@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+/*
+ * Global base styles for the Team Hub viewer/editor shell.
+ *
+ * The visual language (colors, fonts, button shapes) is theme-driven per
+ * workspace — see `app_settings.theme`. These globals only set sensible,
+ * generic, mobile-first defaults. Workspace themes apply on top via CSS
+ * custom properties so any creator can fully restyle their app.
+ */
+
+:root {
+  /* Generic theme defaults; overridden per-workspace at runtime. */
+  --th-bg: #ffffff;
+  --th-text: #0f1420;
+  --th-primary: #0f1420;
+  --th-primary-text: #ffffff;
+  --th-accent: #e23b2e;
+  --th-heading: #1c2541;
+  --th-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--th-bg);
+  color: var(--th-text);
+  font-family: var(--th-font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Respect users who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

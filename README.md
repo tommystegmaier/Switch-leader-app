@@ -1,0 +1,109 @@
+# Team Hub Platform
+
+A multi-tenant **"Team Hub"** platform: any creator/admin can build their own
+mobile app — pages of resources, weekly info, links, and documents — for their
+team, **without writing code**. Each creator gets an isolated workspace; within
+it, hundreds of team members open a **read-only** viewer.
+
+The first reference workspace is a youth-ministry **"Switch Leader"** app, but
+the product is the *platform*, not that one app. Switch is only example content
+built from the same general block palette every creator uses.
+
+> **Status:** Phase 1 (Scaffolding) complete. See the build sequence below.
+
+---
+
+## Two sides, one content database
+
+- **Creator/Admin side** — visually edit everything (text, layout, buttons,
+  links, images, pages, navigation, colors, PDFs) with no coding. Edits publish
+  to all viewers.
+- **Viewer side** — team members see the published content, read-only. Anonymous
+  public viewing is supported per-workspace.
+
+A **workspace** (organization) is the top-level tenant. Everything content-related
+is scoped to a workspace by `org_id`, and tenant isolation + viewer read-only
+access are enforced in the database with Postgres Row-Level Security (Phase 2),
+not just in the UI.
+
+## Tech stack
+
+- **Frontend:** React + Vite + TypeScript + Tailwind CSS v4
+- **Data/auth/storage:** Supabase (Postgres, Auth, Storage, RLS, Realtime) — Phase 2
+- **Data fetching:** TanStack Query · **Routing:** React Router
+- **Rich text:** Tiptap · **Reordering:** dnd-kit · **PWA:** vite-plugin-pwa (later phases)
+- **Native-ready:** structured for a future Capacitor wrapper (see `GOING-NATIVE.md`, later phase)
+
+## Getting started
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Configure environment (optional in Phase 1 — falls back to sample data)
+cp .env.example .env
+#   then fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+
+# 3. Run the dev server
+npm run dev
+```
+
+Open the app and you'll be redirected to the bundled **sample workspace** at
+`/o/demo`. Without Supabase configured, the app reads from an in-memory sample
+repository so the Viewer shell renders immediately.
+
+### Scripts
+
+| Command             | What it does                                  |
+| ------------------- | --------------------------------------------- |
+| `npm run dev`       | Start the Vite dev server                     |
+| `npm run build`     | Type-check and build for production           |
+| `npm run preview`   | Preview the production build                  |
+| `npm run typecheck` | Type-check without emitting                   |
+
+## Architecture (Phase 1)
+
+```
+src/
+  lib/
+    env.ts            # typed env access (single place that reads import.meta.env)
+    supabase.ts       # lazy Supabase client (anon key); null until configured
+    queryClient.ts    # shared TanStack Query client (caches published content)
+    theme.ts          # applies a workspace theme to CSS variables
+  types/
+    index.ts          # domain types mirroring the Postgres schema
+  data/                # THE DATA-LAYER SEAM — UI never imports Supabase directly
+    contentRepository.ts        # interface the UI depends on
+    sampleContentRepository.ts  # in-memory sample (Phase 1)
+    index.ts                    # selects the active repository
+    hooks.ts                    # TanStack Query hooks over the repository
+  viewer/              # read-only Viewer surface
+    ViewerLayout.tsx  # top bar + hamburger nav, applies theme
+    ViewerPage.tsx    # renders a page's blocks
+    BlockRenderer.tsx # minimal Phase 1 renderer (replaced by registry in Phase 3)
+  router/
+    index.tsx         # client-side routes incl. per-workspace deep link /o/{slug}
+  main.tsx            # app entry: Query + Router providers
+```
+
+**The data-layer seam** (`src/data/`) is deliberate: the UI talks only to
+`ContentRepository`. Phase 2 adds a Supabase-backed implementation behind the
+same interface — no UI changes — which also keeps the app native-ready.
+
+**Theme-driven, not hardcoded:** all colors/fonts come from a workspace's
+`app_settings.theme` and are applied as `--th-*` CSS variables. Nothing about
+Switch (or any workspace) is baked into the code.
+
+## Build sequence
+
+- [x] **Phase 1 — Scaffolding:** Vite + React + TS + Tailwind + Router; Supabase
+      client seam; env; Viewer shell reading a sample page.
+- [ ] **Phase 2 — Multi-tenant data model + auth + RLS**
+- [ ] **Phase 3 — Block system (registry + all block types + inline editing)**
+- [ ] **Phase 4 — Pages + navigation**
+- [ ] **Phase 5 — Theme + media + settings**
+- [ ] **Phase 6 — Draft/Publish + visibility + PWA**
+- [ ] **Phase 7 — Seed the Switch starter workspace; docs**
+
+Deployment (`netlify.toml` + `DEPLOY.md`), `GOING-NATIVE.md`, and the
+non-technical-admin guide are written in later phases.
