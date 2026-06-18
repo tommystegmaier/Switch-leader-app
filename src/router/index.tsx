@@ -1,7 +1,8 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 
 import { LoginPage } from '@/auth/LoginPage';
-import { SAMPLE_ORG_SLUG } from '@/data';
+import { CreateWorkspacePage } from '@/creator/CreateWorkspacePage';
+import { HomeRoute } from '@/creator/HomeRoute';
 import { ViewerLayout } from '@/viewer/ViewerLayout';
 import { ViewerPage } from '@/viewer/ViewerPage';
 
@@ -17,12 +18,15 @@ import { ViewerPage } from '@/viewer/ViewerPage';
 export const router = createBrowserRouter([
   {
     path: '/',
-    // No marketing site yet — send root to the bundled sample workspace.
-    element: <Navigate to={`/o/${SAMPLE_ORG_SLUG}`} replace />,
+    element: <HomeRoute />,
   },
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/new',
+    element: <CreateWorkspacePage />,
   },
   {
     path: '/o/:slug',
