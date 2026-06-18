@@ -33,10 +33,18 @@ method:
 
 1. Open **SQL Editor** in the Supabase dashboard.
 2. Open `supabase/migrations/0001_init.sql`, copy its full contents, paste, **Run**.
-3. Repeat for `0002_rls.sql`, then `0003_functions_storage.sql`.
+3. Repeat **in order** for:
+   - `0002_rls.sql` (security policies)
+   - `0003_functions_storage.sql` (create-workspace RPC + media bucket)
+   - `0004_public_media.sql` (public-read media so uploaded images/PDFs show)
+   - `0005_invites.sql` (invite codes for invite-only workspaces)
 
-That's it — tables, RLS policies, the `create_organization` RPC, and the
-`media` storage bucket are now created.
+That's it — tables, RLS policies, RPCs, and the `media` storage bucket are
+created.
+
+**Optional — seed the Switch reference app:** run `supabase/seed_switch.sql`
+to populate a ready-made `/o/switch` workspace (Home + 6 team pages) you can
+edit freely. (Set your email at the top of that file first if different.)
 
 ### Option B — Supabase CLI (repeatable)
 

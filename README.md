@@ -9,8 +9,13 @@ The first reference workspace is a youth-ministry **"Switch Leader"** app, but
 the product is the *platform*, not that one app. Switch is only example content
 built from the same general block palette every creator uses.
 
-> **Status:** Phases 1–3 complete (scaffolding; multi-tenant data model, auth &
-> RLS; and the full block builder). See the build sequence below.
+> **Status:** All seven phases implemented — scaffolding; multi-tenant data
+> model + auth + RLS; the full block builder; pages & navigation; theme, media
+> uploads & settings; draft/publish + visibility + PWA; and the seeded Switch
+> starter workspace. See the build sequence below.
+>
+> **New here?** Non-technical setup is in `SETUP.md` (connect Supabase) and
+> `DEPLOY.md` (go live on Netlify). Native apps later: `GOING-NATIVE.md`.
 
 ---
 
@@ -126,13 +131,17 @@ Apply the SQL migrations to your Supabase project (Supabase SQL editor, or
 supabase/migrations/0001_init.sql              # tables, indexes, triggers
 supabase/migrations/0002_rls.sql               # RLS helpers + policies
 supabase/migrations/0003_functions_storage.sql # create_organization RPC + media bucket
+supabase/migrations/0004_public_media.sql      # public-read media bucket
+supabase/migrations/0005_invites.sql           # invite create/redeem RPCs
 ```
 
-A non-technical admin signs in at `/login` (email + password). To create the
-first workspace, an authenticated user calls the `create_organization(name, slug)`
-RPC, which atomically creates the workspace, its default settings, and an
-`owner` membership for that user. (A guided seed for the Switch starter workspace
-comes in Phase 7.)
+Optionally seed the reference app with `supabase/seed_switch.sql` (creates the
+`/o/switch` workspace and its pages/blocks as fully editable data).
+
+A non-technical admin signs in at `/login` (email + password). New workspaces are
+created **self-service** in the UI ("My workspaces" → **+ Create a new app**),
+which calls the `create_organization(name, slug)` RPC and makes the caller the
+`owner`. Anyone who signs up can build and own their own isolated app.
 
 ## The block system (Phase 3)
 
@@ -167,20 +176,72 @@ accordion.
 That's it — the picker, the renderer, and the property editor all pick it up
 automatically. No database migration is needed (block props are JSONB).
 
-## Build sequence
+## Pages, navigation & settings (Phases 4–5)
 
-- [x] **Phase 1 — Scaffolding:** Vite + React + TS + Tailwind + Router; Supabase
-      client seam; env; Viewer shell reading a sample page.
-- [x] **Phase 2 — Multi-tenant data model + auth + RLS:** full Postgres schema,
-      tenant-isolation + viewer-read-only policies, email/password auth,
-      role-gated Edit toggle, Supabase-backed repository, `/o/{slug}` URLs.
-- [x] **Phase 3 — Block system:** registry + all 17 block types (viewer +
-      data-driven editor panels), inline editing, add/reorder/duplicate/delete,
-      dnd-kit reorder, Tiptap rich text, XSS sanitization, lazy-loaded editor.
-- [ ] **Phase 4 — Pages + navigation**
-- [ ] **Phase 5 — Theme + media + settings**
-- [ ] **Phase 6 — Draft/Publish + visibility + PWA**
-- [ ] **Phase 7 — Seed the Switch starter workspace; docs**
+- **Pages:** add, rename, set emoji icon, drag-reorder, duplicate (page + all
+  blocks), delete, toggle published/draft, and set visibility — via the
+  **Manage pages** panel in Edit Mode.
+- **Navigation:** top bar + hamburger by default; optional bottom tab bar via
+  the per-workspace `nav_style` (`top` / `bottom` / `both`).
+- **Settings** (`/o/{slug}/settings`, editor-only): app name, logo & icon
+  upload, theme editor with 6 presets + live preview, font, splash colors,
+  navigation style, and sharing (public vs invite-only, copy link, invites).
+- **Media:** image/PDF/icon uploads go to Supabase Storage under the org, with a
+  reusable media library. The `media` bucket is public-read (stable URLs);
+  writes are editor-only via storage RLS.
 
-Deployment (`netlify.toml` + `DEPLOY.md`), `GOING-NATIVE.md`, and the
-non-technical-admin guide are written in later phases.
+## Publish model & visibility
+
+**Current model (simple).** Workspaces have a per-page **Published/Draft**
+toggle: a draft page is hidden from viewers, so an admin can build a page
+privately and flip it live when ready. Content edits to an already-published
+page are **live immediately** (viewers always read the latest published pages).
+
+> **Recommended enhancement — full draft→publish snapshot.** To let admins stage
+> *all* edits and release them with one "Publish changes" button (with an
+> "unpublished changes" indicator), add a published snapshot the viewer reads
+> from while editors keep editing live tables. The data layer is already behind
+> `ContentRepository`, so this is an additive change (a `published_content`
+> table + a `publish_workspace` RPC + pointing viewer reads at the snapshot)
+> with no UI rewrite. Not enabled by default.
+
+**Visibility.** Every page and block carries a visibility rule. Phase 1
+audiences ship: **Everyone** (default) and **Admins only** (for staging —
+hidden from viewers in nav and on direct URL). The rule is stored as open JSON
+(`{ kind: 'everyone' | 'admins' | 'roles', roles?: [...] }`), so **named team
+roles** (e.g. "Safety Team", "Host Team") can be added later: extend the
+membership roles, set a block/page rule to `{ kind: 'roles', roles: [...] }`,
+and `isVisibleTo` already understands it — no rewrite.
+
+## For non-technical admins (how to edit your app)
+
+1. **Sign in** at `/login` with your email + password.
+2. Open your app at `/o/your-app`. As an owner/admin/editor you'll see a
+   **✎ Edit** button — tap it.
+3. **Add content:** tap **+ Add block**, pick a block (heading, button, image,
+   PDF…). Click a heading or paragraph to type directly. Hover a block for its
+   toolbar: ⚙ settings, ⧉ duplicate, move, drag, 🗑 delete.
+4. **Pages:** in the Edit bar tap **Manage pages** to add/rename/reorder/
+   duplicate pages and toggle published.
+5. **Look & sharing:** **Settings** lets you set colors, logo, font, navigation,
+   and whether the app is a public link or invite-only.
+6. Changes are saved automatically and are live for your viewers.
+
+## Starting a new workspace (any creator)
+
+Sign in, go to **My workspaces** (the home screen), tap **+ Create a new app**,
+name it and pick its link. You become the owner of a fresh, empty workspace and
+can build it immediately — fully isolated from every other workspace.
+
+## Build sequence — all phases complete
+
+- [x] **Phase 1 — Scaffolding**
+- [x] **Phase 2 — Multi-tenant data model + auth + RLS**
+- [x] **Phase 3 — Block system (registry + all 17 block types + editing)**
+- [x] **Phase 4 — Pages + navigation**
+- [x] **Phase 5 — Theme + media uploads + settings + sharing**
+- [x] **Phase 6 — Draft/publish (page-level) + visibility + PWA/offline**
+- [x] **Phase 7 — Seeded Switch starter workspace + docs**
+
+Docs: `SETUP.md` (connect Supabase), `DEPLOY.md` (Netlify), `GOING-NATIVE.md`
+(Capacitor / app stores).
