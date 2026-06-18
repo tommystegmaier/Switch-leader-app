@@ -1,7 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useParams } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 
+import { useAuth } from '@/auth/AuthProvider';
+import { useMembershipRole } from '@/auth/useMembership';
 import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks';
+import { useEditMode } from '@/editor/EditModeProvider';
 import { applyTheme } from '@/lib/theme';
 
 /**
@@ -14,16 +17,26 @@ import { applyTheme } from '@/lib/theme';
  */
 export function ViewerLayout() {
   const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const { data: org, isLoading: orgLoading } = useOrganization(slug);
   const { data: settings } = useAppSettings(org?.id);
   const { data: pages } = usePublishedPages(org?.id);
 
+  const { user, signOut } = useAuth();
+  const { canEdit } = useMembershipRole(org?.id);
+  const { editing, toggle, setEditing } = useEditMode();
+
   // Apply the workspace theme to CSS variables whenever settings load.
   useEffect(() => {
     if (settings) applyTheme(settings);
   }, [settings]);
+
+  // Never leave Edit Mode "on" for someone who can't edit (e.g. after sign-out).
+  useEffect(() => {
+    if (!canEdit && editing) setEditing(false);
+  }, [canEdit, editing, setEditing]);
 
   if (orgLoading) {
     return <CenteredMessage>Loading…</CenteredMessage>;
@@ -56,17 +69,45 @@ export function ViewerLayout() {
           <span className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>
             {appName}
           </span>
-          <button
-            type="button"
-            aria-label="Open menu"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
-            className="rounded-md p-2 text-2xl leading-none focus:outline-none focus-visible:ring-2"
-            style={{ color: 'var(--th-text)' }}
-          >
-            ☰
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Edit toggle is rendered ONLY for owner/admin/editor of this
+                workspace. Viewers and anonymous visitors never see it. */}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={toggle}
+                aria-pressed={editing}
+                className="rounded-full border px-3 py-1.5 text-sm font-semibold"
+                style={
+                  editing
+                    ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', borderColor: 'var(--th-primary)' }
+                    : { color: 'var(--th-text)', borderColor: 'rgba(0,0,0,0.2)' }
+                }
+              >
+                {editing ? '✓ Editing' : '✎ Edit'}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-label="Open menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+              className="rounded-md p-2 text-2xl leading-none focus:outline-none focus-visible:ring-2"
+              style={{ color: 'var(--th-text)' }}
+            >
+              ☰
+            </button>
+          </div>
         </div>
+
+        {editing && (
+          <div
+            className="px-4 py-1.5 text-center text-xs font-medium"
+            style={{ backgroundColor: 'var(--th-accent)', color: '#fff' }}
+          >
+            Edit Mode — in-place editing tools arrive in Phase 3
+          </div>
+        )}
 
         {menuOpen && (
           <nav
@@ -93,6 +134,33 @@ export function ViewerLayout() {
                 </li>
               ))}
             </ul>
+
+            {/* Account row: sign in (for admins) or sign out. */}
+            <div
+              className="mx-auto max-w-screen-sm border-t px-3 py-2 text-sm"
+              style={{ borderColor: 'rgba(0,0,0,0.08)' }}
+            >
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void signOut();
+                  }}
+                  className="underline"
+                >
+                  Sign out ({user.email})
+                </button>
+              ) : (
+                <Link
+                  to={`/login?next=${encodeURIComponent(location.pathname)}`}
+                  onClick={() => setMenuOpen(false)}
+                  className="underline"
+                >
+                  Admin sign in
+                </Link>
+              )}
+            </div>
           </nav>
         )}
       </header>

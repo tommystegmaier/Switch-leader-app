@@ -1,21 +1,19 @@
 import { isSupabaseConfigured } from '@/lib/supabase';
 import type { ContentRepository } from './contentRepository';
 import { sampleContentRepository } from './sampleContentRepository';
+import { supabaseContentRepository } from './supabaseContentRepository';
 
 /**
  * Selects the active content repository.
  *
- * Phase 1: always the in-memory sample repository.
- * Phase 2: when Supabase is configured, this returns a Supabase-backed
- *          repository (same interface) instead. Until then we transparently
- *          fall back to the sample data so the shell always renders.
+ * When Supabase is configured, the app reads real workspace content (gated by
+ * RLS). Otherwise it transparently falls back to the in-memory sample data so
+ * the Viewer shell always renders — useful for local UI work without a backend.
  */
 export function getContentRepository(): ContentRepository {
-  if (isSupabaseConfigured) {
-    // Phase 2 will return `supabaseContentRepository` here.
-    return sampleContentRepository;
-  }
-  return sampleContentRepository;
+  return isSupabaseConfigured
+    ? supabaseContentRepository
+    : sampleContentRepository;
 }
 
 export type { ContentRepository } from './contentRepository';
