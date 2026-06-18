@@ -111,11 +111,11 @@ const SAMPLE_BLOCKS: Block[] = [
     sortOrder: 3,
     props: {
       label: '📚 Open Resources',
-      actionType: 'page',
-      target: 'resources',
+      action: { type: 'page', target: 'resources' },
       style: 'filled',
       fullWidth: true,
       align: 'center',
+      openInNewTab: false,
     },
     visibility: { kind: 'everyone' },
   },
@@ -128,8 +128,7 @@ const SAMPLE_BLOCKS: Block[] = [
     sortOrder: 4,
     props: {
       label: '🔗 Visit example.com',
-      actionType: 'url',
-      target: 'https://example.com',
+      action: { type: 'url', target: 'https://example.com' },
       style: 'outline',
       fullWidth: true,
       align: 'center',

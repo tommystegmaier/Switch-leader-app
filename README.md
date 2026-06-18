@@ -9,8 +9,8 @@ The first reference workspace is a youth-ministry **"Switch Leader"** app, but
 the product is the *platform*, not that one app. Switch is only example content
 built from the same general block palette every creator uses.
 
-> **Status:** Phases 1–2 complete (scaffolding + multi-tenant data model, auth,
-> and RLS). See the build sequence below.
+> **Status:** Phases 1–3 complete (scaffolding; multi-tenant data model, auth &
+> RLS; and the full block builder). See the build sequence below.
 
 ---
 
@@ -134,6 +134,39 @@ RPC, which atomically creates the workspace, its default settings, and an
 `owner` membership for that user. (A guided seed for the Switch starter workspace
 comes in Phase 7.)
 
+## The block system (Phase 3)
+
+The builder is a general creative palette — the same blocks compose any app.
+Everything is driven by a single **registry** (`src/blocks/registry.tsx`). Each
+entry pairs a block `type` with a viewer component, a list of editor `fields`,
+generic `defaultProps`, an icon, a label, and a one-line description.
+
+- **Viewer Mode** renders each block via `BlockView` → the registry's `Viewer`.
+- **Edit Mode** (owner/admin/editor only) overlays controls on the *same*
+  layout: inline text editing (click a heading/paragraph and type; autosave on
+  blur), a hover toolbar (⚙ edit · ⧉ duplicate · ↑/↓ move · ⠿ drag · 🗑 delete),
+  drag-and-drop reorder (dnd-kit), and a visual **+ Add block** picker.
+- The property drawer is **data-driven** from each block's `fields`, so most
+  blocks need no bespoke editor UI. Rich text uses **Tiptap**; all creator HTML
+  and URLs are sanitized (`src/blocks/sanitize.ts`) to prevent XSS.
+- The whole editing surface (Tiptap, dnd-kit, drawer) is **lazy-loaded**, and
+  the PDF viewer is split out too — public viewers download a lean bundle.
+
+**Block types:** heading, paragraph (rich text), image, gallery, button, link,
+card, list, divider, spacer, video, document/PDF, embed, map, qr, countdown,
+accordion.
+
+### Adding a new block type
+
+1. Add the type name to `BlockType` in `src/types/index.ts`.
+2. Define its props shape in `src/blocks/blockProps.ts`.
+3. Write a viewer component (in `src/blocks/viewers/…`).
+4. Register it in `src/blocks/registry.tsx` with `{ type, label, icon,
+   description, category, defaultProps, fields, Viewer }`.
+
+That's it — the picker, the renderer, and the property editor all pick it up
+automatically. No database migration is needed (block props are JSONB).
+
 ## Build sequence
 
 - [x] **Phase 1 — Scaffolding:** Vite + React + TS + Tailwind + Router; Supabase
@@ -141,7 +174,9 @@ comes in Phase 7.)
 - [x] **Phase 2 — Multi-tenant data model + auth + RLS:** full Postgres schema,
       tenant-isolation + viewer-read-only policies, email/password auth,
       role-gated Edit toggle, Supabase-backed repository, `/o/{slug}` URLs.
-- [ ] **Phase 3 — Block system (registry + all block types + inline editing)**
+- [x] **Phase 3 — Block system:** registry + all 17 block types (viewer +
+      data-driven editor panels), inline editing, add/reorder/duplicate/delete,
+      dnd-kit reorder, Tiptap rich text, XSS sanitization, lazy-loaded editor.
 - [ ] **Phase 4 — Pages + navigation**
 - [ ] **Phase 5 — Theme + media + settings**
 - [ ] **Phase 6 — Draft/Publish + visibility + PWA**
