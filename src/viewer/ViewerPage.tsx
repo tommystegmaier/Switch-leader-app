@@ -5,6 +5,7 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { BlockView, isVisibleTo } from '@/blocks/BlockView';
 import type { ViewerCtx } from '@/blocks/actions';
 import { useOrganization, usePageBlocks, usePublishedPages } from '@/data/hooks';
+import { useLivePageBlocks } from '@/data/liveContent';
 import { useAllPages } from '@/data/pageHooks';
 import { useEditMode } from '@/editor/EditModeProvider';
 
@@ -33,7 +34,11 @@ export function ViewerPage() {
   const pages = editingPages ? allPages : publishedPages;
 
   const page = pageSlug ? pages?.find((p) => p.slug === pageSlug) : pages?.[0];
-  const { data: blocks, isLoading: blocksLoading } = usePageBlocks(org?.id, page?.id);
+  // Editors preview/edit the live (draft) blocks; viewers read the snapshot.
+  const publishedBlocks = usePageBlocks(editingPages ? undefined : org?.id, page?.id);
+  const liveBlocks = useLivePageBlocks(editingPages ? org?.id : undefined, page?.id);
+  const blocks = editingPages ? liveBlocks.data : publishedBlocks.data;
+  const blocksLoading = editingPages ? liveBlocks.isLoading : publishedBlocks.isLoading;
 
   if (!pageSlug && org && pages && pages.length > 0) {
     return <Navigate to={`/o/${org.slug}/${pages[0].slug}`} replace />;
@@ -45,7 +50,9 @@ export function ViewerPage() {
       <p className="text-sm text-gray-500">
         {editingPages
           ? 'No pages yet — use “Manage pages” to add one.'
-          : 'This workspace has no published pages yet.'}
+          : canEdit
+            ? 'Nothing published yet. Tap ✎ Edit to build your app, then “Publish changes”.'
+            : 'This workspace has no published pages yet.'}
       </p>
     );
   }

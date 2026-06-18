@@ -3,7 +3,7 @@
 --
 -- Reproduces the reference "Switch Leader" app as EDITABLE DATA, built entirely
 -- from the generic block palette (nothing Switch-specific is in the code). Run
--- this in the Supabase SQL Editor AFTER migrations 0001–0005.
+-- this in the Supabase SQL Editor AFTER migrations 0001–0006.
 --
 -- It is safe to re-run: it attaches to an existing `switch` workspace if you
 -- already created one (and makes you owner if needed), sets the Switch theme,
@@ -98,5 +98,24 @@ begin
     (v_org, v_pid, 'button', 7, jsonb_build_object('label','🎊 Student Leader Application','action',jsonb_build_object('type','url','target',''),'style','filled','align','center','fullWidth',true,'openInNewTab',true));
   end loop;
 
-  raise notice 'Switch starter workspace seeded at /o/switch';
+  -- Publish the seeded content so it's immediately live for viewers. (We write
+  -- the snapshot directly because the SQL editor has no auth context for the
+  -- publish RPC; the result is identical to clicking "Publish changes".)
+  insert into public.published_content (org_id, settings, pages, blocks, published_at)
+  values (
+    v_org,
+    (select to_jsonb(s) from public.app_settings s where s.org_id = v_org),
+    coalesce((select jsonb_agg(to_jsonb(p) order by p.sort_order)
+              from public.pages p where p.org_id = v_org and p.is_published), '[]'::jsonb),
+    coalesce((select jsonb_agg(to_jsonb(b) order by b.sort_order)
+              from public.blocks b
+              where b.org_id = v_org
+                and b.page_id in (select id from public.pages where org_id = v_org and is_published)), '[]'::jsonb),
+    now()
+  )
+  on conflict (org_id) do update
+    set settings = excluded.settings, pages = excluded.pages,
+        blocks = excluded.blocks, published_at = excluded.published_at;
+
+  raise notice 'Switch starter workspace seeded and published at /o/switch';
 end $$;

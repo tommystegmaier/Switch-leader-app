@@ -38,6 +38,7 @@ method:
    - `0003_functions_storage.sql` (create-workspace RPC + media bucket)
    - `0004_public_media.sql` (public-read media so uploaded images/PDFs show)
    - `0005_invites.sql` (invite codes for invite-only workspaces)
+   - `0006_publish.sql` (draft → publish: viewers see content only after you Publish)
 
 That's it — tables, RLS policies, RPCs, and the `media` storage bucket are
 created.
@@ -131,3 +132,7 @@ visual block builder for that arrives in **Phase 3**.
   server wasn't restarted after editing `.env`.
 - **Blank page / sample "Demo" workspace at `/`** — env vars aren't loaded, so the
   app fell back to sample data. Set them and restart `npm run dev`.
+- **I added content but viewers (or I, when not editing) see nothing** — edits
+  are a **draft** until published. In the Edit bar tap **Publish changes**. If
+  you seeded the Switch app or built it before adding migration `0006`, just
+  open it in Edit Mode and Publish once.

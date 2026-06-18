@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { getSupabase } from '@/lib/supabase';
+import { liveBlocksKey } from '@/data/liveContent';
 import type { Block, BlockType } from '@/types';
 import { getBlockDef } from '@/blocks/registry';
 
@@ -9,13 +10,17 @@ import { getBlockDef } from '@/blocks/registry';
  *
  * All writes go through the anon/auth Supabase client and are authorized by
  * RLS — only owner/admin/editor of the org can succeed, so this is safe even
- * though it runs in the browser. After each change we invalidate the block
- * query so the live preview updates immediately.
+ * though it runs in the browser. Edits land in the LIVE (draft) tables; the
+ * viewer's published snapshot only changes when the user hits Publish. After
+ * each change we invalidate the live block query so the editor preview updates.
  */
 export function useBlockMutations(orgId: string, pageId: string) {
   const qc = useQueryClient();
-  const key = ['org', orgId, 'page', pageId, 'blocks'];
-  const invalidate = () => qc.invalidateQueries({ queryKey: key });
+  const key = liveBlocksKey(orgId, pageId);
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: key });
+    qc.invalidateQueries({ queryKey: ['org', orgId, 'publish-status'] });
+  };
 
   function db() {
     const s = getSupabase();

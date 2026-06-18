@@ -14,6 +14,7 @@ export function usePageMutations(orgId: string) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['org', orgId, 'all-pages'] });
     qc.invalidateQueries({ queryKey: ['org', orgId, 'pages'] });
+    qc.invalidateQueries({ queryKey: ['org', orgId, 'publish-status'] });
   };
 
   function db() {
@@ -42,9 +43,11 @@ export function usePageMutations(orgId: string) {
       const { data: existing } = await db().from('pages').select('sort_order').eq('org_id', orgId).order('sort_order', { ascending: false }).limit(1);
       const nextOrder = (existing?.[0]?.sort_order ?? -1) + 1;
       const slug = await uniqueSlug(name);
+      // Included in the live app by default; the workspace stays in draft until
+      // the user clicks Publish. The per-page toggle just hides a page if needed.
       const { data, error } = await db()
         .from('pages')
-        .insert({ org_id: orgId, name, slug, sort_order: nextOrder, is_published: false, visibility: { kind: 'everyone' } })
+        .insert({ org_id: orgId, name, slug, sort_order: nextOrder, is_published: true, visibility: { kind: 'everyone' } })
         .select()
         .single();
       if (error) throw error;

@@ -5,9 +5,11 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { isVisibleTo } from '@/blocks/BlockView';
 import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks';
+import { useLiveAppSettings } from '@/data/liveContent';
 import { useAllPages } from '@/data/pageHooks';
 import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
+import { usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
 import { applyTheme } from '@/lib/theme';
 
 /**
@@ -24,13 +26,22 @@ export function ViewerLayout() {
   const [pagesOpen, setPagesOpen] = useState(false);
 
   const { data: org, isLoading: orgLoading } = useOrganization(slug);
-  const { data: settings } = useAppSettings(org?.id);
+  const { data: publishedSettings } = useAppSettings(org?.id);
   const { data: publishedPages } = usePublishedPages(org?.id);
 
   const { user, signOut } = useAuth();
   const { role, canEdit } = useMembershipRole(org?.id);
   const { editing, toggle, setEditing } = useEditMode();
-  const { data: allPages } = useAllPages(editing && canEdit ? org?.id : undefined);
+  const liveMode = editing && canEdit;
+  const { data: allPages } = useAllPages(liveMode ? org?.id : undefined);
+  const { data: liveSettings } = useLiveAppSettings(org?.id, liveMode);
+
+  // Editors preview the draft theme/title; viewers see the published one.
+  const settings = liveMode ? (liveSettings ?? publishedSettings) : publishedSettings;
+
+  // Publish workflow.
+  const { data: publishStatus } = usePublishStatus(org?.id, canEdit);
+  const publish = usePublishWorkspace(org?.id ?? '');
 
   useEffect(() => {
     if (settings) applyTheme(settings);
@@ -98,10 +109,25 @@ export function ViewerLayout() {
         </div>
 
         {editing && (
-          <div className="flex items-center justify-center gap-3 px-4 py-1.5 text-center text-xs font-medium" style={{ backgroundColor: 'var(--th-accent)', color: '#fff' }}>
-            <span>Edit Mode</span>
+          <div className="flex flex-wrap items-center justify-center gap-2 px-4 py-1.5 text-center text-xs font-medium" style={{ backgroundColor: 'var(--th-accent)', color: '#fff' }}>
+            <span className="font-semibold">Draft</span>
             <button type="button" onClick={() => setPagesOpen(true)} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Manage pages</button>
             <Link to={`/o/${org.slug}/settings`} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Settings</Link>
+            <span className="mx-1 h-3 w-px bg-white/40" />
+            {publishStatus?.dirty === false ? (
+              <span className="opacity-90">✓ Published</span>
+            ) : (
+              <span className="rounded-full bg-white/25 px-2 py-0.5">● Unpublished changes</span>
+            )}
+            <button
+              type="button"
+              onClick={() => publish.mutate()}
+              disabled={publish.isPending || publishStatus?.dirty === false}
+              className="rounded-full bg-white px-3 py-0.5 font-semibold disabled:opacity-50"
+              style={{ color: 'var(--th-accent)' }}
+            >
+              {publish.isPending ? 'Publishing…' : 'Publish changes'}
+            </button>
           </div>
         )}
 

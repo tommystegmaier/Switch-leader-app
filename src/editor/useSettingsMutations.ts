@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { getSupabase } from '@/lib/supabase';
+import { liveSettingsKey } from '@/data/liveContent';
 import type { AppSettings } from '@/types';
 
 /**
@@ -26,6 +27,9 @@ export function useSettingsMutations(orgId: string) {
       const { error } = await s.from('app_settings').update(row).eq('org_id', orgId);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['org', orgId, 'settings'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: liveSettingsKey(orgId) });
+      qc.invalidateQueries({ queryKey: ['org', orgId, 'publish-status'] });
+    },
   });
 }

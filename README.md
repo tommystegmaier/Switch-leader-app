@@ -133,6 +133,7 @@ supabase/migrations/0002_rls.sql               # RLS helpers + policies
 supabase/migrations/0003_functions_storage.sql # create_organization RPC + media bucket
 supabase/migrations/0004_public_media.sql      # public-read media bucket
 supabase/migrations/0005_invites.sql           # invite create/redeem RPCs
+supabase/migrations/0006_publish.sql           # draft→publish snapshot + RPCs
 ```
 
 Optionally seed the reference app with `supabase/seed_switch.sql` (creates the
@@ -192,18 +193,21 @@ automatically. No database migration is needed (block props are JSONB).
 
 ## Publish model & visibility
 
-**Current model (simple).** Workspaces have a per-page **Published/Draft**
-toggle: a draft page is hidden from viewers, so an admin can build a page
-privately and flip it live when ready. Content edits to an already-published
-page are **live immediately** (viewers always read the latest published pages).
+**Draft → publish (snapshot model).** Editors always edit the **live (draft)**
+tables; **viewers read a published snapshot** (`published_content`). Admins make
+all the changes they want, then click **Publish changes** once to copy the
+current draft into the snapshot — and only then do viewers see it. An
+**"Unpublished changes"** badge shows whenever the draft differs from what's
+live (tracked by `organizations.content_touched_at` vs the snapshot's
+`published_at`).
 
-> **Recommended enhancement — full draft→publish snapshot.** To let admins stage
-> *all* edits and release them with one "Publish changes" button (with an
-> "unpublished changes" indicator), add a published snapshot the viewer reads
-> from while editors keep editing live tables. The data layer is already behind
-> `ContentRepository`, so this is an additive change (a `published_content`
-> table + a `publish_workspace` RPC + pointing viewer reads at the snapshot)
-> with no UI rewrite. Not enabled by default.
+This is enforced in the database: RLS restricts the live `pages`/`blocks`/
+`app_settings`/`sections` to **members only**, while anonymous/public viewers can
+read **only** the snapshot (and the org row to resolve the slug). So unpublished
+edits are never exposed, not just hidden in the UI. Publishing runs through the
+`publish_workspace` RPC (editor+ only); `get_publish_status` powers the badge.
+The per-page **Published** toggle still lets you hide an individual page from the
+live app.
 
 **Visibility.** Every page and block carries a visibility rule. Phase 1
 audiences ship: **Everyone** (default) and **Admins only** (for staging —
@@ -225,7 +229,10 @@ and `isVisibleTo` already understands it — no rewrite.
    duplicate pages and toggle published.
 5. **Look & sharing:** **Settings** lets you set colors, logo, font, navigation,
    and whether the app is a public link or invite-only.
-6. Changes are saved automatically and are live for your viewers.
+6. Your edits are saved automatically as a **draft** — only you (and other
+   editors) see them. When it's ready, tap **Publish changes** in the Edit bar
+   to push everything live for your viewers. The bar shows **"Unpublished
+   changes"** whenever your draft is ahead of what's live.
 
 ## Starting a new workspace (any creator)
 
@@ -240,7 +247,7 @@ can build it immediately — fully isolated from every other workspace.
 - [x] **Phase 3 — Block system (registry + all 17 block types + editing)**
 - [x] **Phase 4 — Pages + navigation**
 - [x] **Phase 5 — Theme + media uploads + settings + sharing**
-- [x] **Phase 6 — Draft/publish (page-level) + visibility + PWA/offline**
+- [x] **Phase 6 — Draft→publish snapshot + visibility + PWA/offline**
 - [x] **Phase 7 — Seeded Switch starter workspace + docs**
 
 Docs: `SETUP.md` (connect Supabase), `DEPLOY.md` (Netlify), `GOING-NATIVE.md`

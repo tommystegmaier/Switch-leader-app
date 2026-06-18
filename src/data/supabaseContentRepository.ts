@@ -91,37 +91,46 @@ export const supabaseContentRepository: ContentRepository = {
     return data ? mapOrg(data) : null;
   },
 
+  // The following three read the PUBLISHED SNAPSHOT (published_content), not the
+  // live tables — so viewers only ever see content that has been published.
+  // Editors use the separate "live" hooks while editing the draft.
   async getAppSettings(orgId) {
     const { data, error } = await client()
-      .from('app_settings')
-      .select('*')
+      .from('published_content')
+      .select('settings')
       .eq('org_id', orgId)
       .maybeSingle();
     if (error) throw error;
-    return data ? mapSettings(data) : null;
+    return data?.settings ? mapSettings(data.settings) : null;
   },
 
   async getPublishedPages(orgId) {
-    // RLS returns drafts too for members; for the read-only Viewer we only want
-    // published pages, so filter here as well.
     const { data, error } = await client()
-      .from('pages')
-      .select('*')
+      .from('published_content')
+      .select('pages')
       .eq('org_id', orgId)
-      .eq('is_published', true)
-      .order('sort_order', { ascending: true });
+      .maybeSingle();
     if (error) throw error;
-    return (data ?? []).map(mapPage);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pages = (data?.pages ?? []) as any[];
+    return pages
+      .map(mapPage)
+      .filter((p) => p.isPublished)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   },
 
   async getPageBlocks(orgId, pageId) {
     const { data, error } = await client()
-      .from('blocks')
-      .select('*')
+      .from('published_content')
+      .select('blocks')
       .eq('org_id', orgId)
-      .eq('page_id', pageId)
-      .order('sort_order', { ascending: true });
+      .maybeSingle();
     if (error) throw error;
-    return (data ?? []).map(mapBlock);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const blocks = (data?.blocks ?? []) as any[];
+    return blocks
+      .map(mapBlock)
+      .filter((b) => b.pageId === pageId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
   },
 };

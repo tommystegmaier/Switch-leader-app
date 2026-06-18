@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 
 import { useMembershipRole } from '@/auth/useMembership';
 import { useInvites, useCreateInvite } from '@/data/inviteHooks';
-import { useAppSettings, useOrganization } from '@/data/hooks';
+import { useOrganization } from '@/data/hooks';
+import { useLiveAppSettings } from '@/data/liveContent';
 import { applyTheme } from '@/lib/theme';
 import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
 import type { AppSettings, NavStyle, ThemeColors, ViewerAccess } from '@/types';
@@ -18,7 +19,7 @@ import { useSettingsMutations } from './useSettingsMutations';
 export function SettingsPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data: org } = useOrganization(slug);
-  const { data: saved } = useAppSettings(org?.id);
+  const { data: saved } = useLiveAppSettings(org?.id);
   const { role, canEdit, isLoading } = useMembershipRole(org?.id);
   const save = useSettingsMutations(org?.id ?? '');
 
