@@ -1,88 +1,81 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks';
+import { useAllPages } from '@/data/pageHooks';
 import { useEditMode } from '@/editor/EditModeProvider';
+import { PageManager } from '@/editor/PageManager';
 import { applyTheme } from '@/lib/theme';
 
 /**
- * Viewer shell: top bar with app title + a hamburger menu listing the
- * workspace's published pages. Mobile-first, single column, read-only.
- *
- * Edit controls do not exist here at all — this is the public/viewer surface.
- * The Editor overlay (Phase 3+) is a separate concern layered on the same
- * rendering components.
+ * Viewer shell: top bar with app title + hamburger menu listing the workspace's
+ * pages (published only for viewers; all pages, incl. drafts, for editors).
+ * Optional bottom tab bar via `nav_style`. Edit controls appear only for
+ * owner/admin/editor.
  */
 export function ViewerLayout() {
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pagesOpen, setPagesOpen] = useState(false);
 
   const { data: org, isLoading: orgLoading } = useOrganization(slug);
   const { data: settings } = useAppSettings(org?.id);
-  const { data: pages } = usePublishedPages(org?.id);
+  const { data: publishedPages } = usePublishedPages(org?.id);
 
   const { user, signOut } = useAuth();
   const { canEdit } = useMembershipRole(org?.id);
   const { editing, toggle, setEditing } = useEditMode();
+  const { data: allPages } = useAllPages(editing && canEdit ? org?.id : undefined);
 
-  // Apply the workspace theme to CSS variables whenever settings load.
   useEffect(() => {
     if (settings) applyTheme(settings);
   }, [settings]);
 
-  // Never leave Edit Mode "on" for someone who can't edit (e.g. after sign-out).
   useEffect(() => {
     if (!canEdit && editing) setEditing(false);
   }, [canEdit, editing, setEditing]);
 
-  if (orgLoading) {
-    return <CenteredMessage>Loading…</CenteredMessage>;
-  }
+  if (orgLoading) return <CenteredMessage>Loading…</CenteredMessage>;
 
   if (!org) {
     return (
       <CenteredMessage>
         <span className="font-semibold">Workspace not found.</span>
-        <span className="mt-1 block text-sm text-gray-500">
-          Check the link and try again.
-        </span>
+        <span className="mt-1 block text-sm text-gray-500">Check the link and try again.</span>
+        <Link to="/" className="mt-3 inline-block text-sm underline">Go to my workspaces</Link>
       </CenteredMessage>
     );
   }
 
   const appName = settings?.appName ?? org.name;
+  // Editors navigate all pages (incl. drafts); viewers only published ones.
+  const navPages = editing && canEdit ? (allPages ?? publishedPages ?? []) : (publishedPages ?? []);
+  const navStyle = settings?.navStyle ?? 'top';
+  const showBottomTabs = navStyle === 'bottom' || navStyle === 'both';
+  const bottomPages = navPages.slice(0, 5);
 
   return (
     <div className="min-h-full" style={{ backgroundColor: 'var(--th-bg)' }}>
       <header
         className="sticky top-0 z-20 border-b"
-        style={{
-          backgroundColor: 'var(--th-bg)',
-          borderColor: 'rgba(0,0,0,0.08)',
-          paddingTop: 'env(safe-area-inset-top)',
-        }}
+        style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(0,0,0,0.08)', paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="mx-auto flex max-w-screen-sm items-center justify-between px-4 py-3">
-          <span className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>
-            {appName}
-          </span>
+          <span className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{appName}</span>
           <div className="flex items-center gap-2">
-            {/* Edit toggle is rendered ONLY for owner/admin/editor of this
-                workspace. Viewers and anonymous visitors never see it. */}
             {canEdit && (
               <button
                 type="button"
                 onClick={toggle}
                 aria-pressed={editing}
                 className="rounded-full border px-3 py-1.5 text-sm font-semibold"
-                style={
-                  editing
-                    ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', borderColor: 'var(--th-primary)' }
-                    : { color: 'var(--th-text)', borderColor: 'rgba(0,0,0,0.2)' }
-                }
+                style={editing
+                  ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', borderColor: 'var(--th-primary)' }
+                  : { color: 'var(--th-text)', borderColor: 'rgba(0,0,0,0.2)' }}
               >
                 {editing ? '✓ Editing' : '✎ Edit'}
               </button>
@@ -101,73 +94,81 @@ export function ViewerLayout() {
         </div>
 
         {editing && (
-          <div
-            className="px-4 py-1.5 text-center text-xs font-medium"
-            style={{ backgroundColor: 'var(--th-accent)', color: '#fff' }}
-          >
-            Edit Mode — in-place editing tools arrive in Phase 3
+          <div className="flex items-center justify-center gap-3 px-4 py-1.5 text-center text-xs font-medium" style={{ backgroundColor: 'var(--th-accent)', color: '#fff' }}>
+            <span>Edit Mode</span>
+            <button type="button" onClick={() => setPagesOpen(true)} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Manage pages</button>
           </div>
         )}
 
         {menuOpen && (
-          <nav
-            className="border-t"
-            style={{ borderColor: 'rgba(0,0,0,0.08)' }}
-            aria-label="Pages"
-          >
+          <nav className="border-t" style={{ borderColor: 'rgba(0,0,0,0.08)' }} aria-label="Pages">
             <ul className="mx-auto max-w-screen-sm px-2 py-2">
-              {(pages ?? []).map((page) => (
+              {navPages.map((page) => (
                 <li key={page.id}>
                   <NavLink
                     to={`/o/${org.slug}/${page.slug}`}
                     onClick={() => setMenuOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 rounded-md px-3 py-2 text-base ${
-                        isActive ? 'font-semibold' : 'font-normal'
-                      } hover:bg-black/5`
-                    }
+                    className={({ isActive }) => `flex items-center gap-3 rounded-md px-3 py-2 text-base ${isActive ? 'font-semibold' : 'font-normal'} hover:bg-black/5`}
                     style={{ color: 'var(--th-text)' }}
                   >
                     {page.icon && <span aria-hidden>{page.icon}</span>}
                     <span>{page.name}</span>
+                    {!page.isPublished && <span className="ml-auto rounded bg-black/10 px-1.5 text-xs">draft</span>}
                   </NavLink>
                 </li>
               ))}
             </ul>
 
-            {/* Account row: sign in (for admins) or sign out. */}
-            <div
-              className="mx-auto max-w-screen-sm border-t px-3 py-2 text-sm"
-              style={{ borderColor: 'rgba(0,0,0,0.08)' }}
-            >
+            <div className="mx-auto max-w-screen-sm border-t px-3 py-2 text-sm" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+              {canEdit && (
+                <button type="button" onClick={() => { setMenuOpen(false); setPagesOpen(true); }} className="mr-4 underline">Manage pages</button>
+              )}
               {user ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    void signOut();
-                  }}
-                  className="underline"
-                >
-                  Sign out ({user.email})
-                </button>
+                <button type="button" onClick={() => { setMenuOpen(false); void signOut(); }} className="underline">Sign out ({user.email})</button>
               ) : (
-                <Link
-                  to={`/login?next=${encodeURIComponent(location.pathname)}`}
-                  onClick={() => setMenuOpen(false)}
-                  className="underline"
-                >
-                  Admin sign in
-                </Link>
+                <Link to={`/login?next=${encodeURIComponent(location.pathname)}`} onClick={() => setMenuOpen(false)} className="underline">Admin sign in</Link>
               )}
             </div>
           </nav>
         )}
       </header>
 
-      <main className="mx-auto max-w-screen-sm px-4 py-6">
+      <main className={`mx-auto max-w-screen-sm px-4 py-6 ${showBottomTabs ? 'pb-24' : ''}`}>
         <Outlet />
       </main>
+
+      {showBottomTabs && bottomPages.length > 0 && (
+        <nav
+          className="fixed inset-x-0 bottom-0 z-20 border-t"
+          style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(0,0,0,0.08)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          aria-label="Bottom navigation"
+        >
+          <ul className="mx-auto flex max-w-screen-sm items-stretch justify-around">
+            {bottomPages.map((page) => (
+              <li key={page.id} className="flex-1">
+                <NavLink
+                  to={`/o/${org.slug}/${page.slug}`}
+                  className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1 py-2 text-xs ${isActive ? 'font-semibold' : 'opacity-70'}`}
+                  style={{ color: 'var(--th-text)' }}
+                >
+                  <span className="text-lg" aria-hidden>{page.icon || '•'}</span>
+                  <span className="max-w-full truncate">{page.name}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
+      {pagesOpen && canEdit && (
+        <PageManager
+          orgId={org.id}
+          pages={allPages ?? []}
+          currentSlug={location.pathname.split('/')[3]}
+          onNavigate={(s) => navigate(`/o/${org.slug}/${s}`)}
+          onClose={() => setPagesOpen(false)}
+        />
+      )}
     </div>
   );
 }
