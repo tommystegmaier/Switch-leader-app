@@ -5,6 +5,7 @@ import type { BlockAction } from '@/blocks/actions';
 import type { FieldDef } from '@/blocks/fields';
 import { getBlockDef } from '@/blocks/registry';
 import type { Block } from '@/types';
+import { MediaPicker } from './MediaPicker';
 import { RichTextEditor } from './RichTextEditor';
 
 /**
@@ -86,16 +87,17 @@ function FieldInput({
   onChange: (value: unknown, commit?: boolean) => void;
 }) {
   switch (field.type) {
-    case 'text':
-    case 'url':
     case 'image':
     case 'pdf':
+      return <MediaField field={field} value={value} orgId={orgId} onChange={onChange} />;
+    case 'text':
+    case 'url':
       return (
         <Label field={field}>
           <input
             type="text"
             className={inputCls}
-            placeholder={field.placeholder ?? (field.type === 'image' ? 'Image URL (upload comes in Phase 5)' : field.type === 'pdf' ? 'PDF URL (upload comes in Phase 5)' : '')}
+            placeholder={field.placeholder ?? ''}
             value={String(value ?? '')}
             onChange={(e) => onChange(e.target.value)}
             onBlur={() => onChange(value ?? '', true)}
@@ -162,6 +164,56 @@ function FieldInput({
     default:
       return null;
   }
+}
+
+/** Image/PDF field: paste a URL or upload / pick from the media library. */
+function MediaField({
+  field,
+  value,
+  orgId,
+  onChange,
+}: {
+  field: FieldDef;
+  value: unknown;
+  orgId: string;
+  onChange: (value: unknown, commit?: boolean) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const url = String(value ?? '');
+  const isPdf = field.type === 'pdf';
+  return (
+    <Label field={field}>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          className={`${inputCls} flex-1`}
+          placeholder={isPdf ? 'PDF URL, or upload →' : 'Image URL, or upload →'}
+          value={url}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => onChange(url, true)}
+        />
+        <button
+          type="button"
+          onClick={() => setPicking(true)}
+          className="shrink-0 rounded-md border border-gray-300 px-3 py-2 text-sm font-medium hover:bg-black/5"
+        >
+          {isPdf ? 'Upload PDF' : 'Upload'}
+        </button>
+      </div>
+      {url && !isPdf && (
+        <img src={url} alt="" className="mt-2 max-h-32 rounded-md border" style={{ borderColor: 'rgba(0,0,0,0.12)' }} />
+      )}
+      {url && isPdf && <span className="mt-1 text-xs text-gray-500">📄 PDF attached</span>}
+      {picking && (
+        <MediaPicker
+          orgId={orgId}
+          accept={isPdf ? 'application/pdf' : 'image/*'}
+          onSelect={(u) => onChange(u, true)}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </Label>
+  );
 }
 
 function toLocalInput(iso: string): string {

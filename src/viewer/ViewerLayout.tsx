@@ -97,6 +97,7 @@ export function ViewerLayout() {
           <div className="flex items-center justify-center gap-3 px-4 py-1.5 text-center text-xs font-medium" style={{ backgroundColor: 'var(--th-accent)', color: '#fff' }}>
             <span>Edit Mode</span>
             <button type="button" onClick={() => setPagesOpen(true)} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Manage pages</button>
+            <Link to={`/o/${org.slug}/settings`} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Settings</Link>
           </div>
         )}
 

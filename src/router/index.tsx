@@ -1,8 +1,10 @@
 import { createBrowserRouter } from 'react-router-dom';
 
+import { JoinPage } from '@/auth/JoinPage';
 import { LoginPage } from '@/auth/LoginPage';
 import { CreateWorkspacePage } from '@/creator/CreateWorkspacePage';
 import { HomeRoute } from '@/creator/HomeRoute';
+import { SettingsPage } from '@/editor/SettingsPage';
 import { ViewerLayout } from '@/viewer/ViewerLayout';
 import { ViewerPage } from '@/viewer/ViewerPage';
 
@@ -29,10 +31,16 @@ export const router = createBrowserRouter([
     element: <CreateWorkspacePage />,
   },
   {
+    path: '/join',
+    element: <JoinPage />,
+  },
+  {
     path: '/o/:slug',
     element: <ViewerLayout />,
     children: [
       { index: true, element: <ViewerPage /> },
+      // Static 'settings' is matched before the dynamic :pageSlug.
+      { path: 'settings', element: <SettingsPage /> },
       { path: ':pageSlug', element: <ViewerPage /> },
     ],
   },
