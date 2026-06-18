@@ -42,6 +42,11 @@ export function ViewerPage() {
     return <p className="text-sm text-gray-500">Page not found.</p>;
   }
 
+  // Hide admins-only pages from viewers even via a direct link (unless editing).
+  if (!editing && page && !isVisibleTo(page.visibility, role)) {
+    return <p className="text-sm text-gray-500">This page isn’t available.</p>;
+  }
+
   const ctx: ViewerCtx = { orgSlug: slug as string, navigate: (to) => navigate(to) };
 
   // Edit Mode (editors only) — the editable surface, lazy-loaded.

@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
+import { isVisibleTo } from '@/blocks/BlockView';
 import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks';
 import { useAllPages } from '@/data/pageHooks';
 import { useEditMode } from '@/editor/EditModeProvider';
@@ -27,7 +28,7 @@ export function ViewerLayout() {
   const { data: publishedPages } = usePublishedPages(org?.id);
 
   const { user, signOut } = useAuth();
-  const { canEdit } = useMembershipRole(org?.id);
+  const { role, canEdit } = useMembershipRole(org?.id);
   const { editing, toggle, setEditing } = useEditMode();
   const { data: allPages } = useAllPages(editing && canEdit ? org?.id : undefined);
 
@@ -52,8 +53,11 @@ export function ViewerLayout() {
   }
 
   const appName = settings?.appName ?? org.name;
-  // Editors navigate all pages (incl. drafts); viewers only published ones.
-  const navPages = editing && canEdit ? (allPages ?? publishedPages ?? []) : (publishedPages ?? []);
+  // Editors navigate all pages (incl. drafts); viewers only published pages
+  // they're allowed to see (admins-only pages are hidden from viewers).
+  const navPages = editing && canEdit
+    ? (allPages ?? publishedPages ?? [])
+    : (publishedPages ?? []).filter((p) => isVisibleTo(p.visibility, role));
   const navStyle = settings?.navStyle ?? 'top';
   const showBottomTabs = navStyle === 'bottom' || navStyle === 'both';
   const bottomPages = navPages.slice(0, 5);
