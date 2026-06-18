@@ -1,0 +1,23 @@
+# Netlify configuration for the Team Hub platform (web / PWA).
+#
+# Netlify reads this file automatically. It tells Netlify how to build the app
+# and how to serve it. You do not edit this to deploy — see DEPLOY.md for the
+# click-by-click steps.
+
+[build]
+  # How Netlify turns the code into the finished app.
+  command = "npm run build"
+  # The folder Netlify publishes after building.
+  publish = "dist"
+
+[build.environment]
+  # Pin the Node.js version Netlify builds with (matches local development).
+  NODE_VERSION = "22"
+
+# Single-Page-App routing: every URL (including per-workspace deep links like
+# /o/your-workspace) must serve index.html so the in-app router can handle it.
+# Without this, refreshing on /o/... would 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
