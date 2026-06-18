@@ -5,6 +5,7 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { BlockView, isVisibleTo } from '@/blocks/BlockView';
 import type { ViewerCtx } from '@/blocks/actions';
 import { useOrganization, usePageBlocks, usePublishedPages } from '@/data/hooks';
+import { useAllPages } from '@/data/pageHooks';
 import { useEditMode } from '@/editor/EditModeProvider';
 
 // The whole editing surface (Tiptap, dnd-kit, property drawer) is loaded only
@@ -23,9 +24,13 @@ export function ViewerPage() {
   const navigate = useNavigate();
 
   const { data: org } = useOrganization(slug);
-  const { data: pages, isLoading: pagesLoading } = usePublishedPages(org?.id);
-  const { role } = useMembershipRole(org?.id);
+  const { data: publishedPages, isLoading: pagesLoading } = usePublishedPages(org?.id);
+  const { role, canEdit } = useMembershipRole(org?.id);
   const { editing } = useEditMode();
+  const editingPages = editing && canEdit;
+  // Editors resolve against ALL pages (incl. drafts); viewers only published.
+  const { data: allPages } = useAllPages(editingPages ? org?.id : undefined);
+  const pages = editingPages ? allPages : publishedPages;
 
   const page = pageSlug ? pages?.find((p) => p.slug === pageSlug) : pages?.[0];
   const { data: blocks, isLoading: blocksLoading } = usePageBlocks(org?.id, page?.id);
@@ -36,7 +41,13 @@ export function ViewerPage() {
 
   if (pagesLoading) return <p className="text-sm text-gray-500">Loading…</p>;
   if (pages && pages.length === 0) {
-    return <p className="text-sm text-gray-500">This workspace has no published pages yet.</p>;
+    return (
+      <p className="text-sm text-gray-500">
+        {editingPages
+          ? 'No pages yet — use “Manage pages” to add one.'
+          : 'This workspace has no published pages yet.'}
+      </p>
+    );
   }
   if (pageSlug && pages && !page) {
     return <p className="text-sm text-gray-500">Page not found.</p>;
@@ -61,12 +72,30 @@ export function ViewerPage() {
   // Read-only mode — published, visible blocks rendered via the registry.
   const visible = (blocks ?? []).filter((b) => isVisibleTo(b.visibility, role));
 
+  // Group consecutive 2-column cards so they sit side by side.
+  const rendered: React.ReactNode[] = [];
+  const isTwoCol = (b: (typeof visible)[number]) =>
+    b.type === 'card' && (b.props as { columns?: number }).columns === 2;
+  for (let i = 0; i < visible.length; i++) {
+    const block = visible[i];
+    const next = visible[i + 1];
+    if (isTwoCol(block) && next && isTwoCol(next)) {
+      rendered.push(
+        <div key={block.id} className="grid grid-cols-2 gap-4">
+          <BlockView block={block} ctx={ctx} />
+          <BlockView block={next} ctx={ctx} />
+        </div>,
+      );
+      i++;
+    } else {
+      rendered.push(<BlockView key={block.id} block={block} ctx={ctx} />);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {blocksLoading && <p className="text-sm text-gray-500">Loading page…</p>}
-      {visible.map((block) => (
-        <BlockView key={block.id} block={block} ctx={ctx} />
-      ))}
+      {rendered}
     </div>
   );
 }

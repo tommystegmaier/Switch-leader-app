@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from './AuthProvider';
@@ -23,10 +23,10 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  if (user) {
+  useEffect(() => {
     // Already signed in — bounce to the requested destination.
-    navigate(next, { replace: true });
-  }
+    if (user) navigate(next, { replace: true });
+  }, [user, next, navigate]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

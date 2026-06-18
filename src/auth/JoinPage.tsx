@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useRedeemInvite } from '@/data/inviteHooks';
@@ -16,10 +16,12 @@ export function JoinPage() {
   const [code, setCode] = useState(params.get('code') ?? '');
   const [error, setError] = useState<string | null>(null);
 
-  if (!loading && !user) {
-    const next = `/join${params.get('code') ? `?code=${params.get('code')}` : ''}`;
-    navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
-  }
+  useEffect(() => {
+    if (!loading && !user) {
+      const next = `/join${params.get('code') ? `?code=${params.get('code')}` : ''}`;
+      navigate(`/login?next=${encodeURIComponent(next)}`, { replace: true });
+    }
+  }, [loading, user, params, navigate]);
 
   async function onJoin() {
     setError(null);

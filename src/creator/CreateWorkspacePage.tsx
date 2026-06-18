@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -19,9 +19,9 @@ export function CreateWorkspacePage() {
   const [slugEdited, setSlugEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!loading && !user) {
-    navigate('/login?next=/new', { replace: true });
-  }
+  useEffect(() => {
+    if (!loading && !user) navigate('/login?next=/new', { replace: true });
+  }, [loading, user, navigate]);
 
   const effectiveSlug = slugEdited ? slug : slugify(name);
 
