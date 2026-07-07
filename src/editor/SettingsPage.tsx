@@ -232,8 +232,11 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
             const isSelf = m.userId === user?.id;
             return (
               <li key={m.userId} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="min-w-0 truncate">
-                  {m.email}{isSelf && <span className="text-gray-400"> (you)</span>}
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium">
+                    {m.name || m.email}{isSelf && <span className="font-normal text-gray-400"> (you)</span>}
+                  </span>
+                  {m.name && <span className="block truncate text-xs text-gray-500">{m.email}</span>}
                 </span>
                 <div className="flex items-center gap-2">
                   <select
@@ -271,6 +274,7 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
           <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
             <option value="editor">{ROLE_LABEL.editor}</option>
             <option value="admin">{ROLE_LABEL.admin}</option>
+            {isOwner && <option value="owner">{ROLE_LABEL.owner}</option>}
             <option value="viewer">{ROLE_LABEL.viewer}</option>
           </select>
           <button

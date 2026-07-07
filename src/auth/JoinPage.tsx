@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useRedeemInvite } from '@/data/inviteHooks';
+import { errorMessage } from '@/lib/errors';
 import { useAuth } from './AuthProvider';
 
 /**
@@ -29,7 +30,7 @@ export function JoinPage() {
       const slug = await redeem.mutateAsync(code);
       navigate(`/o/${slug}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(errorMessage(err));
     }
   }
 

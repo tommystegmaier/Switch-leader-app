@@ -26,8 +26,12 @@ interface AuthContextValue {
   /** True when a real Supabase backend is wired up. */
   configured: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, name?: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  /** Email a password-reset link that returns to /reset-password. */
+  sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  /** Set a new password for the currently-authenticated (recovery) session. */
+  updatePassword: (password: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -78,11 +82,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { error: describeError(e) };
         }
       },
-      async signUp(email, password) {
+      async signUp(email, password, name) {
         const supabase = getSupabase();
         if (!supabase) return { error: 'Authentication is not configured.' };
         try {
-          const { error } = await supabase.auth.signUp({ email, password });
+          const trimmed = name?.trim();
+          const { error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: trimmed ? { data: { full_name: trimmed } } : undefined,
+          });
           return { error: error?.message ?? null };
         } catch (e) {
           console.error('signUp failed', e);
@@ -92,6 +101,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signOut() {
         const supabase = getSupabase();
         if (supabase) await supabase.auth.signOut();
+      },
+      async sendPasswordReset(email) {
+        const supabase = getSupabase();
+        if (!supabase) return { error: 'Authentication is not configured.' };
+        try {
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+          });
+          return { error: error?.message ?? null };
+        } catch (e) {
+          console.error('sendPasswordReset failed', e);
+          return { error: describeError(e) };
+        }
+      },
+      async updatePassword(password) {
+        const supabase = getSupabase();
+        if (!supabase) return { error: 'Authentication is not configured.' };
+        try {
+          const { error } = await supabase.auth.updateUser({ password });
+          return { error: error?.message ?? null };
+        } catch (e) {
+          console.error('updatePassword failed', e);
+          return { error: describeError(e) };
+        }
       },
     };
   }, [session, loading]);

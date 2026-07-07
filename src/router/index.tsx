@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router-dom';
 
 import { JoinPage } from '@/auth/JoinPage';
 import { LoginPage } from '@/auth/LoginPage';
+import { ResetPasswordPage } from '@/auth/ResetPasswordPage';
 import { CreateWorkspacePage } from '@/creator/CreateWorkspacePage';
 import { HomeRoute, WorkspacesRoute } from '@/creator/HomeRoute';
 import { SettingsPage } from '@/editor/SettingsPage';
@@ -25,6 +26,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/reset-password',
+    element: <ResetPasswordPage />,
   },
   {
     path: '/workspaces',

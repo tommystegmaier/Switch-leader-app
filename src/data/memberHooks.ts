@@ -6,6 +6,7 @@ import type { Role } from '@/types';
 export interface OrgMember {
   userId: string;
   email: string;
+  name: string | null;
   role: Role;
   joinedAt: string | null;
 }
@@ -24,6 +25,7 @@ export function useOrgMembers(orgId: string | undefined, enabled: boolean) {
       return (data ?? []).map((r: any) => ({
         userId: r.user_id,
         email: r.email,
+        name: r.name ?? null,
         role: r.role,
         joinedAt: r.created_at ?? null,
       }));
