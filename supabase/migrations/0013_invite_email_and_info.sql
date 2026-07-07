@@ -13,6 +13,10 @@
 
 alter table public.invites add column if not exists email text;
 
+-- Remove the previous 3-arg version so adding the 4-arg one below doesn't leave
+-- two overloads (which PostgREST can't disambiguate — PGRST203).
+drop function if exists public.create_invite(uuid, text, timestamptz);
+
 -- Extend create_invite to store the optional recipient email.
 create or replace function public.create_invite(
   p_org uuid,
