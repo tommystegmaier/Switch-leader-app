@@ -76,7 +76,14 @@ export async function enablePush(orgId: string): Promise<void> {
     },
     { onConflict: 'endpoint' },
   );
-  if (error) throw error;
+  if (error) {
+    // Surface a readable message (Supabase errors are plain objects, not Error).
+    const detail = error.message || (error as { hint?: string }).hint || 'could not save subscription';
+    if (/relation .*push_subscriptions.* does not exist|could not find the table/i.test(detail)) {
+      throw new Error('Notifications aren’t set up yet (missing database table). Ask the admin to run migration 0007.');
+    }
+    throw new Error(`Couldn’t save your notification subscription: ${detail}`);
+  }
 }
 
 /** Unsubscribe this device and remove its stored subscription. */
