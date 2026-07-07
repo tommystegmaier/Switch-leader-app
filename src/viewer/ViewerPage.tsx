@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { useMembershipRole } from '@/auth/useMembership';
-import { BlockView, isVisibleTo } from '@/blocks/BlockView';
+import { BlockView, blockFlexStyle, isVisibleTo } from '@/blocks/BlockView';
 import type { ViewerCtx } from '@/blocks/actions';
 import { useOrganization, usePageBlocks, usePublishedPages } from '@/data/hooks';
 import { useLivePageBlocks } from '@/data/liveContent';
@@ -77,32 +77,18 @@ export function ViewerPage() {
   }
 
   // Read-only mode — published, visible blocks rendered via the registry.
+  // Blocks flow left-to-right and wrap; half/third-width blocks sit side by
+  // side, full-width blocks take their own row.
   const visible = (blocks ?? []).filter((b) => isVisibleTo(b.visibility, role));
 
-  // Group consecutive 2-column cards so they sit side by side.
-  const rendered: React.ReactNode[] = [];
-  const isTwoCol = (b: (typeof visible)[number]) =>
-    b.type === 'card' && (b.props as { columns?: number }).columns === 2;
-  for (let i = 0; i < visible.length; i++) {
-    const block = visible[i];
-    const next = visible[i + 1];
-    if (isTwoCol(block) && next && isTwoCol(next)) {
-      rendered.push(
-        <div key={block.id} className="grid grid-cols-2 gap-4">
-          <BlockView block={block} ctx={ctx} />
-          <BlockView block={next} ctx={ctx} />
-        </div>,
-      );
-      i++;
-    } else {
-      rendered.push(<BlockView key={block.id} block={block} ctx={ctx} />);
-    }
-  }
-
   return (
-    <div className="flex flex-col gap-4">
-      {blocksLoading && <p className="text-sm text-gray-500">Loading page…</p>}
-      {rendered}
+    <div className="flex flex-wrap items-stretch gap-4">
+      {blocksLoading && <p className="w-full text-sm text-gray-500">Loading page…</p>}
+      {visible.map((block) => (
+        <div key={block.id} style={blockFlexStyle(block)}>
+          <BlockView block={block} ctx={ctx} />
+        </div>
+      ))}
     </div>
   );
 }

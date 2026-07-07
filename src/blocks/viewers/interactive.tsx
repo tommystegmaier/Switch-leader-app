@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { resolveAction, type ViewerCtx } from '../actions';
 import type {
   ButtonProps,
@@ -57,22 +59,51 @@ export function ButtonView({ props, ctx }: { props: ButtonProps; ctx: ViewerCtx 
   return <div className={`flex ${wrapJustify}`}>{inner}</div>;
 }
 
+/** Build a favicon URL for a site (Google's public favicon service). */
+export function faviconFor(url: string): string | null {
+  const clean = safeUrl(url);
+  if (!clean) return null;
+  try {
+    const host = new URL(clean).hostname;
+    return `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`;
+  } catch {
+    return null;
+  }
+}
+
 export function LinkView({ props }: { props: LinkProps }) {
   const url = safeUrl(props.url);
+  const customIcon = safeUrl(props.iconUrl ?? '');
+  const auto = props.autoIcon !== false; // default on
+  const favicon = auto ? faviconFor(props.url) : null;
+
+  // Icon priority: custom image → emoji → auto favicon → default link glyph.
+  let iconEl: ReactNode = <span aria-hidden>🔗</span>;
+  if (customIcon) {
+    iconEl = <img src={customIcon} alt="" className="h-6 w-6 rounded object-contain" />;
+  } else if (props.icon) {
+    iconEl = <span aria-hidden className="text-xl">{props.icon}</span>;
+  } else if (favicon) {
+    iconEl = <img src={favicon} alt="" className="h-6 w-6 rounded object-contain" loading="lazy" />;
+  }
+
   return (
     <a
       href={url ?? '#'}
       target={props.openInNewTab ? '_blank' : undefined}
       rel={props.openInNewTab ? 'noopener noreferrer' : undefined}
-      className="block rounded-lg border px-4 py-3 transition-colors hover:bg-black/5"
+      className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-black/5"
       style={{ borderColor: 'rgba(0,0,0,0.12)' }}
     >
-      <span className="font-medium underline" style={{ color: 'var(--th-text)' }}>
-        {props.label || url}
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center">{iconEl}</span>
+      <span className="min-w-0">
+        <span className="block font-medium underline" style={{ color: 'var(--th-text)' }}>
+          {props.label || url}
+        </span>
+        {props.description && (
+          <span className="mt-0.5 block text-sm text-gray-500">{props.description}</span>
+        )}
       </span>
-      {props.description && (
-        <span className="mt-0.5 block text-sm text-gray-500">{props.description}</span>
-      )}
     </a>
   );
 }

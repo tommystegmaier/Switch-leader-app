@@ -1,10 +1,14 @@
 import { useState, type HTMLAttributes } from 'react';
 
-import { BlockView } from '@/blocks/BlockView';
+import { BlockView, blockWidth, type BlockWidth } from '@/blocks/BlockView';
 import type { ViewerCtx } from '@/blocks/actions';
 import { sanitizeHtml } from '@/blocks/sanitize';
 import type { Block } from '@/types';
 import type { HeadingProps, ParagraphProps } from '@/blocks/blockProps';
+
+const WIDTH_CYCLE: Record<BlockWidth, BlockWidth> = { full: 'half', half: 'third', third: 'full' };
+const WIDTH_LABEL: Record<BlockWidth, string> = { full: 'Full', half: '½', third: '⅓' };
+const WIDTH_MAX: Record<BlockWidth, string> = { full: '100%', half: '50%', third: '33%' };
 
 /**
  * Wraps a block in Edit Mode with:
@@ -38,6 +42,7 @@ export function EditableBlock({
   isLast: boolean;
 }) {
   const [hover, setHover] = useState(false);
+  const width = blockWidth(block);
 
   return (
     <div
@@ -50,12 +55,21 @@ export function EditableBlock({
         <button type="button" {...dragHandleProps} className="cursor-grab rounded px-1.5 py-1 hover:bg-black/10" aria-label="Drag to reorder" title="Drag">⠿</button>
         <button type="button" onClick={() => onMove(-1)} disabled={isFirst} className="rounded px-1.5 py-1 hover:bg-black/10 disabled:opacity-30" aria-label="Move up">↑</button>
         <button type="button" onClick={() => onMove(1)} disabled={isLast} className="rounded px-1.5 py-1 hover:bg-black/10 disabled:opacity-30" aria-label="Move down">↓</button>
+        <button
+          type="button"
+          onClick={() => onInlineChange({ ...block.props, __width: WIDTH_CYCLE[width] })}
+          className="rounded px-1.5 py-1 hover:bg-black/10"
+          aria-label="Change width"
+          title={`Width: ${WIDTH_LABEL[width]} (tap to change — put blocks side by side)`}
+        >
+          {WIDTH_LABEL[width]}
+        </button>
         <button type="button" onClick={onEdit} className="rounded px-1.5 py-1 hover:bg-black/10" aria-label="Edit properties" title="Edit">⚙</button>
         <button type="button" onClick={onDuplicate} className="rounded px-1.5 py-1 hover:bg-black/10" aria-label="Duplicate" title="Duplicate">⧉</button>
         <button type="button" onClick={onDelete} className="rounded px-1.5 py-1 text-red-600 hover:bg-black/10" aria-label="Delete" title="Delete">🗑</button>
       </div>
 
-      <div className="p-1">
+      <div className="p-1" style={{ maxWidth: WIDTH_MAX[width] }}>
         {block.type === 'heading' ? (
           <InlineHeading props={block.props as unknown as HeadingProps} onSave={(text) => onInlineChange({ ...block.props, text })} />
         ) : block.type === 'paragraph' ? (

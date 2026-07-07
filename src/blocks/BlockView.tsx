@@ -1,6 +1,30 @@
+import type { CSSProperties } from 'react';
+
 import type { Block, Role, VisibilityRule } from '@/types';
 import type { ViewerCtx } from './actions';
 import { getBlockDef } from './registry';
+
+export type BlockWidth = 'full' | 'half' | 'third';
+
+/** The chosen layout width for a block (defaults: 2-col cards → half, else full). */
+export function blockWidth(block: Block): BlockWidth {
+  const w = (block.props as { __width?: string }).__width;
+  if (w === 'half' || w === 'third') return w;
+  if (block.type === 'card' && (block.props as { columns?: number }).columns === 2) return 'half';
+  return 'full';
+}
+
+/** Flex sizing so half/third-width blocks sit side by side (gap-4 = 1rem). */
+export function blockFlexStyle(block: Block): CSSProperties {
+  switch (blockWidth(block)) {
+    case 'half':
+      return { flexBasis: 'calc(50% - 0.5rem)', maxWidth: 'calc(50% - 0.5rem)', flexGrow: 1 };
+    case 'third':
+      return { flexBasis: 'calc(33.333% - 0.667rem)', maxWidth: 'calc(33.333% - 0.667rem)', flexGrow: 1 };
+    default:
+      return { flexBasis: '100%', maxWidth: '100%' };
+  }
+}
 
 /**
  * Renders one block by looking it up in the registry. Unknown types degrade

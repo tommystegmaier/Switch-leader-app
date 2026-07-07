@@ -60,6 +60,12 @@ export interface LinkProps {
   url: string;
   description?: string;
   openInNewTab: boolean;
+  /** Auto-pull the destination site's logo (favicon) as the icon. */
+  autoIcon?: boolean;
+  /** Emoji icon (used when not auto, and no custom image). */
+  icon?: string;
+  /** Custom uploaded icon image URL (overrides emoji + auto favicon). */
+  iconUrl?: string;
 }
 
 export interface CardProps {
