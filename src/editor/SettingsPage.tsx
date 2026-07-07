@@ -6,6 +6,7 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { useInvites, useCreateInvite, useRevokeInvite } from '@/data/inviteHooks';
 import { useOrgMembers, useSetMemberRole, useRemoveMember } from '@/data/memberHooks';
 import { useOrganization } from '@/data/hooks';
+import { errorMessage } from '@/lib/errors';
 import { useLiveAppSettings } from '@/data/liveContent';
 import { applyTheme } from '@/lib/theme';
 import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
@@ -208,13 +209,13 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
       const code = await createInvite.mutateAsync({ role: inviteRole });
       await copy(joinLinkFor(code));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
     }
   }
 
   async function run(fn: () => Promise<unknown>) {
     setError(null);
-    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    try { await fn(); } catch (e) { setError(errorMessage(e)); }
   }
 
   return (
