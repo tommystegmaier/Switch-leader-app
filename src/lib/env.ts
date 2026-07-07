@@ -12,6 +12,12 @@ export interface AppEnv {
   supabaseAnonKey: string;
   /** True when both Supabase vars are present and look usable. */
   supabaseConfigured: boolean;
+  /**
+   * When set, this deployment behaves as a single workspace's app: the root URL
+   * (and any custom domain) opens that workspace directly instead of the
+   * multi-tenant home. Lets a custom domain "be" the Switch app.
+   */
+  defaultOrgSlug: string;
 }
 
 // Normalize: trim whitespace/newlines, and strip any trailing slash from the
@@ -28,4 +34,5 @@ export const env: AppEnv = {
   supabaseUrl,
   supabaseAnonKey,
   supabaseConfigured: supabaseUrl.length > 0 && supabaseAnonKey.length > 0,
+  defaultOrgSlug: clean(import.meta.env.VITE_DEFAULT_ORG_SLUG).toLowerCase(),
 };

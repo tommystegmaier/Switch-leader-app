@@ -3,7 +3,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import { JoinPage } from '@/auth/JoinPage';
 import { LoginPage } from '@/auth/LoginPage';
 import { CreateWorkspacePage } from '@/creator/CreateWorkspacePage';
-import { HomeRoute } from '@/creator/HomeRoute';
+import { HomeRoute, WorkspacesRoute } from '@/creator/HomeRoute';
 import { SettingsPage } from '@/editor/SettingsPage';
 import { ViewerLayout } from '@/viewer/ViewerLayout';
 import { ViewerPage } from '@/viewer/ViewerPage';
@@ -25,6 +25,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/workspaces',
+    element: <WorkspacesRoute />,
   },
   {
     path: '/new',
