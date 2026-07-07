@@ -189,6 +189,7 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
   const removeMember = useRemoveMember(orgId);
 
   const [inviteRole, setInviteRole] = useState<Role>('editor');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const isOwner = currentRole === 'owner';
@@ -206,7 +207,8 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
   async function onCreate() {
     setError(null);
     try {
-      const code = await createInvite.mutateAsync({ role: inviteRole });
+      const code = await createInvite.mutateAsync({ role: inviteRole, email: inviteEmail });
+      setInviteEmail('');
       await copy(joinLinkFor(code));
     } catch (e) {
       setError(errorMessage(e));
@@ -270,24 +272,33 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
       {/* Invite a teammate */}
       <div className="rounded-lg border border-gray-200 p-3">
         <span className="text-sm font-medium">Invite a teammate</span>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
-            <option value="editor">{ROLE_LABEL.editor}</option>
-            <option value="admin">{ROLE_LABEL.admin}</option>
-            {isOwner && <option value="owner">{ROLE_LABEL.owner}</option>}
-            <option value="viewer">{ROLE_LABEL.viewer}</option>
-          </select>
-          <button
-            type="button"
-            className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50"
-            style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
-            onClick={onCreate}
-            disabled={createInvite.isPending}
-          >
-            {createInvite.isPending ? 'Creating…' : 'Create invite link'}
-          </button>
+        <div className="mt-2 flex flex-col gap-2">
+          <input
+            type="email"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            placeholder="Their email (optional — ties the link to them)"
+            value={inviteEmail}
+            onChange={(e) => setInviteEmail(e.target.value)}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
+              <option value="editor">{ROLE_LABEL.editor}</option>
+              <option value="admin">{ROLE_LABEL.admin}</option>
+              {isOwner && <option value="owner">{ROLE_LABEL.owner}</option>}
+              <option value="viewer">{ROLE_LABEL.viewer}</option>
+            </select>
+            <button
+              type="button"
+              className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+              onClick={onCreate}
+              disabled={createInvite.isPending}
+            >
+              {createInvite.isPending ? 'Creating…' : 'Create invite link'}
+            </button>
+          </div>
         </div>
-        <p className="mt-2 text-xs text-gray-500">A link is created and copied to your clipboard — text or email it to the person. They open it, create an account, and they&apos;re in.</p>
+        <p className="mt-2 text-xs text-gray-500">A link is created and copied to your clipboard — text or email it to the person. It opens a page that shows their role and lets them create an account, then drops them straight in.</p>
 
         {(invites ?? []).length > 0 && (
           <ul className="mt-3 flex flex-col gap-1 text-sm">
@@ -295,7 +306,9 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
               const link = joinLinkFor(inv.code);
               return (
                 <li key={inv.id} className="flex items-center justify-between gap-2">
-                  <code className="truncate rounded bg-black/5 px-2 py-1 text-xs">{ROLE_LABEL[inv.role] ?? inv.role}</code>
+                  <span className="min-w-0 flex-1 truncate rounded bg-black/5 px-2 py-1 text-xs">
+                    {ROLE_LABEL[inv.role] ?? inv.role}{inv.email && <span className="text-gray-500"> · {inv.email}</span>}
+                  </span>
                   <div className="flex shrink-0 items-center gap-2">
                     <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-black/5" onClick={() => copy(link)}>
                       {copied === link ? 'Copied ✓' : 'Copy link'}

@@ -7,6 +7,7 @@ export interface Invite {
   id: string;
   code: string;
   role: Role;
+  email: string | null;
   expiresAt: string | null;
 }
 
@@ -20,12 +21,12 @@ export function useInvites(orgId: string | undefined, enabled: boolean) {
       if (!s || !orgId) return [];
       const { data, error } = await s
         .from('invites')
-        .select('id, code, role, expires_at')
+        .select('id, code, role, email, expires_at')
         .eq('org_id', orgId)
         .order('created_at', { ascending: false });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, code: r.code, role: r.role, expiresAt: r.expires_at }));
+      return (data ?? []).map((r: any) => ({ id: r.id, code: r.code, role: r.role, email: r.email ?? null, expiresAt: r.expires_at }));
     },
   });
 }
@@ -33,14 +34,39 @@ export function useInvites(orgId: string | undefined, enabled: boolean) {
 export function useCreateInvite(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ role = 'viewer' as Role }: { role?: Role }) => {
+    mutationFn: async ({ role = 'viewer' as Role, email }: { role?: Role; email?: string }) => {
       const s = getSupabase();
       if (!s) throw new Error('Backend not configured.');
-      const { data, error } = await s.rpc('create_invite', { p_org: orgId, p_role: role });
+      const { data, error } = await s.rpc('create_invite', { p_org: orgId, p_role: role, p_email: email?.trim() || null });
       if (error) throw error;
       return data as string;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['org', orgId, 'invites'] }),
+  });
+}
+
+export interface InviteInfo {
+  orgSlug: string;
+  orgName: string;
+  role: Role;
+  email: string | null;
+  valid: boolean;
+}
+
+/** Public preview of an invite code (what workspace + role it grants). */
+export function useInviteInfo(code: string | undefined) {
+  return useQuery({
+    queryKey: ['invite-info', code],
+    enabled: Boolean(code) && isSupabaseConfigured,
+    queryFn: async (): Promise<InviteInfo | null> => {
+      const s = getSupabase();
+      if (!s || !code) return null;
+      const { data, error } = await s.rpc('invite_info', { p_code: code.trim() });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) return null;
+      return { orgSlug: row.org_slug, orgName: row.org_name, role: row.role, email: row.email ?? null, valid: row.valid };
+    },
   });
 }
 
