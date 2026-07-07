@@ -7,6 +7,10 @@
 -- UI shows their email in that case.
 -- ===========================================================================
 
+-- Adding the `name` column changes the return type, which CREATE OR REPLACE
+-- can't do — drop the old definition first.
+drop function if exists public.list_org_members(uuid);
+
 create or replace function public.list_org_members(p_org uuid)
 returns table (user_id uuid, email text, name text, role text, created_at timestamptz)
 language plpgsql
@@ -33,3 +37,7 @@ begin
     m.created_at;
 end;
 $$;
+
+-- DROP removed the old grant; restore it.
+revoke all on function public.list_org_members(uuid) from public;
+grant execute on function public.list_org_members(uuid) to authenticated;
