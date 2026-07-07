@@ -11,6 +11,8 @@ import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
 import { usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
 import { applyTheme } from '@/lib/theme';
+import { applyWorkspaceMetadata } from '@/lib/appMetadata';
+import { InstallPrompt } from './InstallPrompt';
 
 /**
  * Viewer shell: top bar with app title + hamburger menu listing the workspace's
@@ -46,6 +48,11 @@ export function ViewerLayout() {
   useEffect(() => {
     if (settings) applyTheme(settings);
   }, [settings]);
+
+  // Make this workspace install to the home screen as its own app (name + icon).
+  useEffect(() => {
+    if (org) applyWorkspaceMetadata(org, settings ?? undefined);
+  }, [org, settings]);
 
   useEffect(() => {
     if (!canEdit && editing) setEditing(false);
@@ -190,6 +197,8 @@ export function ViewerLayout() {
           </ul>
         </nav>
       )}
+
+      {!editing && <InstallPrompt appName={appName} slug={org.slug} />}
 
       {pagesOpen && canEdit && (
         <PageManager
