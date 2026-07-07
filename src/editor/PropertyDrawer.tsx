@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { usePublishedPages } from '@/data/hooks';
+import { useAllPages } from '@/data/pageHooks';
 import type { BlockAction } from '@/blocks/actions';
 import type { FieldDef } from '@/blocks/fields';
 import { getBlockDef } from '@/blocks/registry';
@@ -236,7 +236,9 @@ function ActionInput({
   onChange: (v: BlockAction) => void;
 }) {
   const action: BlockAction = value ?? { type: 'url', target: '' };
-  const { data: pages } = usePublishedPages(orgId);
+  // List ALL pages (including drafts) so a just-created page is selectable
+  // before the workspace is published.
+  const { data: pages } = useAllPages(orgId);
   return (
     <div className="rounded-md border border-gray-200 p-3">
       <span className="text-sm font-medium">{field.label}</span>
