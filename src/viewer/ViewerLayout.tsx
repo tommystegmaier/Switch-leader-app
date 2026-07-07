@@ -90,9 +90,19 @@ export function ViewerLayout() {
         className="sticky top-0 z-20 border-b"
         style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(0,0,0,0.08)', paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <div className="mx-auto flex max-w-screen-sm items-center justify-between px-4 py-3">
-          <span className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{appName}</span>
-          <div className="flex items-center gap-2">
+        <div className="mx-auto flex max-w-screen-sm flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <span className="min-w-0 truncate text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{appName}</span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setNotifyOpen(true)}
+                className="rounded-full border px-3 py-1.5 text-sm font-semibold"
+                style={{ color: 'var(--th-text)', borderColor: 'rgba(0,0,0,0.2)' }}
+              >
+                🔔 Send Push Notification
+              </button>
+            )}
             {canEdit && (
               <button
                 type="button"
@@ -124,7 +134,6 @@ export function ViewerLayout() {
             <span className="font-semibold">Draft</span>
             <button type="button" onClick={() => setPagesOpen(true)} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Manage pages</button>
             <Link to={`/o/${org.slug}/settings`} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Settings</Link>
-            <button type="button" onClick={() => setNotifyOpen(true)} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">🔔 Notify</button>
             <span className="mx-1 h-3 w-px bg-white/40" />
             {publishStatus?.dirty === false ? (
               <span className="opacity-90">✓ Published</span>

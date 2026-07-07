@@ -44,6 +44,20 @@ export function useCreateInvite(orgId: string) {
   });
 }
 
+/** Revoke (delete) an invite code. Owner/admin only, per RLS. */
+export function useRevokeInvite(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (inviteId: string) => {
+      const s = getSupabase();
+      if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('invites').delete().eq('id', inviteId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['org', orgId, 'invites'] }),
+  });
+}
+
 export function useRedeemInvite() {
   return useMutation({
     mutationFn: async (code: string): Promise<string> => {

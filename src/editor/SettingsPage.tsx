@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
-import { useInvites, useCreateInvite } from '@/data/inviteHooks';
+import { useInvites, useCreateInvite, useRevokeInvite } from '@/data/inviteHooks';
+import { useOrgMembers, useSetMemberRole, useRemoveMember } from '@/data/memberHooks';
 import { useOrganization } from '@/data/hooks';
 import { useLiveAppSettings } from '@/data/liveContent';
 import { applyTheme } from '@/lib/theme';
 import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
-import type { AppSettings, NavStyle, ThemeColors, ViewerAccess } from '@/types';
+import type { AppSettings, NavStyle, Role, ThemeColors, ViewerAccess } from '@/types';
 import { MediaPicker } from './MediaPicker';
 import { useSettingsMutations } from './useSettingsMutations';
 
@@ -36,8 +38,6 @@ export function SettingsPage() {
   useEffect(() => () => { if (saved) applyTheme(saved); }, [saved]);
 
   const isAdmin = role === 'owner' || role === 'admin';
-  const { data: invites } = useInvites(org?.id, isAdmin);
-  const createInvite = useCreateInvite(org?.id ?? '');
 
   if (!isLoading && !canEdit) {
     return (
@@ -141,37 +141,15 @@ export function SettingsPage() {
             <button type="button" className="rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-black/5" onClick={() => navigator.clipboard?.writeText(viewerLink)}>Copy</button>
           </div>
         </Field>
-
         {draft.viewerAccess === 'invite_only' && (
-          isAdmin ? (
-            <div className="rounded-lg border border-gray-200 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-medium">Invite codes</span>
-                <button type="button" className="rounded-full px-3 py-1 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }} onClick={() => createInvite.mutate({ role: 'viewer' })} disabled={createInvite.isPending}>
-                  {createInvite.isPending ? 'Creating…' : '+ New invite'}
-                </button>
-              </div>
-              {(invites ?? []).length === 0 ? (
-                <p className="text-xs text-gray-500">No invites yet. Create one and share the join link.</p>
-              ) : (
-                <ul className="flex flex-col gap-1 text-sm">
-                  {(invites ?? []).map((inv) => {
-                    const joinLink = `${window.location.origin}/join?code=${inv.code}`;
-                    return (
-                      <li key={inv.id} className="flex items-center justify-between gap-2">
-                        <code className="truncate rounded bg-black/5 px-2 py-1 text-xs">{inv.code} · {inv.role}</code>
-                        <button type="button" className="shrink-0 rounded border border-gray-300 px-2 py-1 text-xs hover:bg-black/5" onClick={() => navigator.clipboard?.writeText(joinLink)}>Copy join link</button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-500">Only an owner or admin can manage invites.</p>
-          )
+          <p className="text-xs text-gray-500">
+            This app is invite-only. Add people (as viewers or editors) in the <span className="font-medium">Team &amp; access</span> section below.
+          </p>
         )}
       </Section>
+
+      {/* Team & access — who can edit / view (owner & admin only) */}
+      {isAdmin && <TeamAccessSection orgId={org.id} currentRole={role} />}
 
       <div className="sticky bottom-0 mt-6 flex items-center gap-3 border-t bg-white/90 py-3 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <button type="button" onClick={onSave} disabled={save.isPending} className="rounded-full px-6 py-3 font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
@@ -183,6 +161,153 @@ export function SettingsPage() {
       {pickLogo && <MediaPicker orgId={org.id} accept="image/*" onSelect={(u) => set({ logoUrl: u })} onClose={() => setPickLogo(false)} />}
       {pickIcon && <MediaPicker orgId={org.id} accept="image/*" onSelect={(u) => set({ iconUrl: u })} onClose={() => setPickIcon(false)} />}
     </div>
+  );
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: 'Owner (full control)',
+  admin: 'Admin (can edit + manage people)',
+  editor: 'Editor (can edit the app)',
+  viewer: 'Viewer (can only look)',
+};
+
+/**
+ * Team & access: an owner/admin invites teammates by generating a join link
+ * (pick the role), sees everyone who currently has access, and can change a
+ * person's role or remove them. Anyone you invite signs up with their own
+ * email and lands with the role you chose — so several people can edit the
+ * same app from different accounts.
+ */
+function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole: Role | null }) {
+  const { user } = useAuth();
+  const { data: invites } = useInvites(orgId, true);
+  const { data: members } = useOrgMembers(orgId, true);
+  const createInvite = useCreateInvite(orgId);
+  const revokeInvite = useRevokeInvite(orgId);
+  const setRole = useSetMemberRole(orgId);
+  const removeMember = useRemoveMember(orgId);
+
+  const [inviteRole, setInviteRole] = useState<Role>('editor');
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const isOwner = currentRole === 'owner';
+
+  const joinLinkFor = (code: string) => `${window.location.origin}/join?code=${code}`;
+
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopied(text);
+      setTimeout(() => setCopied(null), 2000);
+    } catch { /* clipboard unavailable */ }
+  }
+
+  async function onCreate() {
+    setError(null);
+    try {
+      const code = await createInvite.mutateAsync({ role: inviteRole });
+      await copy(joinLinkFor(code));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function run(fn: () => Promise<unknown>) {
+    setError(null);
+    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  }
+
+  return (
+    <Section title="Team & access">
+      <p className="text-sm text-gray-500">
+        Invite other people to help run this app. They sign up with their own email and get the role you pick — so several people can edit from different accounts.
+      </p>
+
+      {/* Current people */}
+      <div className="rounded-lg border border-gray-200 p-3">
+        <span className="text-sm font-medium">People with access</span>
+        <ul className="mt-2 flex flex-col gap-2 text-sm">
+          {(members ?? []).map((m) => {
+            const isSelf = m.userId === user?.id;
+            return (
+              <li key={m.userId} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0 truncate">
+                  {m.email}{isSelf && <span className="text-gray-400"> (you)</span>}
+                </span>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-60"
+                    value={m.role}
+                    disabled={isSelf || (m.role === 'owner' && !isOwner)}
+                    onChange={(e) => run(() => setRole.mutateAsync({ userId: m.userId, role: e.target.value as Role }))}
+                  >
+                    <option value="owner">Owner</option>
+                    <option value="admin">Admin</option>
+                    <option value="editor">Editor</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                  {!isSelf && (
+                    <button
+                      type="button"
+                      className="rounded border border-gray-300 px-2 py-1 text-xs text-red-600 hover:bg-black/5"
+                      onClick={() => run(() => removeMember.mutateAsync(m.userId))}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+          {(members ?? []).length === 0 && <li className="text-xs text-gray-500">Just you so far.</li>}
+        </ul>
+      </div>
+
+      {/* Invite a teammate */}
+      <div className="rounded-lg border border-gray-200 p-3">
+        <span className="text-sm font-medium">Invite a teammate</span>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
+            <option value="editor">{ROLE_LABEL.editor}</option>
+            <option value="admin">{ROLE_LABEL.admin}</option>
+            <option value="viewer">{ROLE_LABEL.viewer}</option>
+          </select>
+          <button
+            type="button"
+            className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+            onClick={onCreate}
+            disabled={createInvite.isPending}
+          >
+            {createInvite.isPending ? 'Creating…' : 'Create invite link'}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-gray-500">A link is created and copied to your clipboard — text or email it to the person. They open it, create an account, and they&apos;re in.</p>
+
+        {(invites ?? []).length > 0 && (
+          <ul className="mt-3 flex flex-col gap-1 text-sm">
+            {(invites ?? []).map((inv) => {
+              const link = joinLinkFor(inv.code);
+              return (
+                <li key={inv.id} className="flex items-center justify-between gap-2">
+                  <code className="truncate rounded bg-black/5 px-2 py-1 text-xs">{ROLE_LABEL[inv.role] ?? inv.role}</code>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-black/5" onClick={() => copy(link)}>
+                      {copied === link ? 'Copied ✓' : 'Copy link'}
+                    </button>
+                    <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs text-red-600 hover:bg-black/5" onClick={() => run(() => revokeInvite.mutateAsync(inv.id))}>
+                      Revoke
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+    </Section>
   );
 }
 
