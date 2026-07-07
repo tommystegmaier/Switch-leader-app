@@ -87,21 +87,23 @@ export function LinkView({ props }: { props: LinkProps }) {
     iconEl = <img src={favicon} alt="" className="h-6 w-6 rounded object-contain" loading="lazy" />;
   }
 
+  const bg = props.bgColor?.trim();
+  const fg = props.textColor?.trim() || 'var(--th-text)';
   return (
     <a
       href={url ?? '#'}
       target={props.openInNewTab ? '_blank' : undefined}
       rel={props.openInNewTab ? 'noopener noreferrer' : undefined}
-      className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-black/5"
-      style={{ borderColor: 'rgba(0,0,0,0.12)' }}
+      className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-opacity hover:opacity-90"
+      style={{ backgroundColor: bg || 'transparent', borderColor: bg ? 'transparent' : 'rgba(0,0,0,0.12)' }}
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center">{iconEl}</span>
       <span className="min-w-0">
-        <span className="block font-medium underline" style={{ color: 'var(--th-text)' }}>
+        <span className="block font-medium underline" style={{ color: fg }}>
           {props.label || url}
         </span>
         {props.description && (
-          <span className="mt-0.5 block text-sm text-gray-500">{props.description}</span>
+          <span className="mt-0.5 block text-sm" style={{ color: fg, opacity: 0.75 }}>{props.description}</span>
         )}
       </span>
     </a>

@@ -66,6 +66,10 @@ export interface LinkProps {
   icon?: string;
   /** Custom uploaded icon image URL (overrides emoji + auto favicon). */
   iconUrl?: string;
+  /** Optional background color for the link card (default: transparent). */
+  bgColor?: string;
+  /** Optional text color (default: theme text color). */
+  textColor?: string;
 }
 
 export interface CardProps {
