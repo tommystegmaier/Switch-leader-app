@@ -66,16 +66,20 @@ export async function enablePush(orgId: string): Promise<void> {
   const supabase = getSupabase();
   if (!supabase) throw new Error('Backend not configured.');
   const { data: userRes } = await supabase.auth.getUser();
-  const { error } = await supabase.from('push_subscriptions').upsert(
-    {
-      org_id: orgId,
-      endpoint: json.endpoint,
-      p256dh: json.keys.p256dh,
-      auth: json.keys.auth,
-      user_id: userRes?.user?.id ?? null,
-    },
-    { onConflict: 'endpoint' },
-  );
+  // Delete any existing row for this endpoint, then insert a fresh one.
+  // We intentionally do NOT upsert: an upsert becomes INSERT ... ON CONFLICT
+  // DO UPDATE, and the table has no UPDATE policy (by design — see 0007), so
+  // the update branch would fail with an RLS violation whenever the device
+  // re-subscribes with an endpoint it already registered. Delete-then-insert
+  // only needs the delete + insert policies, which every viewer has.
+  await supabase.from('push_subscriptions').delete().eq('endpoint', json.endpoint);
+  const { error } = await supabase.from('push_subscriptions').insert({
+    org_id: orgId,
+    endpoint: json.endpoint,
+    p256dh: json.keys.p256dh,
+    auth: json.keys.auth,
+    user_id: userRes?.user?.id ?? null,
+  });
   if (error) {
     // Surface a readable message (Supabase errors are plain objects, not Error).
     const detail = error.message || (error as { hint?: string }).hint || 'could not save subscription';
