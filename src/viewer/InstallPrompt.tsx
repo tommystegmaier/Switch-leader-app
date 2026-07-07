@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { NotifyButton } from './NotifyButton';
+
 /**
  * A friendly, platform-aware "Add to Home Screen" prompt.
  *
@@ -22,7 +24,7 @@ function isStandalone(): boolean {
   );
 }
 
-export function InstallPrompt({ appName, slug }: { appName: string; slug: string }) {
+export function InstallPrompt({ appName, slug, orgId }: { appName: string; slug: string; orgId: string }) {
   const storageKey = `install-dismissed:${slug}`;
   const [visible, setVisible] = useState(false);
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
@@ -98,6 +100,12 @@ export function InstallPrompt({ appName, slug }: { appName: string; slug: string
             In your browser menu, choose <strong>“Install app”</strong> or <strong>“Add to Home screen.”</strong>
           </p>
         )}
+
+        <div className="mt-3 border-t pt-3" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+          <p className="mb-2 text-sm text-gray-600">Get notified about updates:</p>
+          <NotifyButton orgId={orgId} />
+          {isIOS && <p className="mt-1 text-xs text-gray-400">On iPhone, add to your Home Screen first, then open it from there to turn on notifications.</p>}
+        </div>
       </div>
     </div>
   );

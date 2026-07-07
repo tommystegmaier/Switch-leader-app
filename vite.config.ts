@@ -32,6 +32,8 @@ export default defineConfig({
         // Cache the built app shell for offline use; runtime-cache published
         // content (Supabase reads) so a viewer can reopen the app offline.
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Web Push handlers (push + notificationclick) folded into the SW.
+        importScripts: ['/push-sw.js'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/o\/[^/]+\/settings/],
         runtimeCaching: [

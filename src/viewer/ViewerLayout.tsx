@@ -12,7 +12,9 @@ import { PageManager } from '@/editor/PageManager';
 import { usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
 import { applyTheme } from '@/lib/theme';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
+import { SendNotification } from '@/editor/SendNotification';
 import { InstallPrompt } from './InstallPrompt';
+import { NotifyButton } from './NotifyButton';
 
 /**
  * Viewer shell: top bar with app title + hamburger menu listing the workspace's
@@ -26,6 +28,7 @@ export function ViewerLayout() {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pagesOpen, setPagesOpen] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
 
   const { data: org, isLoading: orgLoading } = useOrganization(slug);
   const { data: publishedSettings } = useAppSettings(org?.id);
@@ -120,6 +123,7 @@ export function ViewerLayout() {
             <span className="font-semibold">Draft</span>
             <button type="button" onClick={() => setPagesOpen(true)} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Manage pages</button>
             <Link to={`/o/${org.slug}/settings`} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Settings</Link>
+            <button type="button" onClick={() => setNotifyOpen(true)} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">🔔 Notify</button>
             <span className="mx-1 h-3 w-px bg-white/40" />
             {publishStatus?.dirty === false ? (
               <span className="opacity-90">✓ Published</span>
@@ -156,6 +160,10 @@ export function ViewerLayout() {
                 </li>
               ))}
             </ul>
+
+            <div className="mx-auto max-w-screen-sm border-t px-3 py-2" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+              <NotifyButton orgId={org.id} className="mb-2" />
+            </div>
 
             <div className="mx-auto max-w-screen-sm border-t px-3 py-2 text-sm" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
               {canEdit && (
@@ -198,7 +206,11 @@ export function ViewerLayout() {
         </nav>
       )}
 
-      {!editing && <InstallPrompt appName={appName} slug={org.slug} />}
+      {!editing && <InstallPrompt appName={appName} slug={org.slug} orgId={org.id} />}
+
+      {notifyOpen && canEdit && (
+        <SendNotification orgId={org.id} orgSlug={org.slug} onClose={() => setNotifyOpen(false)} />
+      )}
 
       {pagesOpen && canEdit && (
         <PageManager
