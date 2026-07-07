@@ -14,6 +14,7 @@ import { applyTheme } from '@/lib/theme';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
 import { SendNotification } from '@/editor/SendNotification';
 import { InstallPrompt } from './InstallPrompt';
+import { NotificationPrompt } from './NotificationPrompt';
 import { NotifyButton } from './NotifyButton';
 
 /**
@@ -207,6 +208,7 @@ export function ViewerLayout() {
       )}
 
       {!editing && <InstallPrompt appName={appName} slug={org.slug} orgId={org.id} />}
+      {!editing && <NotificationPrompt appName={appName} orgId={org.id} />}
 
       {notifyOpen && canEdit && (
         <SendNotification orgId={org.id} orgSlug={org.slug} onClose={() => setNotifyOpen(false)} />
