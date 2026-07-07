@@ -31,7 +31,8 @@ export function applyWorkspaceMetadata(org: Organization, settings: AppSettings 
   // Per-workspace manifest (Android/Chrome installs).
   const manifest = {
     name,
-    short_name: name.slice(0, 12),
+    // Don't truncate mid-word (e.g. "Switch Leade"); let the OS shorten if needed.
+    short_name: name.slice(0, 30),
     start_url: `/o/${org.slug}`,
     scope: `/o/${org.slug}`,
     display: 'standalone',
