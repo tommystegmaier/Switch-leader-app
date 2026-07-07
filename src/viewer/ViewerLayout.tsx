@@ -171,6 +171,20 @@ export function ViewerLayout() {
               ))}
             </ul>
 
+            {user && (
+              <div className="mx-auto max-w-screen-sm border-t px-3 py-2" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+                <Link
+                  to="/workspaces"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-3 rounded-md px-3 py-2 text-base font-medium hover:bg-black/5"
+                  style={{ color: 'var(--th-text)' }}
+                >
+                  <span aria-hidden>⧉</span>
+                  <span>My apps — create or switch</span>
+                </Link>
+              </div>
+            )}
+
             <div className="mx-auto max-w-screen-sm border-t px-3 py-2" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
               <NotifyButton orgId={org.id} className="mb-2" />
             </div>
