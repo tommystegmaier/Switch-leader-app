@@ -70,17 +70,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signIn(email, password) {
         const supabase = getSupabase();
         if (!supabase) return { error: 'Authentication is not configured.' };
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        return { error: error?.message ?? null };
+        try {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          return { error: error?.message ?? null };
+        } catch (e) {
+          console.error('signIn failed', e);
+          return { error: describeError(e) };
+        }
       },
       async signUp(email, password) {
         const supabase = getSupabase();
         if (!supabase) return { error: 'Authentication is not configured.' };
-        const { error } = await supabase.auth.signUp({ email, password });
-        return { error: error?.message ?? null };
+        try {
+          const { error } = await supabase.auth.signUp({ email, password });
+          return { error: error?.message ?? null };
+        } catch (e) {
+          console.error('signUp failed', e);
+          return { error: describeError(e) };
+        }
       },
       async signOut() {
         const supabase = getSupabase();
@@ -90,6 +97,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/**
+ * Turns a thrown error into a human-friendly message. A bare "TypeError" here
+ * almost always means the browser couldn't reach Supabase (bad URL, blocked
+ * network, or wrong project), so we say so plainly.
+ */
+function describeError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/load failed|failed to fetch|networkerror|type ?error/i.test(msg)) {
+    return "Couldn't reach the server — check the app's Supabase URL/key settings and your connection.";
+  }
+  return msg || 'Something went wrong. Please try again.';
 }
 
 export function useAuth(): AuthContextValue {

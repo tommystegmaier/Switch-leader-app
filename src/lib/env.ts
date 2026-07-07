@@ -14,8 +14,15 @@ export interface AppEnv {
   supabaseConfigured: boolean;
 }
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
+// Normalize: trim whitespace/newlines, and strip any trailing slash from the
+// URL (a trailing "/" produces a double-slash "//auth/v1" that some setups
+// reject). Also strip surrounding quotes in case they were pasted in.
+function clean(v: string | undefined): string {
+  return (v ?? '').trim().replace(/^["']|["']$/g, '');
+}
+
+const supabaseUrl = clean(import.meta.env.VITE_SUPABASE_URL).replace(/\/+$/, '');
+const supabaseAnonKey = clean(import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 export const env: AppEnv = {
   supabaseUrl,
