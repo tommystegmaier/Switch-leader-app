@@ -138,7 +138,18 @@ export function JoinPage() {
           )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Email</span>
-            <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              readOnly={Boolean(info?.email)}
+              className={`${inputCls} ${info?.email ? 'bg-gray-100 text-gray-600' : ''}`}
+            />
+            {info?.email && (
+              <span className="text-xs text-gray-500">This invitation is for {info.email} — use this address to accept.</span>
+            )}
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Password</span>
