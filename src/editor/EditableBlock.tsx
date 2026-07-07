@@ -8,7 +8,6 @@ import type { HeadingProps, ParagraphProps } from '@/blocks/blockProps';
 
 const WIDTH_CYCLE: Record<BlockWidth, BlockWidth> = { full: 'half', half: 'third', third: 'full' };
 const WIDTH_LABEL: Record<BlockWidth, string> = { full: 'Full', half: '½', third: '⅓' };
-const WIDTH_MAX: Record<BlockWidth, string> = { full: '100%', half: '50%', third: '33%' };
 
 /**
  * Wraps a block in Edit Mode with:
@@ -25,6 +24,7 @@ export function EditableBlock({
   onDuplicate,
   onDelete,
   onMove,
+  onInsertAfter,
   onInlineChange,
   dragHandleProps,
   isFirst,
@@ -36,6 +36,7 @@ export function EditableBlock({
   onDuplicate: () => void;
   onDelete: () => void;
   onMove: (dir: -1 | 1) => void;
+  onInsertAfter: () => void;
   onInlineChange: (props: Record<string, unknown>) => void;
   dragHandleProps?: HTMLAttributes<HTMLButtonElement>;
   isFirst: boolean;
@@ -46,7 +47,7 @@ export function EditableBlock({
 
   return (
     <div
-      className="group relative rounded-lg ring-offset-2 transition-shadow hover:ring-2 hover:ring-black/10"
+      className="group relative h-full rounded-lg ring-offset-2 transition-shadow hover:ring-2 hover:ring-black/10"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
@@ -66,10 +67,11 @@ export function EditableBlock({
         </button>
         <button type="button" onClick={onEdit} className="rounded px-1.5 py-1 hover:bg-black/10" aria-label="Edit properties" title="Edit">⚙</button>
         <button type="button" onClick={onDuplicate} className="rounded px-1.5 py-1 hover:bg-black/10" aria-label="Duplicate" title="Duplicate">⧉</button>
+        <button type="button" onClick={onInsertAfter} className="rounded px-1.5 py-1 hover:bg-black/10" aria-label="Insert block after" title="Insert block after">＋</button>
         <button type="button" onClick={onDelete} className="rounded px-1.5 py-1 text-red-600 hover:bg-black/10" aria-label="Delete" title="Delete">🗑</button>
       </div>
 
-      <div className="p-1" style={{ maxWidth: WIDTH_MAX[width] }}>
+      <div className="h-full p-1">
         {block.type === 'heading' ? (
           <InlineHeading props={block.props as unknown as HeadingProps} onSave={(text) => onInlineChange({ ...block.props, text })} />
         ) : block.type === 'paragraph' ? (
