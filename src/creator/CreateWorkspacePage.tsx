@@ -46,7 +46,7 @@ export function CreateWorkspacePage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-10">
-      <Link to="/" className="text-sm text-gray-500 underline">← My workspaces</Link>
+      <Link to="/workspaces" className="text-sm text-gray-500 underline">← My workspaces</Link>
       <h1 className="mb-1 mt-4 text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>
         Create a new app
       </h1>

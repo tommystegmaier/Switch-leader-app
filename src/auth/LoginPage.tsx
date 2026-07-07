@@ -14,7 +14,9 @@ export function LoginPage() {
   const { signIn, signUp, sendPasswordReset, configured, user } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const next = params.get('next') || '/';
+  // Default to the creator hub so anyone signing in (to build their own app)
+  // lands on "My workspaces" rather than a specific workspace.
+  const next = params.get('next') || '/workspaces';
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>('signin');
   const [name, setName] = useState('');
