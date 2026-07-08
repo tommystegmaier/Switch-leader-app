@@ -132,6 +132,33 @@ export function useServeWeekday(orgId: string | undefined, enabled = true) {
   });
 }
 
+export interface BirthdayConfig { enabled: boolean; notifyTime: string; timezone: string }
+
+export function useBirthdayConfig(orgId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: KEY(orgId, 'birthday-config'),
+    enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<BirthdayConfig> => {
+      const s = getSupabase(); if (!s || !orgId) return { enabled: false, notifyTime: '08:00', timezone: 'UTC' };
+      const { data, error } = await s.from('birthday_config').select('enabled, notify_time, timezone').eq('org_id', orgId).maybeSingle();
+      if (error) throw error;
+      return { enabled: data?.enabled ?? false, notifyTime: data?.notify_time ?? '08:00', timezone: data?.timezone ?? 'UTC' };
+    },
+  });
+}
+
+export function useSaveBirthdayConfig(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (cfg: BirthdayConfig) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('birthday_config').upsert({ org_id: orgId, enabled: cfg.enabled, notify_time: cfg.notifyTime, timezone: cfg.timezone });
+      if (error) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'birthday-config'),
+  });
+}
+
 export interface NotifyDefaults { title: string; message: string }
 
 export function useNotifyDefaults(orgId: string | undefined, enabled = true) {

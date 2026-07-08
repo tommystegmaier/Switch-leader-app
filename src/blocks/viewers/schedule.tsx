@@ -14,6 +14,7 @@ import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import {
   useAddSkip, useAddToRoster, useCreateRole, useCreateTeam, useDeleteRole, useDeleteTeam,
+  useBirthdayConfig, useSaveBirthdayConfig,
   useMySchedule, useNotifyDefaults, useNotifyRoster, useOrgBirthdays, useRemoveFromRoster,
   useRemoveSkip, useReorderRoles, useReorderTeams, useRespondOccurrence, useRoster,
   useRosterStatus, useSaveNotifyDefaults, useScheduleMembers, useScheduleMute,
@@ -670,6 +671,8 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
       {withDays.length === 0 && (
         <p className="mt-2 text-sm text-gray-500">Birthdays appear here once people add theirs at sign-up.</p>
       )}
+
+      <BirthdayAlertSettings orgId={org.id} />
     </div>
   );
 }
@@ -685,5 +688,43 @@ function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | nul
         {b.days === 0 ? 'TODAY' : b.days === 1 ? 'TOMORROW' : fmtMonthDay(b.md)}
       </span>
     </li>
+  );
+}
+
+/** Managers-only: turn on a daily birthday push at a chosen time. */
+function BirthdayAlertSettings({ orgId }: { orgId: string }) {
+  const { data: cfg } = useBirthdayConfig(orgId, true);
+  const save = useSaveBirthdayConfig(orgId);
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [time, setTime] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const enabledVal = enabled ?? cfg?.enabled ?? false;
+  const timeVal = time ?? cfg?.notifyTime ?? '08:00';
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
+
+  function persist(next: { enabled: boolean; notifyTime: string }) {
+    save.mutate({ enabled: next.enabled, notifyTime: next.notifyTime, timezone: tz });
+    setSaved(true); setTimeout(() => setSaved(false), 2000);
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border p-3" style={cardStyle}>
+      <label className="flex items-center justify-between gap-3 text-sm">
+        <span>
+          <span className="block font-medium">🔔 Daily birthday alert</span>
+          <span className="block text-xs text-gray-500">Push managers a reminder of today&apos;s birthdays.</span>
+        </span>
+        <input type="checkbox" className="h-5 w-5" checked={enabledVal} onChange={(e) => { setEnabled(e.target.checked); persist({ enabled: e.target.checked, notifyTime: timeVal }); }} />
+      </label>
+      {enabledVal && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-medium">Send at</span>
+          <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={timeVal} onChange={(e) => { setTime(e.target.value); persist({ enabled: enabledVal, notifyTime: e.target.value }); }} />
+          <span className="text-xs text-gray-500">your time ({tz.split('/').pop()})</span>
+        </div>
+      )}
+      {saved && <p className="mt-1 text-xs text-green-700">Saved ✓</p>}
+    </div>
   );
 }
