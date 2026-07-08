@@ -219,7 +219,7 @@ export function ViewerLayout() {
         <Outlet />
       </main>
 
-      {showBottomTabs && (
+      {showBottomTabs && !menuOpen && (
         <nav
           className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.6rem)' }}
