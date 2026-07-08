@@ -204,6 +204,8 @@ function RosterTab({ orgId, size, editing }: { orgId: string; size: HeaderSize; 
   const { data: statuses } = useRosterStatus(orgId, selectedDate, true);
   const [assignRole, setAssignRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleTeam = (id: string) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
 
   const teamList = teams ?? [];
   const onTeamDrag = (e: DragEndEvent) => {
@@ -244,14 +246,31 @@ function RosterTab({ orgId, size, editing }: { orgId: string; size: HeaderSize; 
         </div>
       )}
 
-      {editing && <p className="text-xs text-gray-500">Hold the ⠿ grip to drag a team or role into the order you want.</p>}
+      <div className="flex items-center justify-between">
+        {editing ? <span className="text-xs text-gray-500">Hold the ⠿ grip to drag a team or role.</span> : <span />}
+        <button
+          type="button"
+          className="text-xs text-gray-500 underline"
+          onClick={() => {
+            const anyOpen = teamList.some((t) => !collapsed[t.id]);
+            setCollapsed(Object.fromEntries(teamList.map((t) => [t.id, anyOpen])));
+          }}
+        >
+          {teamList.some((t) => !collapsed[t.id]) ? 'Collapse all' : 'Expand all'}
+        </button>
+      </div>
       <SortableGroup enabled={editing} items={teamList.map((t) => t.id)} sensors={sensors} onDragEnd={onTeamDrag}>
           {teamList.map((t) => {
             const teamRoles = (roles ?? []).filter((r) => r.teamId === t.id);
             return (
               <MaybeSortable enabled={editing} id={t.id} key={t.id}>
                 <div>
-                  <p className={`mb-1 font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>{t.name}</p>
+                  <button type="button" onClick={() => toggleTeam(t.id)} className="mb-1 flex w-full items-center gap-2 text-left" aria-expanded={!collapsed[t.id]}>
+                    <span className="text-gray-400" aria-hidden>{collapsed[t.id] ? '▸' : '▾'}</span>
+                    <span className={`font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>{t.name}</span>
+                    <span className="ml-auto text-xs font-normal text-gray-400">{teamRoles.length} role{teamRoles.length === 1 ? '' : 's'}</span>
+                  </button>
+                  {!collapsed[t.id] && (
                   <SortableGroup enabled={editing} items={teamRoles.map((r) => r.id)} sensors={sensors} onDragEnd={(e) => onRoleDrag(teamRoles, e)}>
                       <div className="flex flex-col gap-2">
                         {teamRoles.map((r) => {
@@ -287,6 +306,7 @@ function RosterTab({ orgId, size, editing }: { orgId: string; size: HeaderSize; 
                         })}
                       </div>
                   </SortableGroup>
+                  )}
                 </div>
               </MaybeSortable>
             );
