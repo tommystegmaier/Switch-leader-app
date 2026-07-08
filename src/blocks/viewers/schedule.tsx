@@ -178,6 +178,9 @@ function RosterTab({ orgId, size }: { orgId: string; size: HeaderSize }) {
   const { data: skips } = useSkips(orgId);
   const addToRoster = useAddToRoster(orgId);
   const removeFromRoster = useRemoveFromRoster(orgId);
+  const reorderTeams = useReorderTeams(orgId);
+  const reorderRoles = useReorderRoles(orgId);
+  const sensors = useDragSensors();
 
   const dates = useMemo(() => upcomingServeDates(weekday, new Set(skips ?? [])), [weekday, skips]);
   const [dateIdx, setDateIdx] = useState(0);
@@ -185,6 +188,20 @@ function RosterTab({ orgId, size }: { orgId: string; size: HeaderSize }) {
   const { data: statuses } = useRosterStatus(orgId, selectedDate, true);
   const [assignRole, setAssignRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const teamList = teams ?? [];
+  const onTeamDrag = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const ids = teamList.map((t) => t.id);
+    reorderTeams.mutate(arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string)));
+  };
+  const onRoleDrag = (teamRoles: typeof roles, e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const ids = (teamRoles ?? []).map((r) => r.id);
+    reorderRoles.mutate(arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string)));
+  };
 
   const statusFor = (roleId: string, userId: string) =>
     (statuses ?? []).find((s) => s.roleId === roleId && s.userId === userId)?.status ?? 'pending';
@@ -211,42 +228,58 @@ function RosterTab({ orgId, size }: { orgId: string; size: HeaderSize }) {
         </div>
       )}
 
-      {(teams ?? []).map((t) => (
-        <div key={t.id}>
-          <p className={`mb-1 font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>{t.name}</p>
-          <div className="flex flex-col gap-2">
-            {(roles ?? []).filter((r) => r.teamId === t.id).map((r) => {
-              const people = (roster ?? []).filter((rr) => rr.roleId === r.id);
-              const availableMembers = (members ?? []).filter((m) => !people.some((p) => p.userId === m.userId));
-              return (
-                <div key={r.id} className="rounded-lg border p-2" style={cardStyle}>
-                  <p className={`font-medium ${ROLE_CLS[size]}`}>{r.name}</p>
-                  <ul className="mt-1 flex flex-col gap-1">
-                    {people.map((p) => (
-                      <li key={p.userId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                        <span className="min-w-0 flex-1 truncate">{p.name || p.email}</span>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <Badge status={statusFor(r.id, p.userId)} />
-                          <button type="button" onClick={() => removeFromRoster.mutate({ roleId: r.id, userId: p.userId })} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Remove</button>
-                        </div>
-                      </li>
-                    ))}
-                    {people.length === 0 && <li className="text-xs text-gray-400">No one assigned yet.</li>}
-                  </ul>
-                  {assignRole === r.id ? (
-                    <select autoFocus className={input + ' mt-2'} defaultValue="" onChange={(e) => { if (e.target.value) assign(r.id, e.target.value); }}>
-                      <option value="">Choose a person…</option>
-                      {availableMembers.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
-                    </select>
-                  ) : (
-                    <button type="button" onClick={() => setAssignRole(r.id)} className="mt-2 rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Assign someone</button>
-                  )}
+      <p className="text-xs text-gray-500">Hold the ⠿ grip to drag a team or role into the order you want.</p>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTeamDrag}>
+        <SortableContext items={teamList.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          {teamList.map((t) => {
+            const teamRoles = (roles ?? []).filter((r) => r.teamId === t.id);
+            return (
+              <SortableRow id={t.id} key={t.id}>
+                <div>
+                  <p className={`mb-1 font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>{t.name}</p>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onRoleDrag(teamRoles, e)}>
+                    <SortableContext items={teamRoles.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+                      <div className="flex flex-col gap-2">
+                        {teamRoles.map((r) => {
+                          const people = (roster ?? []).filter((rr) => rr.roleId === r.id);
+                          const availableMembers = (members ?? []).filter((m) => !people.some((p) => p.userId === m.userId));
+                          return (
+                            <SortableRow id={r.id} key={r.id}>
+                              <div className="rounded-lg border p-2" style={cardStyle}>
+                                <p className={`font-medium ${ROLE_CLS[size]}`}>{r.name}</p>
+                                <ul className="mt-1 flex flex-col gap-1">
+                                  {people.map((p) => (
+                                    <li key={p.userId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                      <span className="min-w-0 flex-1 truncate">{p.name || p.email}</span>
+                                      <div className="flex shrink-0 items-center gap-2">
+                                        <Badge status={statusFor(r.id, p.userId)} />
+                                        <button type="button" onClick={() => removeFromRoster.mutate({ roleId: r.id, userId: p.userId })} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Remove</button>
+                                      </div>
+                                    </li>
+                                  ))}
+                                  {people.length === 0 && <li className="text-xs text-gray-400">No one assigned yet.</li>}
+                                </ul>
+                                {assignRole === r.id ? (
+                                  <select autoFocus className={input + ' mt-2'} defaultValue="" onChange={(e) => { if (e.target.value) assign(r.id, e.target.value); }}>
+                                    <option value="">Choose a person…</option>
+                                    {availableMembers.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
+                                  </select>
+                                ) : (
+                                  <button type="button" onClick={() => setAssignRole(r.id)} className="mt-2 rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Assign someone</button>
+                                )}
+                              </div>
+                            </SortableRow>
+                          );
+                        })}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+              </SortableRow>
+            );
+          })}
+        </SortableContext>
+      </DndContext>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );
