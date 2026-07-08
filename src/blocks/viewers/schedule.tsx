@@ -590,33 +590,55 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
   // Only owner/admin/editor see this at all.
   if (!org || !canEdit) return <></>;
 
-  const sorted = [...(birthdays ?? [])]
+  const withDays = [...(birthdays ?? [])]
     .map((b) => ({ ...b, md: monthDay(b.birthday), days: daysUntil(monthDay(b.birthday)) }))
-    .sort((a, b) => a.days - b.days)
-    .slice(0, 12);
+    .sort((a, b) => a.days - b.days);
+  const today = withDays.filter((b) => b.days === 0);
+  const upcoming = withDays.filter((b) => b.days >= 1 && b.days <= 14); // next 2 weeks
 
   return (
     <div className={card} style={cardStyle}>
       <p className="mb-3 font-semibold uppercase tracking-wide" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
-      {sorted.length === 0 ? (
-        <p className="text-sm text-gray-500">No birthdays yet. They appear here once people add their birthday at sign-up.</p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {sorted.map((b) => (
-            <li key={b.userId} className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm" style={cardStyle}>
-              <span className="min-w-0">
-                <span className="block truncate font-medium">🎂 {b.name || b.email}</span>
-                {b.phone && <a href={`tel:${b.phone}`} className="text-xs text-gray-500 underline">{b.phone}</a>}
-              </span>
-              <span className="shrink-0 text-right">
-                <span className="block font-semibold" style={{ color: b.days <= 1 ? 'var(--th-accent)' : 'var(--th-text)' }}>
-                  {b.days === 0 ? 'TODAY' : b.days === 1 ? 'TOMORROW' : fmtMonthDay(b.md)}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
+
+      <div className="mb-4">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Today</p>
+        {today.length === 0 ? (
+          <p className="text-sm text-gray-400">No birthdays today.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {today.map((b) => <BirthdayRow key={b.userId} b={b} highlight />)}
+          </ul>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Upcoming (next 2 weeks)</p>
+        {upcoming.length === 0 ? (
+          <p className="text-sm text-gray-400">Nothing in the next two weeks.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {upcoming.map((b) => <BirthdayRow key={b.userId} b={b} />)}
+          </ul>
+        )}
+      </div>
+
+      {withDays.length === 0 && (
+        <p className="mt-2 text-sm text-gray-500">Birthdays appear here once people add theirs at sign-up.</p>
       )}
     </div>
+  );
+}
+
+function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | null; email: string; phone: string | null; md: string; days: number }; highlight?: boolean }) {
+  return (
+    <li className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm" style={{ ...cardStyle, ...(highlight ? { backgroundColor: 'rgba(226,59,46,0.06)' } : {}) }}>
+      <span className="min-w-0">
+        <span className="block truncate font-medium">🎂 {b.name || b.email}</span>
+        {b.phone && <a href={`tel:${b.phone}`} className="text-xs text-gray-500 underline">{b.phone}</a>}
+      </span>
+      <span className="shrink-0 text-right font-semibold" style={{ color: b.days <= 1 ? 'var(--th-accent)' : 'var(--th-text)' }}>
+        {b.days === 0 ? 'TODAY' : b.days === 1 ? 'TOMORROW' : fmtMonthDay(b.md)}
+      </span>
+    </li>
   );
 }
