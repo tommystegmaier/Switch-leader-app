@@ -551,7 +551,7 @@ function SettingsTab({ orgId, userId }: { orgId: string; userId: string }) {
 // ---------------------------------------------------------------------------
 // Birthdays block — managers only. Pulls from what people entered at signup.
 // ---------------------------------------------------------------------------
-interface BirthdaysProps { title?: string }
+interface BirthdaysProps { title?: string; upcomingWeeks?: number }
 
 /** MM-DD key from a 'YYYY-MM-DD' (or 'MM-DD') birthday. */
 function monthDay(b: string): string {
@@ -578,6 +578,7 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
   const { canEdit } = useMembershipRole(org?.id);
   const { data: birthdays } = useOrgBirthdays(org?.id, Boolean(org) && canEdit);
   const title = props.title || 'Birthdays';
+  const weeks = Math.max(1, Math.min(8, Number(props.upcomingWeeks) || 2));
 
   if (ctx.editing) {
     return (
@@ -594,7 +595,7 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
     .map((b) => ({ ...b, md: monthDay(b.birthday), days: daysUntil(monthDay(b.birthday)) }))
     .sort((a, b) => a.days - b.days);
   const today = withDays.filter((b) => b.days === 0);
-  const upcoming = withDays.filter((b) => b.days >= 1 && b.days <= 14); // next 2 weeks
+  const upcoming = withDays.filter((b) => b.days >= 1 && b.days <= weeks * 7);
 
   return (
     <div className={card} style={cardStyle}>
@@ -612,9 +613,9 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
       </div>
 
       <div>
-        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Upcoming (next 2 weeks)</p>
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Upcoming (next {weeks === 1 ? 'week' : `${weeks} weeks`})</p>
         {upcoming.length === 0 ? (
-          <p className="text-sm text-gray-400">Nothing in the next two weeks.</p>
+          <p className="text-sm text-gray-400">Nothing in the next {weeks === 1 ? 'week' : `${weeks} weeks`}.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {upcoming.map((b) => <BirthdayRow key={b.userId} b={b} />)}

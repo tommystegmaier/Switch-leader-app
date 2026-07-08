@@ -374,9 +374,14 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
     icon: '🎂',
     description: "Upcoming birthdays pulled from members' accounts. Only managers can see it.",
     category: 'advanced',
-    defaultProps: { title: 'Birthdays' },
+    defaultProps: { title: 'Birthdays', upcomingWeeks: 2 },
     fields: [
       { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Birthdays & anniversaries' },
+      { key: 'upcomingWeeks', label: 'Show upcoming', type: 'select', options: [
+        { value: '1', label: 'Next 1 week' }, { value: '2', label: 'Next 2 weeks' },
+        { value: '3', label: 'Next 3 weeks' }, { value: '4', label: 'Next 4 weeks' },
+        { value: '6', label: 'Next 6 weeks' }, { value: '8', label: 'Next 8 weeks' },
+      ] },
     ],
     Viewer: BirthdaysView,
   }),
