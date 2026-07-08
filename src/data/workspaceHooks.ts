@@ -52,6 +52,21 @@ export function slugify(input: string): string {
     .slice(0, 40);
 }
 
+/** Duplicate a workspace's structure into a new one (only the owner carries over). */
+export function useDuplicateWorkspace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orgId, name, slug }: { orgId: string; name: string; slug: string }): Promise<string> => {
+      const s = getSupabase();
+      if (!s) throw new Error('Backend not configured.');
+      const { data, error } = await s.rpc('duplicate_workspace', { p_org: orgId, p_name: name, p_slug: slug });
+      if (error) throw error;
+      return data as string; // new slug
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-workspaces'] }),
+  });
+}
+
 export function useCreateWorkspace() {
   const qc = useQueryClient();
   return useMutation({
