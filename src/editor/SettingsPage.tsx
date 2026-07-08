@@ -1,5 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
+import {
+  DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
@@ -195,11 +203,22 @@ function TabBarEditor({ orgId, tabs, onChange }: { orgId: string; tabs: NavTab[]
     onChange(next);
   };
   const add = () => onChange([...tabs, { icon: 'home', label: 'Tab', kind: 'page', target: pages?.[0]?.slug ?? '', adminOnly: false }]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    onChange(arrayMove(tabs, Number(active.id), Number(over.id)));
+  };
 
   return (
     <div className="flex flex-col gap-2">
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={tabs.map((_, i) => String(i))} strategy={verticalListSortingStrategy}>
       {tabs.map((t, i) => (
-        <div key={i} className="rounded-lg border border-gray-200 p-2">
+        <SortableTab key={i} id={String(i)}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-300"><NavIcon name={t.icon} className="h-5 w-5" /></span>
             <select className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={isNavIconName(t.icon) ? t.icon : '__emoji__'} onChange={(e) => update(i, { icon: e.target.value === '__emoji__' ? '⭐' : e.target.value })} aria-label="Icon">
@@ -234,9 +253,26 @@ function TabBarEditor({ orgId, tabs, onChange }: { orgId: string; tabs: NavTab[]
               Managers only
             </label>
           </div>
-        </div>
+        </SortableTab>
       ))}
+      </SortableContext>
+      </DndContext>
       <button type="button" onClick={add} className="self-start rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Add tab</button>
+    </div>
+  );
+}
+
+/** A draggable tab card in the icon-bar editor (grip on the left). */
+function SortableTab({ id, children }: { id: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 10 : undefined }}
+      className="flex items-start gap-1"
+    >
+      <button type="button" className="mt-2 cursor-grab touch-none px-1 text-gray-400 hover:text-gray-600" aria-label="Hold and drag to reorder" {...attributes} {...listeners}>⠿</button>
+      <div className="min-w-0 flex-1 rounded-lg border border-gray-200 p-2">{children}</div>
     </div>
   );
 }

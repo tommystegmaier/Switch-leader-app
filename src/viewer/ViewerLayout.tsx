@@ -228,7 +228,7 @@ export function ViewerLayout() {
           <ul
             className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 overflow-hidden rounded-full border p-1.5"
             style={{
-              backgroundColor: 'color-mix(in srgb, var(--th-bg) 60%, transparent)',
+              backgroundColor: 'color-mix(in srgb, var(--th-bg) 45%, transparent)',
               backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
               borderColor: 'rgba(127,127,127,0.22)',
