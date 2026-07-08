@@ -1,4 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import {
+  DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
@@ -253,6 +261,28 @@ function moved<T extends { id: string }>(list: T[], idx: number, dir: number): s
   return ids;
 }
 
+function useDragSensors() {
+  return useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+}
+
+/** A draggable row: a grip handle you can hold + drag, plus its content. */
+function SortableRow({ id, children }: { id: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1, zIndex: isDragging ? 10 : undefined }}
+      className="flex items-center gap-1"
+    >
+      <button type="button" className="cursor-grab touch-none px-1 text-gray-400 hover:text-gray-600" aria-label="Hold and drag to reorder" {...attributes} {...listeners}>⠿</button>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
 function TeamsTab({ orgId }: { orgId: string }) {
   const { data: teams } = useScheduleTeams(orgId);
   const { data: roles } = useScheduleRoles(orgId);
@@ -264,8 +294,22 @@ function TeamsTab({ orgId }: { orgId: string }) {
   const reorderRoles = useReorderRoles(orgId);
   const [newTeam, setNewTeam] = useState('');
   const [roleDraft, setRoleDraft] = useState<Record<string, string>>({});
+  const sensors = useDragSensors();
 
   const teamList = teams ?? [];
+
+  const onTeamDrag = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const ids = teamList.map((t) => t.id);
+    reorderTeams.mutate(arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string)));
+  };
+  const onRoleDrag = (teamRoles: typeof roles, e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const ids = (teamRoles ?? []).map((r) => r.id);
+    reorderRoles.mutate(arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string)));
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -273,36 +317,48 @@ function TeamsTab({ orgId }: { orgId: string }) {
         <input className={input} placeholder="New team (e.g. Sunday AM)" value={newTeam} onChange={(e) => setNewTeam(e.target.value)} />
         <button type="button" disabled={!newTeam.trim() || createTeam.isPending} onClick={async () => { await createTeam.mutateAsync(newTeam); setNewTeam(''); }} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>+ Team</button>
       </div>
-      <p className="text-xs text-gray-500">Use ▲▼ to set the order teams and roles appear in.</p>
-      {teamList.map((t, ti) => {
-        const teamRoles = (roles ?? []).filter((r) => r.teamId === t.id);
-        return (
-          <div key={t.id} className="rounded-lg border p-3" style={cardStyle}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1">
-                <ReorderButtons up={() => reorderTeams.mutate(moved(teamList, ti, -1))} down={() => reorderTeams.mutate(moved(teamList, ti, 1))} first={ti === 0} last={ti === teamList.length - 1} />
-                <span className="font-medium">{t.name}</span>
-              </div>
-              <button type="button" onClick={() => { if (confirm(`Delete team "${t.name}" and its roles?`)) deleteTeam.mutate(t.id); }} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Delete team</button>
-            </div>
-            <ul className="mt-2 flex flex-col gap-1">
-              {teamRoles.map((r, ri) => (
-                <li key={r.id} className="flex items-center justify-between gap-2 rounded bg-black/5 px-2 py-1 text-sm">
-                  <div className="flex items-center gap-1">
-                    <ReorderButtons up={() => reorderRoles.mutate(moved(teamRoles, ri, -1))} down={() => reorderRoles.mutate(moved(teamRoles, ri, 1))} first={ri === 0} last={ri === teamRoles.length - 1} />
-                    <span>{r.name}</span>
+      <p className="text-xs text-gray-500">Hold the ⠿ grip and drag to reorder, or use ▲▼.</p>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTeamDrag}>
+        <SortableContext items={teamList.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          {teamList.map((t, ti) => {
+            const teamRoles = (roles ?? []).filter((r) => r.teamId === t.id);
+            return (
+              <SortableRow id={t.id} key={t.id}>
+                <div className="rounded-lg border p-3" style={cardStyle}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1">
+                      <ReorderButtons up={() => reorderTeams.mutate(moved(teamList, ti, -1))} down={() => reorderTeams.mutate(moved(teamList, ti, 1))} first={ti === 0} last={ti === teamList.length - 1} />
+                      <span className="font-medium">{t.name}</span>
+                    </div>
+                    <button type="button" onClick={() => { if (confirm(`Delete team "${t.name}" and its roles?`)) deleteTeam.mutate(t.id); }} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Delete team</button>
                   </div>
-                  <button type="button" onClick={() => deleteRole.mutate(r.id)} className="text-xs text-red-600" aria-label={`Remove ${r.name}`}>Remove</button>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-2 flex gap-2">
-              <input className={input} placeholder="Add a role (e.g. Greeter)" value={roleDraft[t.id] ?? ''} onChange={(e) => setRoleDraft((d) => ({ ...d, [t.id]: e.target.value }))} />
-              <button type="button" disabled={!(roleDraft[t.id] ?? '').trim()} onClick={async () => { await createRole.mutateAsync({ teamId: t.id, name: roleDraft[t.id] }); setRoleDraft((d) => ({ ...d, [t.id]: '' })); }} className="shrink-0 rounded-full border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>+ Role</button>
-            </div>
-          </div>
-        );
-      })}
+                  <div className="mt-2 flex flex-col gap-1">
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onRoleDrag(teamRoles, e)}>
+                      <SortableContext items={teamRoles.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+                        {teamRoles.map((r, ri) => (
+                          <SortableRow id={r.id} key={r.id}>
+                            <div className="flex items-center justify-between gap-2 rounded bg-black/5 px-2 py-1 text-sm">
+                              <div className="flex items-center gap-1">
+                                <ReorderButtons up={() => reorderRoles.mutate(moved(teamRoles, ri, -1))} down={() => reorderRoles.mutate(moved(teamRoles, ri, 1))} first={ri === 0} last={ri === teamRoles.length - 1} />
+                                <span>{r.name}</span>
+                              </div>
+                              <button type="button" onClick={() => deleteRole.mutate(r.id)} className="text-xs text-red-600" aria-label={`Remove ${r.name}`}>Remove</button>
+                            </div>
+                          </SortableRow>
+                        ))}
+                      </SortableContext>
+                    </DndContext>
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <input className={input} placeholder="Add a role (e.g. Greeter)" value={roleDraft[t.id] ?? ''} onChange={(e) => setRoleDraft((d) => ({ ...d, [t.id]: e.target.value }))} />
+                    <button type="button" disabled={!(roleDraft[t.id] ?? '').trim()} onClick={async () => { await createRole.mutateAsync({ teamId: t.id, name: roleDraft[t.id] }); setRoleDraft((d) => ({ ...d, [t.id]: '' })); }} className="shrink-0 rounded-full border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>+ Role</button>
+                  </div>
+                </div>
+              </SortableRow>
+            );
+          })}
+        </SortableContext>
+      </DndContext>
       {teamList.length === 0 && <p className="text-sm text-gray-500">No teams yet. Add one above.</p>}
     </div>
   );
