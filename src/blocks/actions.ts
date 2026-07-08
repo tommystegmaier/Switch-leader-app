@@ -12,6 +12,8 @@ export interface ViewerCtx {
   navigate: (to: string) => void;
   /** True when rendered inside the editing surface (drag/reorder active). */
   editing?: boolean;
+  /** The id of the block being rendered (set per-block by BlockView). */
+  blockId?: string;
 }
 
 /**

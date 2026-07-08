@@ -41,7 +41,7 @@ export function BlockView({ block, ctx }: { block: Block; ctx: ViewerCtx }) {
     );
   }
   const Viewer = def.Viewer;
-  return <Viewer props={block.props as never} ctx={ctx} />;
+  return <Viewer props={block.props as never} ctx={{ ...ctx, blockId: block.id }} />;
 }
 
 /**
