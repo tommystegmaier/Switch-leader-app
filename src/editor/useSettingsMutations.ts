@@ -24,6 +24,7 @@ export function useSettingsMutations(orgId: string) {
       if (patch.splash !== undefined) row.splash = patch.splash;
       if (patch.navStyle !== undefined) row.nav_style = patch.navStyle;
       if (patch.viewerAccess !== undefined) row.viewer_access = patch.viewerAccess;
+      if (patch.tabs !== undefined) row.tabs = patch.tabs;
       const { error } = await s.from('app_settings').update(row).eq('org_id', orgId);
       if (error) throw error;
     },

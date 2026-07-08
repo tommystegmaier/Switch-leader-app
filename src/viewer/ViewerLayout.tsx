@@ -81,7 +81,9 @@ export function ViewerLayout() {
     ? (allPages ?? publishedPages ?? [])
     : (publishedPages ?? []).filter((p) => isVisibleTo(p.visibility, role));
   const navStyle = settings?.navStyle ?? 'top';
-  const showBottomTabs = navStyle === 'bottom' || navStyle === 'both';
+  // Custom icon bar takes priority; otherwise fall back to auto page tabs.
+  const customTabs = (settings?.tabs ?? []).filter((t) => canEdit || !t.adminOnly);
+  const showBottomTabs = customTabs.length > 0 || navStyle === 'bottom' || navStyle === 'both';
   const bottomPages = navPages.slice(0, 5);
 
   return (
@@ -207,25 +209,51 @@ export function ViewerLayout() {
         <Outlet />
       </main>
 
-      {showBottomTabs && bottomPages.length > 0 && (
+      {showBottomTabs && (customTabs.length > 0 || bottomPages.length > 0) && (
         <nav
           className="fixed inset-x-0 bottom-0 z-20 border-t"
           style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(0,0,0,0.08)', paddingBottom: 'env(safe-area-inset-bottom)' }}
           aria-label="Bottom navigation"
         >
           <ul className="mx-auto flex max-w-screen-sm items-stretch justify-around">
-            {bottomPages.map((page) => (
-              <li key={page.id} className="flex-1">
-                <NavLink
-                  to={`/o/${org.slug}/${page.slug}`}
-                  className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1 py-2 text-xs ${isActive ? 'font-semibold' : 'opacity-70'}`}
-                  style={{ color: 'var(--th-text)' }}
-                >
-                  <span className="text-lg" aria-hidden>{page.icon || '•'}</span>
-                  <span className="max-w-full truncate">{page.name}</span>
-                </NavLink>
-              </li>
-            ))}
+            {customTabs.length > 0
+              ? customTabs.map((tab, i) => (
+                  <li key={i} className="flex-1">
+                    {tab.kind === 'url' ? (
+                      <a
+                        href={tab.target || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-0.5 px-1 py-2 text-xs opacity-70"
+                        style={{ color: 'var(--th-text)' }}
+                      >
+                        <span className="text-lg" aria-hidden>{tab.icon || '•'}</span>
+                        <span className="max-w-full truncate">{tab.label}</span>
+                      </a>
+                    ) : (
+                      <NavLink
+                        to={`/o/${org.slug}/${tab.target}`}
+                        className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1 py-2 text-xs ${isActive ? 'font-semibold' : 'opacity-70'}`}
+                        style={{ color: 'var(--th-text)' }}
+                      >
+                        <span className="text-lg" aria-hidden>{tab.icon || '•'}</span>
+                        <span className="max-w-full truncate">{tab.label}</span>
+                      </NavLink>
+                    )}
+                  </li>
+                ))
+              : bottomPages.map((page) => (
+                  <li key={page.id} className="flex-1">
+                    <NavLink
+                      to={`/o/${org.slug}/${page.slug}`}
+                      className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1 py-2 text-xs ${isActive ? 'font-semibold' : 'opacity-70'}`}
+                      style={{ color: 'var(--th-text)' }}
+                    >
+                      <span className="text-lg" aria-hidden>{page.icon || '•'}</span>
+                      <span className="max-w-full truncate">{page.name}</span>
+                    </NavLink>
+                  </li>
+                ))}
           </ul>
         </nav>
       )}

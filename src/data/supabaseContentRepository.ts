@@ -50,6 +50,7 @@ function mapSettings(row: any): AppSettings {
     splash: row.splash,
     navStyle: row.nav_style,
     viewerAccess: row.viewer_access,
+    tabs: row.tabs ?? [],
   };
 }
 

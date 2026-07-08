@@ -42,6 +42,18 @@ export interface ThemeColors {
   heading: string;
 }
 
+/** One button in the custom bottom icon bar. */
+export interface NavTab {
+  /** Emoji or short text icon. */
+  icon: string;
+  label: string;
+  /** 'page' → page slug; 'url' → external link. */
+  kind: 'page' | 'url';
+  target: string;
+  /** Only show to owner/admin/editor (e.g. a manager Schedule tab). */
+  adminOnly?: boolean;
+}
+
 export interface AppSettings {
   orgId: string;
   appName: string;
@@ -52,6 +64,8 @@ export interface AppSettings {
   splash: { background: string; text: string };
   navStyle: NavStyle;
   viewerAccess: ViewerAccess;
+  /** Custom bottom icon bar; empty = fall back to auto page tabs. */
+  tabs: NavTab[];
 }
 
 export interface Membership {

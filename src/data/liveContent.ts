@@ -36,6 +36,7 @@ export function useLiveAppSettings(orgId: string | undefined, enabled = true) {
         splash: data.splash,
         navStyle: data.nav_style,
         viewerAccess: data.viewer_access,
+        tabs: data.tabs ?? [],
       };
     },
   });

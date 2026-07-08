@@ -40,6 +40,7 @@ const SAMPLE_SETTINGS: AppSettings = {
   splash: { background: '#0f1420', text: '#ffffff' },
   navStyle: 'top',
   viewerAccess: 'public',
+  tabs: [],
 };
 
 const HOME_PAGE: Page = {

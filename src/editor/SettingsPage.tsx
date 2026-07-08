@@ -10,7 +10,8 @@ import { errorMessage } from '@/lib/errors';
 import { useLiveAppSettings } from '@/data/liveContent';
 import { applyTheme } from '@/lib/theme';
 import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
-import type { AppSettings, NavStyle, Role, ThemeColors, ViewerAccess } from '@/types';
+import { useAllPages } from '@/data/pageHooks';
+import type { AppSettings, NavStyle, NavTab, Role, ThemeColors, ViewerAccess } from '@/types';
 import { MediaPicker } from './MediaPicker';
 import { useSettingsMutations } from './useSettingsMutations';
 
@@ -128,6 +129,12 @@ export function SettingsPage() {
         </Field>
       </Section>
 
+      {/* Bottom tab bar */}
+      <Section title="Bottom icon bar">
+        <p className="text-sm text-gray-500">Add tabs to the bar at the bottom of the app — each with an icon, a label, and where it links. Leave empty to just list your pages automatically.</p>
+        <TabBarEditor orgId={org.id} tabs={draft.tabs ?? []} onChange={(tabs) => set({ tabs })} />
+      </Section>
+
       {/* Sharing */}
       <Section title="Sharing & access">
         <Field label="Who can view this app">
@@ -161,6 +168,58 @@ export function SettingsPage() {
 
       {pickLogo && <MediaPicker orgId={org.id} accept="image/*" onSelect={(u) => set({ logoUrl: u })} onClose={() => setPickLogo(false)} />}
       {pickIcon && <MediaPicker orgId={org.id} accept="image/*" onSelect={(u) => set({ iconUrl: u })} onClose={() => setPickIcon(false)} />}
+    </div>
+  );
+}
+
+/** Editor for the custom bottom icon bar. */
+function TabBarEditor({ orgId, tabs, onChange }: { orgId: string; tabs: NavTab[]; onChange: (t: NavTab[]) => void }) {
+  const { data: pages } = useAllPages(orgId);
+  const update = (i: number, patch: Partial<NavTab>) => onChange(tabs.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
+  const remove = (i: number) => onChange(tabs.filter((_, idx) => idx !== i));
+  const move = (i: number, dir: number) => {
+    const j = i + dir;
+    if (j < 0 || j >= tabs.length) return;
+    const next = [...tabs];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const add = () => onChange([...tabs, { icon: '⭐', label: 'Tab', kind: 'page', target: pages?.[0]?.slug ?? '', adminOnly: false }]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {tabs.map((t, i) => (
+        <div key={i} className="rounded-lg border border-gray-200 p-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <input className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-center text-lg" value={t.icon} onChange={(e) => update(i, { icon: e.target.value })} aria-label="Icon" />
+            <input className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="Label" value={t.label} onChange={(e) => update(i, { label: e.target.value })} />
+            <div className="flex flex-col leading-none">
+              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="px-1 text-xs disabled:opacity-25" aria-label="Move up">▲</button>
+              <button type="button" onClick={() => move(i, 1)} disabled={i === tabs.length - 1} className="px-1 text-xs disabled:opacity-25" aria-label="Move down">▼</button>
+            </div>
+            <button type="button" onClick={() => remove(i)} className="rounded border border-gray-300 px-2 py-1 text-xs text-red-600 hover:bg-black/5">Remove</button>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <select className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={t.kind} onChange={(e) => update(i, { kind: e.target.value as NavTab['kind'], target: '' })}>
+              <option value="page">Go to page</option>
+              <option value="url">Open link</option>
+            </select>
+            {t.kind === 'page' ? (
+              <select className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={t.target} onChange={(e) => update(i, { target: e.target.value })}>
+                <option value="">Choose a page…</option>
+                {(pages ?? []).map((p) => <option key={p.id} value={p.slug}>{p.name}</option>)}
+              </select>
+            ) : (
+              <input className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="https://…" value={t.target} onChange={(e) => update(i, { target: e.target.value })} />
+            )}
+            <label className="flex items-center gap-1 text-xs text-gray-600">
+              <input type="checkbox" checked={Boolean(t.adminOnly)} onChange={(e) => update(i, { adminOnly: e.target.checked })} />
+              Managers only
+            </label>
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={add} className="self-start rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Add tab</button>
     </div>
   );
 }
