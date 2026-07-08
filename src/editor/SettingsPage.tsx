@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
@@ -33,6 +33,14 @@ export function SettingsPage() {
   const [pickIcon, setPickIcon] = useState(false);
 
   useEffect(() => { if (saved && !draft) setDraft(saved); }, [saved, draft]);
+
+  // Deep link from the "Icon bar" shortcut scrolls to that section.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash === '#iconbar' && draft) {
+      setTimeout(() => document.getElementById('iconbar')?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }
+  }, [hash, draft]);
 
   // Live theme preview as the draft changes.
   useEffect(() => { if (draft) applyTheme(draft); }, [draft]);
@@ -130,6 +138,7 @@ export function SettingsPage() {
       </Section>
 
       {/* Bottom tab bar */}
+      <div id="iconbar" />
       <Section title="Bottom icon bar">
         <p className="text-sm text-gray-500">Add tabs to the bar at the bottom of the app — each with an icon, a label, and where it links. Leave empty to just list your pages automatically.</p>
         <TabBarEditor orgId={org.id} tabs={draft.tabs ?? []} onChange={(tabs) => set({ tabs })} />

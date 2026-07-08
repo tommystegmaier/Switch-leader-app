@@ -51,8 +51,9 @@ export function EditableBlock({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      {/* Toolbar */}
-      <div className={`absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-full border bg-white px-1 py-0.5 text-sm shadow-sm transition-opacity ${hover ? 'opacity-100' : 'opacity-0'} group-focus-within:opacity-100`}>
+      {/* Toolbar — always visible on touch (no hover); fades in on hover for
+          pointer devices. */}
+      <div className={`absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-full border bg-white px-1 py-0.5 text-sm shadow-sm transition-opacity ${hover ? 'opacity-100' : 'opacity-100 sm:opacity-60'} hover:opacity-100 group-focus-within:opacity-100`}>
         <button type="button" {...dragHandleProps} className="cursor-grab rounded px-1.5 py-1 hover:bg-black/10" aria-label="Drag to reorder" title="Drag">⠿</button>
         <button type="button" onClick={() => onMove(-1)} disabled={isFirst} className="rounded px-1.5 py-1 hover:bg-black/10 disabled:opacity-30" aria-label="Move up">↑</button>
         <button type="button" onClick={() => onMove(1)} disabled={isLast} className="rounded px-1.5 py-1 hover:bg-black/10 disabled:opacity-30" aria-label="Move down">↓</button>

@@ -135,6 +135,7 @@ export function ViewerLayout() {
           <div className="flex flex-wrap items-center justify-center gap-2 px-4 py-1.5 text-center text-xs font-medium" style={{ backgroundColor: 'var(--th-accent)', color: '#fff' }}>
             <span className="font-semibold">Draft</span>
             <button type="button" onClick={() => setPagesOpen(true)} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Manage pages</button>
+            <Link to={`/o/${org.slug}/settings#iconbar`} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Icon bar</Link>
             <Link to={`/o/${org.slug}/settings`} className="rounded-full bg-white/20 px-2 py-0.5 hover:bg-white/30">Settings</Link>
             <span className="mx-1 h-3 w-px bg-white/40" />
             {publishStatus?.dirty === false ? (

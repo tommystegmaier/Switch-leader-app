@@ -154,7 +154,7 @@ function PageRow({
           aria-label="Visibility"
         >
           <option value="everyone">Everyone</option>
-          <option value="admins">Admins only</option>
+          <option value="admins">Managers only</option>
         </select>
         <button type="button" onClick={onOpen} className="rounded px-2 py-1 underline">Open</button>
         <button type="button" onClick={onDuplicate} className="rounded px-2 py-1 hover:bg-black/10" title="Duplicate">⧉</button>
