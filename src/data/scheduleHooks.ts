@@ -174,6 +174,35 @@ export function useDeleteTeam(orgId: string) {
   });
 }
 
+/** Persist a new order by writing sort = index for each id. */
+export function useReorderTeams(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      for (let i = 0; i < ids.length; i++) {
+        const { error } = await s.from('schedule_teams').update({ sort: i }).eq('id', ids[i]);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => invalidate(qc, orgId, 'teams'),
+  });
+}
+
+export function useReorderRoles(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      for (let i = 0; i < ids.length; i++) {
+        const { error } = await s.from('schedule_roles').update({ sort: i }).eq('id', ids[i]);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => invalidate(qc, orgId, 'roles'),
+  });
+}
+
 export function useCreateRole(orgId: string) {
   const qc = useQueryClient();
   return useMutation({

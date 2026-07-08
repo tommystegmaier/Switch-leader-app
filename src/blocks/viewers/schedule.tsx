@@ -6,13 +6,18 @@ import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import {
   useAddSkip, useAddToRoster, useCreateRole, useCreateTeam, useDeleteRole, useDeleteTeam,
-  useMySchedule, useOrgBirthdays, useRemoveFromRoster, useRemoveSkip, useRespondOccurrence,
-  useRoster, useRosterStatus, useScheduleMembers, useScheduleMute, useScheduleRoles,
-  useScheduleTeams, useServeWeekday, useSetScheduleMute, useSetServeWeekday, useSkips,
+  useMySchedule, useOrgBirthdays, useRemoveFromRoster, useRemoveSkip, useReorderRoles,
+  useReorderTeams, useRespondOccurrence, useRoster, useRosterStatus, useScheduleMembers,
+  useScheduleMute, useScheduleRoles, useScheduleTeams, useServeWeekday, useSetScheduleMute,
+  useSetServeWeekday, useSkips,
 } from '@/data/scheduleHooks';
 import type { ViewerCtx } from '../actions';
 
-interface ScheduleProps { title?: string }
+type HeaderSize = 'sm' | 'md' | 'lg';
+interface ScheduleProps { title?: string; headerSize?: HeaderSize }
+
+const HEADER_CLS: Record<HeaderSize, string> = { sm: 'text-sm', md: 'text-lg', lg: 'text-2xl' };
+const ROLE_CLS: Record<HeaderSize, string> = { sm: 'text-sm', md: 'text-base', lg: 'text-lg' };
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -61,6 +66,7 @@ export function ScheduleView({ props, ctx }: { props: ScheduleProps; ctx: Viewer
   const { user } = useAuth();
   const { canEdit, isLoading } = useMembershipRole(org?.id);
   const title = props.title || 'Serving schedule';
+  const size: HeaderSize = props.headerSize ?? 'md';
 
   if (ctx.editing) {
     return (
@@ -81,7 +87,7 @@ export function ScheduleView({ props, ctx }: { props: ScheduleProps; ctx: Viewer
     );
   }
   return canEdit
-    ? <ManagerSchedule orgId={org.id} userId={user.id} title={title} />
+    ? <ManagerSchedule orgId={org.id} userId={user.id} title={title} size={size} />
     : <VolunteerSchedule orgId={org.id} title={title} />;
 }
 
@@ -143,19 +149,19 @@ function VolunteerSchedule({ orgId, title }: { orgId: string; title: string }) {
 // ---------------------------------------------------------------------------
 type Tab = 'roster' | 'teams' | 'weeks' | 'settings';
 
-function ManagerSchedule({ orgId, userId, title }: { orgId: string; userId: string; title: string }) {
+function ManagerSchedule({ orgId, userId, title, size }: { orgId: string; userId: string; title: string; size: HeaderSize }) {
   const [tab, setTab] = useState<Tab>('roster');
   return (
     <div className={card} style={cardStyle}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
+        <p className={`font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
         <div className="flex flex-wrap gap-1 text-sm">
           {([['roster', 'Roster'], ['teams', 'Teams & roles'], ['weeks', 'Weeks off'], ['settings', 'Notifications']] as [Tab, string][]).map(([t, label]) => (
             <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-3 py-1 ${tab === t ? 'font-semibold' : 'opacity-60'}`} style={tab === t ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid rgba(0,0,0,0.15)' }}>{label}</button>
           ))}
         </div>
       </div>
-      {tab === 'roster' && <RosterTab orgId={orgId} />}
+      {tab === 'roster' && <RosterTab orgId={orgId} size={size} />}
       {tab === 'teams' && <TeamsTab orgId={orgId} />}
       {tab === 'weeks' && <WeeksTab orgId={orgId} />}
       {tab === 'settings' && <SettingsTab orgId={orgId} userId={userId} />}
@@ -163,7 +169,7 @@ function ManagerSchedule({ orgId, userId, title }: { orgId: string; userId: stri
   );
 }
 
-function RosterTab({ orgId }: { orgId: string }) {
+function RosterTab({ orgId, size }: { orgId: string; size: HeaderSize }) {
   const { data: teams } = useScheduleTeams(orgId);
   const { data: roles } = useScheduleRoles(orgId);
   const { data: roster } = useRoster(orgId, true);
@@ -207,14 +213,14 @@ function RosterTab({ orgId }: { orgId: string }) {
 
       {(teams ?? []).map((t) => (
         <div key={t.id}>
-          <p className="mb-1 text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>{t.name}</p>
+          <p className={`mb-1 font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>{t.name}</p>
           <div className="flex flex-col gap-2">
             {(roles ?? []).filter((r) => r.teamId === t.id).map((r) => {
               const people = (roster ?? []).filter((rr) => rr.roleId === r.id);
               const availableMembers = (members ?? []).filter((m) => !people.some((p) => p.userId === m.userId));
               return (
                 <div key={r.id} className="rounded-lg border p-2" style={cardStyle}>
-                  <p className="text-sm font-medium">{r.name}</p>
+                  <p className={`font-medium ${ROLE_CLS[size]}`}>{r.name}</p>
                   <ul className="mt-1 flex flex-col gap-1">
                     {people.map((p) => (
                       <li key={p.userId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
@@ -246,6 +252,15 @@ function RosterTab({ orgId }: { orgId: string }) {
   );
 }
 
+/** Move item at `idx` by `dir` (-1 up / +1 down) and return the new id order. */
+function moved<T extends { id: string }>(list: T[], idx: number, dir: number): string[] {
+  const ids = list.map((x) => x.id);
+  const j = idx + dir;
+  if (j < 0 || j >= ids.length) return ids;
+  [ids[idx], ids[j]] = [ids[j], ids[idx]];
+  return ids;
+}
+
 function TeamsTab({ orgId }: { orgId: string }) {
   const { data: teams } = useScheduleTeams(orgId);
   const { data: roles } = useScheduleRoles(orgId);
@@ -253,8 +268,12 @@ function TeamsTab({ orgId }: { orgId: string }) {
   const deleteTeam = useDeleteTeam(orgId);
   const createRole = useCreateRole(orgId);
   const deleteRole = useDeleteRole(orgId);
+  const reorderTeams = useReorderTeams(orgId);
+  const reorderRoles = useReorderRoles(orgId);
   const [newTeam, setNewTeam] = useState('');
   const [roleDraft, setRoleDraft] = useState<Record<string, string>>({});
+
+  const teamList = teams ?? [];
 
   return (
     <div className="flex flex-col gap-3">
@@ -262,28 +281,47 @@ function TeamsTab({ orgId }: { orgId: string }) {
         <input className={input} placeholder="New team (e.g. Sunday AM)" value={newTeam} onChange={(e) => setNewTeam(e.target.value)} />
         <button type="button" disabled={!newTeam.trim() || createTeam.isPending} onClick={async () => { await createTeam.mutateAsync(newTeam); setNewTeam(''); }} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>+ Team</button>
       </div>
-      {(teams ?? []).map((t) => (
-        <div key={t.id} className="rounded-lg border p-3" style={cardStyle}>
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-medium">{t.name}</span>
-            <button type="button" onClick={() => { if (confirm(`Delete team "${t.name}" and its roles?`)) deleteTeam.mutate(t.id); }} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Delete team</button>
+      <p className="text-xs text-gray-500">Use ▲▼ to set the order teams and roles appear in.</p>
+      {teamList.map((t, ti) => {
+        const teamRoles = (roles ?? []).filter((r) => r.teamId === t.id);
+        return (
+          <div key={t.id} className="rounded-lg border p-3" style={cardStyle}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
+                <ReorderButtons up={() => reorderTeams.mutate(moved(teamList, ti, -1))} down={() => reorderTeams.mutate(moved(teamList, ti, 1))} first={ti === 0} last={ti === teamList.length - 1} />
+                <span className="font-medium">{t.name}</span>
+              </div>
+              <button type="button" onClick={() => { if (confirm(`Delete team "${t.name}" and its roles?`)) deleteTeam.mutate(t.id); }} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Delete team</button>
+            </div>
+            <ul className="mt-2 flex flex-col gap-1">
+              {teamRoles.map((r, ri) => (
+                <li key={r.id} className="flex items-center justify-between gap-2 rounded bg-black/5 px-2 py-1 text-sm">
+                  <div className="flex items-center gap-1">
+                    <ReorderButtons up={() => reorderRoles.mutate(moved(teamRoles, ri, -1))} down={() => reorderRoles.mutate(moved(teamRoles, ri, 1))} first={ri === 0} last={ri === teamRoles.length - 1} />
+                    <span>{r.name}</span>
+                  </div>
+                  <button type="button" onClick={() => deleteRole.mutate(r.id)} className="text-xs text-red-600" aria-label={`Remove ${r.name}`}>Remove</button>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 flex gap-2">
+              <input className={input} placeholder="Add a role (e.g. Greeter)" value={roleDraft[t.id] ?? ''} onChange={(e) => setRoleDraft((d) => ({ ...d, [t.id]: e.target.value }))} />
+              <button type="button" disabled={!(roleDraft[t.id] ?? '').trim()} onClick={async () => { await createRole.mutateAsync({ teamId: t.id, name: roleDraft[t.id] }); setRoleDraft((d) => ({ ...d, [t.id]: '' })); }} className="shrink-0 rounded-full border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>+ Role</button>
+            </div>
           </div>
-          <ul className="mt-2 flex flex-wrap gap-1">
-            {(roles ?? []).filter((r) => r.teamId === t.id).map((r) => (
-              <li key={r.id} className="flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 text-xs">
-                {r.name}
-                <button type="button" onClick={() => deleteRole.mutate(r.id)} className="text-red-600" aria-label={`Remove ${r.name}`}>×</button>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-2 flex gap-2">
-            <input className={input} placeholder="Add a role (e.g. Greeter)" value={roleDraft[t.id] ?? ''} onChange={(e) => setRoleDraft((d) => ({ ...d, [t.id]: e.target.value }))} />
-            <button type="button" disabled={!(roleDraft[t.id] ?? '').trim()} onClick={async () => { await createRole.mutateAsync({ teamId: t.id, name: roleDraft[t.id] }); setRoleDraft((d) => ({ ...d, [t.id]: '' })); }} className="shrink-0 rounded-full border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>+ Role</button>
-          </div>
-        </div>
-      ))}
-      {(teams ?? []).length === 0 && <p className="text-sm text-gray-500">No teams yet. Add one above.</p>}
+        );
+      })}
+      {teamList.length === 0 && <p className="text-sm text-gray-500">No teams yet. Add one above.</p>}
     </div>
+  );
+}
+
+function ReorderButtons({ up, down, first, last }: { up: () => void; down: () => void; first: boolean; last: boolean }) {
+  return (
+    <span className="flex flex-col leading-none">
+      <button type="button" onClick={up} disabled={first} className="px-1 text-xs disabled:opacity-25" aria-label="Move up">▲</button>
+      <button type="button" onClick={down} disabled={last} className="px-1 text-xs disabled:opacity-25" aria-label="Move down">▼</button>
+    </span>
   );
 }
 

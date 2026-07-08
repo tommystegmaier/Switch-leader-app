@@ -358,9 +358,12 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
     icon: '📅',
     description: 'Schedule volunteers into team roles; they confirm or decline their own assignments.',
     category: 'advanced',
-    defaultProps: { title: 'Serving schedule' },
+    defaultProps: { title: 'Serving schedule', headerSize: 'md' },
     fields: [
       { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Sunday serving' },
+      { key: 'headerSize', label: 'Header size', type: 'select', options: [
+        { value: 'sm', label: 'Small' }, { value: 'md', label: 'Medium' }, { value: 'lg', label: 'Large' },
+      ] },
     ],
     Viewer: ScheduleView,
   }),
