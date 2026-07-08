@@ -13,6 +13,11 @@
 
 drop table if exists public.schedule_assignments cascade;
 
+-- 0016 defined my_schedule with different return columns; its return type
+-- changes below, so drop it first (CREATE OR REPLACE can't change a function's
+-- return shape). Safe to re-run this whole script.
+drop function if exists public.my_schedule(uuid);
+
 create table if not exists public.schedule_config (
   org_id       uuid primary key references public.organizations(id) on delete cascade,
   serve_weekday smallint not null default 0 check (serve_weekday between 0 and 6)
