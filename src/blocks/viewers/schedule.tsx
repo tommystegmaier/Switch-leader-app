@@ -14,9 +14,10 @@ import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import {
   useAddSkip, useAddToRoster, useCreateRole, useCreateTeam, useDeleteRole, useDeleteTeam,
-  useMySchedule, useOrgBirthdays, useRemoveFromRoster, useRemoveSkip, useReorderRoles,
-  useReorderTeams, useRespondOccurrence, useRoster, useRosterStatus, useScheduleMembers,
-  useScheduleMute, useScheduleRoles, useScheduleTeams, useServeWeekday, useSetScheduleMute,
+  useMySchedule, useNotifyDefaults, useNotifyRoster, useOrgBirthdays, useRemoveFromRoster,
+  useRemoveSkip, useReorderRoles, useReorderTeams, useRespondOccurrence, useRoster,
+  useRosterStatus, useSaveNotifyDefaults, useScheduleMembers, useScheduleMute,
+  useScheduleRoles, useScheduleTeams, useServeWeekday, useSetScheduleMute,
   useSetServeWeekday, useSkips,
 } from '@/data/scheduleHooks';
 import type { ViewerCtx } from '../actions';
@@ -88,7 +89,7 @@ export function ScheduleView({ props, ctx }: { props: ScheduleProps; ctx: Viewer
   }
   return canEdit
     ? <ManagerSchedule orgId={org.id} userId={user.id} title={title} size={size} editing={Boolean(ctx.editing)} />
-    : <VolunteerSchedule orgId={org.id} title={title} />;
+    : <VolunteerSchedule orgId={org.id} />;
 }
 
 /** Wrap a list in drag context only when editing; otherwise render plain. */
@@ -110,7 +111,7 @@ function MaybeSortable({ enabled, id, children }: { enabled: boolean; id: string
 // ---------------------------------------------------------------------------
 // Volunteer — my upcoming weeks
 // ---------------------------------------------------------------------------
-function VolunteerSchedule({ orgId, title }: { orgId: string; title: string }) {
+function VolunteerSchedule({ orgId }: { orgId: string }) {
   const { data: mine, isLoading } = useMySchedule(orgId, true);
   const respond = useRespondOccurrence(orgId);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +127,7 @@ function VolunteerSchedule({ orgId, title }: { orgId: string; title: string }) {
   const rows = mine ?? [];
   return (
     <div className={card} style={cardStyle}>
-      <p className="mb-3 font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
+      <p className="mb-3 font-semibold" style={{ color: 'var(--th-heading)' }}>📅 My Serving Schedule</p>
       {isLoading ? (
         <p className="text-sm text-gray-500">Loading your weeks…</p>
       ) : rows.length === 0 ? (
@@ -473,17 +474,62 @@ function WeeksTab({ orgId }: { orgId: string }) {
   );
 }
 
+const DEFAULT_NOTIFY_TITLE = "You're scheduled to serve";
+const DEFAULT_NOTIFY_MESSAGE = 'The schedule is posted — open the app to confirm or decline your serving times.';
+
 function SettingsTab({ orgId, userId }: { orgId: string; userId: string }) {
   const { data: muted } = useScheduleMute(orgId, userId, true);
   const setMute = useSetScheduleMute(orgId, userId);
+  const { data: defaults } = useNotifyDefaults(orgId);
+  const saveDefaults = useSaveNotifyDefaults(orgId);
+  const notify = useNotifyRoster(orgId);
+
+  const [title, setTitle] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Seed the fields from saved defaults (or the built-in defaults) once loaded.
+  const titleVal = title ?? (defaults?.title || DEFAULT_NOTIFY_TITLE);
+  const messageVal = message ?? (defaults?.message || DEFAULT_NOTIFY_MESSAGE);
+
+  async function send() {
+    setError(null); setResult(null);
+    try {
+      const r = await notify.mutateAsync({ title: titleVal, message: messageVal, url: window.location.pathname });
+      setResult(r.total === 0 ? 'No one on the roster has notifications turned on yet.' : `Sent to ${r.sent} of ${r.total} device(s).`);
+    } catch (e) { setError(errorMessage(e)); }
+  }
+
   return (
-    <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm" style={cardStyle}>
-      <span>
-        <span className="block font-medium">Notify me when someone confirms or declines</span>
-        <span className="block text-xs text-gray-500">Turn off to stop these push notifications (only affects you).</span>
-      </span>
-      <input type="checkbox" className="h-5 w-5" checked={!muted} onChange={(e) => setMute.mutate(!e.target.checked)} />
-    </label>
+    <div className="flex flex-col gap-4">
+      <div className="rounded-lg border p-3" style={cardStyle}>
+        <p className="text-sm font-medium">Notify volunteers the schedule is posted</p>
+        <p className="mt-0.5 text-xs text-gray-500">Sends a push to everyone on the roster so they can confirm or decline. Edit the message or save it as your default.</p>
+        <label className="mt-2 block text-xs font-medium">Title</label>
+        <input className={input} value={titleVal} onChange={(e) => setTitle(e.target.value)} />
+        <label className="mt-2 block text-xs font-medium">Message</label>
+        <textarea className={input} rows={3} value={messageVal} onChange={(e) => setMessage(e.target.value)} />
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={send} disabled={notify.isPending} className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+            {notify.isPending ? 'Sending…' : 'Send to scheduled volunteers'}
+          </button>
+          <button type="button" onClick={() => saveDefaults.mutate({ title: titleVal, message: messageVal })} className="rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>
+            {saveDefaults.isPending ? 'Saving…' : 'Save as default'}
+          </button>
+        </div>
+        {result && <p className="mt-2 text-sm text-green-700">{result}</p>}
+        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      </div>
+
+      <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm" style={cardStyle}>
+        <span>
+          <span className="block font-medium">Notify me when someone confirms or declines</span>
+          <span className="block text-xs text-gray-500">Turn off to stop these push notifications (only affects you).</span>
+        </span>
+        <input type="checkbox" className="h-5 w-5" checked={!muted} onChange={(e) => setMute.mutate(!e.target.checked)} />
+      </label>
+    </div>
   );
 }
 

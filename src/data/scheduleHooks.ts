@@ -132,6 +132,53 @@ export function useServeWeekday(orgId: string | undefined, enabled = true) {
   });
 }
 
+export interface NotifyDefaults { title: string; message: string }
+
+export function useNotifyDefaults(orgId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: KEY(orgId, 'notify-defaults'),
+    enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<NotifyDefaults> => {
+      const s = getSupabase(); if (!s || !orgId) return { title: '', message: '' };
+      const { data, error } = await s.from('schedule_config').select('notify_title, notify_message').eq('org_id', orgId).maybeSingle();
+      if (error) throw error;
+      return { title: data?.notify_title ?? '', message: data?.notify_message ?? '' };
+    },
+  });
+}
+
+export function useSaveNotifyDefaults(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ title, message }: NotifyDefaults) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('schedule_config').upsert({ org_id: orgId, notify_title: title, notify_message: message });
+      if (error) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'notify-defaults'),
+  });
+}
+
+/** Manager posts the schedule and notifies everyone on the roster. */
+export function useNotifyRoster(orgId: string) {
+  return useMutation({
+    mutationFn: async ({ title, message, url }: { title: string; message: string; url: string }): Promise<{ sent: number; total: number }> => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { data } = await s.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error('Please sign in again.');
+      const res = await fetch('/api/notify-roster', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ orgId, title, message, url }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { sent?: number; total?: number; error?: string };
+      if (!res.ok) throw new Error(body.error || `Server error (${res.status})`);
+      return { sent: body.sent ?? 0, total: body.total ?? 0 };
+    },
+  });
+}
+
 export function useSkips(orgId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: KEY(orgId, 'skips'),
