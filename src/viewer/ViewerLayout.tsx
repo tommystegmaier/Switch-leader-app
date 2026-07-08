@@ -215,7 +215,7 @@ export function ViewerLayout() {
         )}
       </header>
 
-      <main className={`mx-auto max-w-screen-sm px-4 py-6 ${showBottomTabs ? 'pb-24' : ''}`}>
+      <main className="mx-auto max-w-screen-sm px-4 py-6" style={showBottomTabs ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 7rem)' } : undefined}>
         <Outlet />
       </main>
 
@@ -226,8 +226,8 @@ export function ViewerLayout() {
           aria-label="Bottom navigation"
         >
           <ul
-            className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 rounded-full border p-1.5 shadow-lg backdrop-blur"
-            style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(127,127,127,0.25)' }}
+            className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 rounded-full border p-1.5"
+            style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(127,127,127,0.22)', boxShadow: '0 6px 24px -8px rgba(0,0,0,0.35)' }}
           >
             {editing && canEdit ? (
               <li className="flex-1">
