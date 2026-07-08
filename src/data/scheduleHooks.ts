@@ -370,7 +370,7 @@ export function useRespondOccurrence(orgId: string) {
         }
       } catch { /* notification is best-effort */ }
     },
-    onSuccess: () => invalidate(qc, orgId, 'mine'),
+    onSuccess: () => invalidate(qc, orgId, 'mine', 'status'),
   });
 }
 

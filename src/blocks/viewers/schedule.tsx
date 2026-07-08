@@ -178,7 +178,7 @@ function ManagerSchedule({ orgId, userId, title, size, editing }: { orgId: strin
           ))}
         </div>
       </div>
-      {tab === 'roster' && <RosterTab orgId={orgId} size={size} editing={editing} />}
+      {tab === 'roster' && <RosterTab orgId={orgId} userId={userId} size={size} editing={editing} />}
       {tab === 'teams' && <TeamsTab orgId={orgId} editing={editing} />}
       {tab === 'weeks' && <WeeksTab orgId={orgId} />}
       {tab === 'settings' && <SettingsTab orgId={orgId} userId={userId} />}
@@ -186,7 +186,7 @@ function ManagerSchedule({ orgId, userId, title, size, editing }: { orgId: strin
   );
 }
 
-function RosterTab({ orgId, size, editing }: { orgId: string; size: HeaderSize; editing: boolean }) {
+function RosterTab({ orgId, userId, size, editing }: { orgId: string; userId: string; size: HeaderSize; editing: boolean }) {
   const { data: teams } = useScheduleTeams(orgId);
   const { data: roles } = useScheduleRoles(orgId);
   const { data: roster } = useRoster(orgId, true);
@@ -195,6 +195,7 @@ function RosterTab({ orgId, size, editing }: { orgId: string; size: HeaderSize; 
   const { data: skips } = useSkips(orgId);
   const addToRoster = useAddToRoster(orgId);
   const removeFromRoster = useRemoveFromRoster(orgId);
+  const respond = useRespondOccurrence(orgId);
   const reorderTeams = useReorderTeams(orgId);
   const reorderRoles = useReorderRoles(orgId);
   const sensors = useDragSensors();
@@ -291,9 +292,16 @@ function RosterTab({ orgId, size, editing }: { orgId: string; size: HeaderSize; 
                                 <ul className="mt-1 flex flex-col gap-1">
                                   {people.map((p) => (
                                     <li key={p.userId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                                      <span className="min-w-0 flex-1 truncate">{p.name || p.email}</span>
+                                      <span className="min-w-0 flex-1 truncate">{p.name || p.email}{p.userId === userId && <span className="text-gray-400"> (you)</span>}</span>
                                       <div className="flex shrink-0 items-center gap-2">
-                                        <Badge status={statusFor(r.id, p.userId)} />
+                                        {p.userId === userId && selectedDate ? (
+                                          <>
+                                            <button type="button" onClick={() => respond.mutate({ roleId: r.id, serveDate: selectedDate, status: 'confirmed' })} disabled={statusFor(r.id, p.userId) === 'confirmed'} className="rounded-full px-3 py-0.5 text-xs font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>{statusFor(r.id, p.userId) === 'confirmed' ? '✓ Confirmed' : 'Confirm'}</button>
+                                            <button type="button" onClick={() => respond.mutate({ roleId: r.id, serveDate: selectedDate, status: 'declined' })} disabled={statusFor(r.id, p.userId) === 'declined'} className="rounded-full border px-3 py-0.5 text-xs font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>{statusFor(r.id, p.userId) === 'declined' ? "Can't" : "Can't make it"}</button>
+                                          </>
+                                        ) : (
+                                          <Badge status={statusFor(r.id, p.userId)} />
+                                        )}
                                         <button type="button" onClick={() => removeFromRoster.mutate({ roleId: r.id, userId: p.userId })} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Remove</button>
                                       </div>
                                     </li>
