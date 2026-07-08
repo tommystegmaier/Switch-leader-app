@@ -14,8 +14,12 @@ export function sanitizeHtml(dirty: string): string {
     ALLOWED_TAGS: [
       'p', 'br', 'span', 'strong', 'b', 'em', 'i', 'u', 's',
       'ul', 'ol', 'li', 'a', 'h1', 'h2', 'h3', 'blockquote', 'img',
+      'hr', 'mark', 'label', 'input', 'div',
     ],
-    ALLOWED_ATTR: ['href', 'target', 'rel', 'style', 'src', 'alt', 'class'],
+    ALLOWED_ATTR: [
+      'href', 'target', 'rel', 'style', 'src', 'alt', 'class',
+      'type', 'checked', 'disabled', 'data-type', 'data-checked', 'data-color',
+    ],
     ALLOWED_URI_REGEXP:
       /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
   });

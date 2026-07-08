@@ -2,6 +2,9 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import Highlight from '@tiptap/extension-highlight';
 import { useEffect } from 'react';
 
 import { sanitizeHtml } from '@/blocks/sanitize';
@@ -25,13 +28,16 @@ export function RichTextEditor({
       StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
       TextStyle,
       Color,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      Highlight.configure({ multicolor: true }),
     ],
     content: value,
     onUpdate: ({ editor }) => onChange(sanitizeHtml(editor.getHTML())),
     editorProps: {
       attributes: {
         class:
-          'min-h-24 rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_a]:underline [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold [&_blockquote]:border-l-4 [&_blockquote]:border-black/20 [&_blockquote]:pl-3 [&_blockquote]:text-gray-600',
+          'min-h-24 rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_a]:underline [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold [&_blockquote]:border-l-4 [&_blockquote]:border-black/20 [&_blockquote]:pl-3 [&_blockquote]:text-gray-600 [&_[data-type=taskList]]:list-none [&_[data-type=taskList]]:pl-0 [&_[data-type=taskItem]]:flex [&_[data-type=taskItem]]:items-start [&_[data-type=taskItem]]:gap-2 [&_hr]:my-3 [&_hr]:border-black/20 [&_mark]:rounded [&_mark]:px-0.5',
       },
     },
   });
@@ -58,12 +64,14 @@ export function RichTextEditor({
         <span className="mx-1 h-4 w-px bg-black/20" />
         <button type="button" className={btn(editor.isActive('bulletList'))} onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bullet list">• List</button>
         <button type="button" className={btn(editor.isActive('orderedList'))} onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list">1. List</button>
-        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10 disabled:opacity-30" disabled={!editor.can().sinkListItem('listItem')} onClick={() => editor.chain().focus().sinkListItem('listItem').run()} aria-label="Indent" title="Indent (nest)">⇥</button>
-        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10 disabled:opacity-30" disabled={!editor.can().liftListItem('listItem')} onClick={() => editor.chain().focus().liftListItem('listItem').run()} aria-label="Outdent" title="Outdent">⇤</button>
+        <button type="button" className={btn(editor.isActive('taskList'))} onClick={() => editor.chain().focus().toggleTaskList().run()} aria-label="Checklist" title="Checklist">☑ List</button>
+        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10 disabled:opacity-30" disabled={!editor.can().sinkListItem('listItem') && !editor.can().sinkListItem('taskItem')} onClick={() => editor.chain().focus().sinkListItem(editor.isActive('taskItem') ? 'taskItem' : 'listItem').run()} aria-label="Indent" title="Indent (nest)">⇥</button>
+        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10 disabled:opacity-30" disabled={!editor.can().liftListItem('listItem') && !editor.can().liftListItem('taskItem')} onClick={() => editor.chain().focus().liftListItem(editor.isActive('taskItem') ? 'taskItem' : 'listItem').run()} aria-label="Outdent" title="Outdent">⇤</button>
         <span className="mx-1 h-4 w-px bg-black/20" />
         <button type="button" className={btn(editor.isActive('heading', { level: 2 }))} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} aria-label="Heading">H2</button>
         <button type="button" className={btn(editor.isActive('heading', { level: 3 }))} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} aria-label="Subheading">H3</button>
         <button type="button" className={btn(editor.isActive('blockquote'))} onClick={() => editor.chain().focus().toggleBlockquote().run()} aria-label="Quote">❝</button>
+        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10" onClick={() => editor.chain().focus().setHorizontalRule().run()} aria-label="Divider" title="Divider line">―</button>
         <span className="mx-1 h-4 w-px bg-black/20" />
         <button
           type="button"
@@ -86,6 +94,16 @@ export function RichTextEditor({
           />
         </label>
         <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10" onClick={() => editor.chain().focus().unsetColor().run()}>Reset color</button>
+        <label className="ml-1 flex items-center gap-1 text-sm" title="Highlight color">
+          🖍
+          <input
+            type="color"
+            className="h-6 w-6 cursor-pointer border-0 bg-transparent p-0"
+            value={editor.getAttributes('highlight').color ?? '#fff59d'}
+            onChange={(e) => editor.chain().focus().setHighlight({ color: e.target.value }).run()}
+          />
+        </label>
+        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10" onClick={() => editor.chain().focus().unsetHighlight().run()}>No highlight</button>
       </div>
       <EditorContent editor={editor} />
     </div>

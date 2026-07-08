@@ -10,6 +10,16 @@ import type {
   SpacerProps,
 } from '../blockProps';
 
+/** Render styles for creator rich-text (matches the editor): lists, headings,
+ *  quotes, checklists (read-only), divider, highlight. */
+const RICHTEXT_CLS =
+  '[&_a]:underline [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6' +
+  ' [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold' +
+  ' [&_blockquote]:border-l-4 [&_blockquote]:border-black/20 [&_blockquote]:pl-3 [&_blockquote]:text-gray-600' +
+  ' [&_[data-type=taskList]]:list-none [&_[data-type=taskList]]:pl-0' +
+  ' [&_[data-type=taskItem]]:flex [&_[data-type=taskItem]]:items-start [&_[data-type=taskItem]]:gap-2' +
+  ' [&_input]:mt-1 [&_input]:pointer-events-none [&_hr]:my-3 [&_hr]:border-black/20 [&_mark]:rounded [&_mark]:px-0.5';
+
 function alignClass(align: Align): string {
   return align === 'center'
     ? 'text-center'
@@ -31,7 +41,7 @@ export function HeadingView({ props }: { props: HeadingProps }) {
 export function ParagraphView({ props }: { props: ParagraphProps }) {
   return (
     <div
-      className={`leading-relaxed ${alignClass(props.align)} [&_a]:underline [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6`}
+      className={`leading-relaxed ${alignClass(props.align)} ${RICHTEXT_CLS}`}
       dangerouslySetInnerHTML={{ __html: sanitizeHtml(props.html) }}
     />
   );
@@ -70,7 +80,7 @@ export function AccordionView({ props }: { props: AccordionProps }) {
       </button>
       {open && (
         <div
-          className="px-4 pb-4 leading-relaxed [&_a]:underline [&_ul]:list-disc [&_ul]:pl-6"
+          className={`px-4 pb-4 leading-relaxed ${RICHTEXT_CLS}`}
           dangerouslySetInnerHTML={{ __html: sanitizeHtml(props.html) }}
         />
       )}
