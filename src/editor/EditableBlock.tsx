@@ -29,6 +29,8 @@ export function EditableBlock({
   dragHandleProps,
   isFirst,
   isLast,
+  selected,
+  onSelect,
 }: {
   block: Block;
   ctx: ViewerCtx;
@@ -41,19 +43,23 @@ export function EditableBlock({
   dragHandleProps?: HTMLAttributes<HTMLButtonElement>;
   isFirst: boolean;
   isLast: boolean;
+  selected?: boolean;
+  onSelect?: () => void;
 }) {
   const [hover, setHover] = useState(false);
   const width = blockWidth(block);
+  const showToolbar = hover || selected;
 
   return (
     <div
-      className="group relative h-full rounded-lg ring-offset-2 transition-shadow hover:ring-2 hover:ring-black/10"
+      className={`group relative h-full rounded-lg ring-offset-2 transition-shadow ${selected ? 'ring-2 ring-black/20' : 'hover:ring-2 hover:ring-black/10'}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onClick={onSelect}
     >
       {/* Toolbar — always visible on touch (no hover); fades in on hover for
           pointer devices. */}
-      <div className={`absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-full border bg-white px-1 py-0.5 text-sm shadow-sm transition-opacity ${hover ? 'opacity-100' : 'opacity-100 sm:opacity-60'} hover:opacity-100 group-focus-within:opacity-100`}>
+      <div className={`absolute -top-3 right-2 z-10 flex items-center gap-0.5 rounded-full border bg-white px-1 py-0.5 text-sm shadow-sm transition-opacity ${showToolbar ? 'opacity-100' : 'pointer-events-none opacity-0'} group-focus-within:opacity-100`}>
         <button type="button" {...dragHandleProps} className="cursor-grab rounded px-1.5 py-1 hover:bg-black/10" aria-label="Drag to reorder" title="Drag">⠿</button>
         <button type="button" onClick={() => onMove(-1)} disabled={isFirst} className="rounded px-1.5 py-1 hover:bg-black/10 disabled:opacity-30" aria-label="Move up">↑</button>
         <button type="button" onClick={() => onMove(1)} disabled={isLast} className="rounded px-1.5 py-1 hover:bg-black/10 disabled:opacity-30" aria-label="Move down">↓</button>

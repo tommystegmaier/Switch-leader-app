@@ -47,6 +47,22 @@ export function useScheduleRoles(orgId: string | undefined, enabled = true) {
   });
 }
 
+/** The page id that holds a schedule block (if any) — used to auto-add a
+ *  Schedule tab to the bottom bar. Null when no schedule block exists. */
+export function useSchedulePageId(orgId: string | undefined) {
+  return useQuery({
+    queryKey: KEY(orgId, 'schedule-page'),
+    enabled: Boolean(orgId) && isSupabaseConfigured,
+    queryFn: async (): Promise<string | null> => {
+      const s = getSupabase(); if (!s || !orgId) return null;
+      const { data, error } = await s.from('blocks').select('page_id').eq('org_id', orgId).eq('type', 'schedule').limit(1);
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data && data[0] ? (data[0] as any).page_id : null);
+    },
+  });
+}
+
 export function useScheduleMembers(orgId: string | undefined, enabled: boolean) {
   return useQuery({
     queryKey: KEY(orgId, 'members'),

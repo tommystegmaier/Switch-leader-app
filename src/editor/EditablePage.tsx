@@ -46,6 +46,9 @@ export function EditablePage({
   const { addBlock, updateProps, deleteBlock, duplicateBlock, reorder } = useBlockMutations(orgId, pageId);
   const [picker, setPicker] = useState<{ atIndex: number } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Only the selected block shows its toolbar (keeps the edit view uncluttered,
+  // and makes the toolbar reachable on touch where there's no hover).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -83,6 +86,8 @@ export function EditablePage({
                 ctx={ctx}
                 isFirst={i === 0}
                 isLast={i === blocks.length - 1}
+                selected={selectedId === block.id}
+                onSelect={() => setSelectedId(block.id)}
                 onEdit={() => setEditingId(block.id)}
                 onDuplicate={() => duplicateBlock.mutate(block)}
                 onDelete={() => {

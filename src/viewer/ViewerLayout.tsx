@@ -8,6 +8,8 @@ import { NavIcon } from '@/blocks/navIcons';
 import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks';
 import { useLiveAppSettings } from '@/data/liveContent';
 import { useAllPages } from '@/data/pageHooks';
+import { useSchedulePageId } from '@/data/scheduleHooks';
+import type { NavTab } from '@/types';
 import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
 import { usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
@@ -42,6 +44,7 @@ export function ViewerLayout() {
   const liveMode = editing && canEdit;
   const { data: allPages } = useAllPages(liveMode ? org?.id : undefined);
   const { data: liveSettings } = useLiveAppSettings(org?.id, liveMode);
+  const { data: schedulePageId } = useSchedulePageId(org?.id);
 
   // Editors preview the draft theme/title; viewers see the published one.
   const settings = liveMode ? (liveSettings ?? publishedSettings) : publishedSettings;
@@ -81,11 +84,16 @@ export function ViewerLayout() {
   const navPages = editing && canEdit
     ? (allPages ?? publishedPages ?? [])
     : (publishedPages ?? []).filter((p) => isVisibleTo(p.visibility, role));
-  const navStyle = settings?.navStyle ?? 'top';
-  // Custom icon bar takes priority; otherwise fall back to auto page tabs.
+  // Custom icon bar takes priority; otherwise a minimal default: Home + (if a
+  // schedule block exists anywhere) Schedule. Both use simple line icons.
   const customTabs = (settings?.tabs ?? []).filter((t) => canEdit || !t.adminOnly);
-  const showBottomTabs = customTabs.length > 0 || navStyle === 'bottom' || navStyle === 'both';
-  const bottomPages = navPages.slice(0, 5);
+  const firstPage = navPages[0];
+  const schedulePage = (allPages ?? publishedPages ?? []).find((p) => p.id === schedulePageId);
+  const autoTabs: NavTab[] = [];
+  if (firstPage) autoTabs.push({ icon: 'home', label: 'Home', kind: 'page', target: firstPage.slug });
+  if (schedulePage) autoTabs.push({ icon: 'calendar', label: 'Schedule', kind: 'page', target: schedulePage.slug });
+  const barTabs = customTabs.length > 0 ? customTabs : autoTabs;
+  const showBottomTabs = barTabs.length > 0 || (editing && canEdit);
 
   return (
     <div className="min-h-full" style={{ backgroundColor: 'var(--th-bg)' }}>
@@ -211,7 +219,7 @@ export function ViewerLayout() {
         <Outlet />
       </main>
 
-      {showBottomTabs && (customTabs.length > 0 || bottomPages.length > 0) && (
+      {showBottomTabs && (
         <nav
           className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.6rem)' }}
@@ -221,24 +229,27 @@ export function ViewerLayout() {
             className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 rounded-full border p-1.5 shadow-lg backdrop-blur"
             style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(127,127,127,0.25)' }}
           >
-            {customTabs.length > 0
-              ? customTabs.map((tab, i) => (
-                  <li key={i} className="flex-1">
-                    {tab.kind === 'url' ? (
-                      <a href={tab.target || '#'} target="_blank" rel="noopener noreferrer" className={tabCls(false)} style={{ color: 'var(--th-text)' }}>
-                        <NavIcon name={tab.icon} className="h-6 w-6" />
-                        <span className="max-w-full truncate text-[11px]">{tab.label}</span>
-                      </a>
-                    ) : (
-                      <TabLink to={`/o/${org.slug}/${tab.target}`} icon={tab.icon} label={tab.label} />
-                    )}
-                  </li>
-                ))
-              : bottomPages.map((page) => (
-                  <li key={page.id} className="flex-1">
-                    <TabLink to={`/o/${org.slug}/${page.slug}`} icon={page.icon || 'grid'} label={page.name} />
-                  </li>
-                ))}
+            {editing && canEdit ? (
+              <li className="flex-1">
+                <Link to={`/o/${org.slug}/settings#iconbar`} className={tabCls(false)} style={{ color: 'var(--th-text)' }}>
+                  <NavIcon name="grid" className="h-6 w-6" />
+                  <span className="max-w-full truncate text-[11px]">Edit icon bar</span>
+                </Link>
+              </li>
+            ) : (
+              barTabs.map((tab, i) => (
+                <li key={i} className="flex-1">
+                  {tab.kind === 'url' ? (
+                    <a href={tab.target || '#'} target="_blank" rel="noopener noreferrer" className={tabCls(false)} style={{ color: 'var(--th-text)' }}>
+                      <NavIcon name={tab.icon} className="h-6 w-6" />
+                      <span className="max-w-full truncate text-[11px]">{tab.label}</span>
+                    </a>
+                  ) : (
+                    <TabLink to={`/o/${org.slug}/${tab.target}`} icon={tab.icon} label={tab.label} />
+                  )}
+                </li>
+              ))
+            )}
           </ul>
         </nav>
       )}
