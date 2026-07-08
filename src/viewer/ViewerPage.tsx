@@ -26,7 +26,7 @@ export function ViewerPage() {
 
   const { data: org } = useOrganization(slug);
   const { data: publishedPages, isLoading: pagesLoading } = usePublishedPages(org?.id);
-  const { role, canEdit } = useMembershipRole(org?.id);
+  const { role, canEdit, isLoading: roleLoading } = useMembershipRole(org?.id);
   const { editing } = useEditMode();
   const editingPages = editing && canEdit;
   // Editors resolve against ALL pages (incl. drafts); viewers only published.
@@ -40,8 +40,15 @@ export function ViewerPage() {
   const blocks = editingPages ? liveBlocks.data : publishedBlocks.data;
   const blocksLoading = editingPages ? liveBlocks.isLoading : publishedBlocks.isLoading;
 
-  // The first page this person is actually allowed to see (editors see all).
-  const firstVisible = (pages ?? []).find((p) => editingPages || isVisibleTo(p.visibility, role));
+  // Wait for the signed-in user's role before deciding visibility — otherwise
+  // an admin briefly looks like a viewer and gets sent to the first PUBLIC page
+  // instead of the true first page (which may be managers-only).
+  if (org && roleLoading) return <p className="text-sm text-gray-500">Loading…</p>;
+
+  // The first page this person is actually allowed to see (editors/managers see
+  // all, so they land on the true first page).
+  const canSeeAll = canEdit;
+  const firstVisible = (pages ?? []).find((p) => canSeeAll || isVisibleTo(p.visibility, role));
 
   // Landing on the workspace root: go to the first page they can see (not just
   // pages[0], which might be a managers-only page).
