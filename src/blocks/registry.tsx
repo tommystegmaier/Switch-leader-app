@@ -24,6 +24,7 @@ import {
 } from './viewers/media';
 import { DocumentView } from './viewers/document';
 import { CountdownView, MapView, QrView } from './viewers/utility';
+import { ScheduleView } from './viewers/schedule';
 
 /**
  * THE BLOCK REGISTRY — the single source of truth for the creative palette.
@@ -349,6 +350,19 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       { key: 'openByDefault', label: 'Open by default', type: 'boolean' },
     ],
     Viewer: AccordionView,
+  }),
+
+  schedule: def({
+    type: 'schedule',
+    label: 'Serving schedule',
+    icon: '📅',
+    description: 'Schedule volunteers into team roles; they confirm or decline their own assignments.',
+    category: 'advanced',
+    defaultProps: { title: 'Serving schedule' },
+    fields: [
+      { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Sunday serving' },
+    ],
+    Viewer: ScheduleView,
   }),
 };
 

@@ -65,7 +65,7 @@ export function ViewerPage() {
     return <p className="text-sm text-gray-500">This page isn’t available.</p>;
   }
 
-  const ctx: ViewerCtx = { orgSlug: slug as string, navigate: (to) => navigate(to) };
+  const ctx: ViewerCtx = { orgSlug: slug as string, navigate: (to) => navigate(to), editing: editingPages };
 
   // Edit Mode (editors only) — the editable surface, lazy-loaded.
   if (editing && org && page) {

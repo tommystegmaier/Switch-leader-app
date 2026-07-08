@@ -10,6 +10,8 @@ export interface BlockAction {
 export interface ViewerCtx {
   orgSlug: string;
   navigate: (to: string) => void;
+  /** True when rendered inside the editing surface (drag/reorder active). */
+  editing?: boolean;
 }
 
 /**
