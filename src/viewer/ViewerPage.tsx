@@ -40,8 +40,13 @@ export function ViewerPage() {
   const blocks = editingPages ? liveBlocks.data : publishedBlocks.data;
   const blocksLoading = editingPages ? liveBlocks.isLoading : publishedBlocks.isLoading;
 
-  if (!pageSlug && org && pages && pages.length > 0) {
-    return <Navigate to={`/o/${org.slug}/${pages[0].slug}`} replace />;
+  // The first page this person is actually allowed to see (editors see all).
+  const firstVisible = (pages ?? []).find((p) => editingPages || isVisibleTo(p.visibility, role));
+
+  // Landing on the workspace root: go to the first page they can see (not just
+  // pages[0], which might be a managers-only page).
+  if (!pageSlug && org && firstVisible) {
+    return <Navigate to={`/o/${org.slug}/${firstVisible.slug}`} replace />;
   }
 
   if (pagesLoading) return <p className="text-sm text-gray-500">Loading…</p>;
@@ -60,8 +65,12 @@ export function ViewerPage() {
     return <p className="text-sm text-gray-500">Page not found.</p>;
   }
 
-  // Hide admins-only pages from viewers even via a direct link (unless editing).
+  // A viewer landed on a page they can't see (e.g. a managers-only home page).
+  // Bounce them to the first page they CAN see instead of a dead end.
   if (!editing && page && !isVisibleTo(page.visibility, role)) {
+    if (firstVisible && firstVisible.slug !== pageSlug) {
+      return <Navigate to={`/o/${org!.slug}/${firstVisible.slug}`} replace />;
+    }
     return <p className="text-sm text-gray-500">This page isn’t available.</p>;
   }
 
