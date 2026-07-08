@@ -19,6 +19,13 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
  * Viewer shell still works against sample data.
  */
 
+export interface SignUpProfile {
+  name?: string;
+  /** ISO date 'YYYY-MM-DD'. */
+  birthday?: string;
+  phone?: string;
+}
+
 interface AuthContextValue {
   session: Session | null;
   user: User | null;
@@ -26,7 +33,7 @@ interface AuthContextValue {
   /** True when a real Supabase backend is wired up. */
   configured: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, name?: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, profile?: SignUpProfile) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   /** Email a password-reset link that returns to /reset-password. */
   sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
@@ -82,15 +89,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { error: describeError(e) };
         }
       },
-      async signUp(email, password, name) {
+      async signUp(email, password, profile) {
         const supabase = getSupabase();
         if (!supabase) return { error: 'Authentication is not configured.' };
         try {
-          const trimmed = name?.trim();
+          const data: Record<string, string> = {};
+          const name = profile?.name?.trim();
+          const birthday = profile?.birthday?.trim();
+          const phone = profile?.phone?.trim();
+          if (name) data.full_name = name;
+          if (birthday) data.birthday = birthday;
+          if (phone) data.phone = phone;
           const { error } = await supabase.auth.signUp({
             email,
             password,
-            options: trimmed ? { data: { full_name: trimmed } } : undefined,
+            options: Object.keys(data).length ? { data } : undefined,
           });
           return { error: error?.message ?? null };
         } catch (e) {

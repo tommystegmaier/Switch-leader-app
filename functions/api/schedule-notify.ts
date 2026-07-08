@@ -30,10 +30,10 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (!token) return json({ error: 'Not signed in.' }, 401);
 
-  let body: { assignmentId?: string };
+  let body: { roleId?: string; serveDate?: string };
   try { body = await request.json(); } catch { return json({ error: 'Bad request.' }, 400); }
-  const { assignmentId } = body;
-  if (!assignmentId) return json({ error: 'Missing assignment.' }, 400);
+  const { roleId, serveDate } = body;
+  if (!roleId || !serveDate) return json({ error: 'Missing role or date.' }, 400);
 
   const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -43,38 +43,50 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   if (userErr || !userData?.user) return json({ error: 'Not signed in.' }, 401);
   const caller = userData.user;
 
-  // Load the assignment; only the assignee may trigger this.
-  const { data: a } = await admin
-    .from('schedule_assignments')
-    .select('id, org_id, role_id, user_id, status, serve_date')
-    .eq('id', assignmentId)
-    .maybeSingle();
-  if (!a) return json({ error: 'Assignment not found.' }, 404);
-  if (a.user_id !== caller.id) return json({ error: 'Not your assignment.' }, 403);
+  // Role + team + org for the message; also validates the role exists.
+  const { data: role } = await admin.from('schedule_roles').select('name, team_id, org_id').eq('id', roleId).maybeSingle();
+  if (!role) return json({ error: 'Role not found.' }, 404);
+  const orgId = role.org_id as string;
 
-  // Role + team names for the message.
-  const { data: role } = await admin.from('schedule_roles').select('name, team_id').eq('id', a.role_id).maybeSingle();
+  // Only someone actually rostered in this role may trigger the notice.
+  const { data: rosterRow } = await admin
+    .from('schedule_roster')
+    .select('user_id')
+    .eq('role_id', roleId)
+    .eq('user_id', caller.id)
+    .maybeSingle();
+  if (!rosterRow) return json({ error: 'Not your role.' }, 403);
+
+  // The response we're announcing.
+  const { data: resp } = await admin
+    .from('schedule_responses')
+    .select('status')
+    .eq('role_id', roleId)
+    .eq('user_id', caller.id)
+    .eq('serve_date', serveDate)
+    .maybeSingle();
+  const verb = resp?.status === 'confirmed' ? 'confirmed' : resp?.status === 'declined' ? 'declined' : 'updated';
+
   let teamName = '';
-  if (role?.team_id) {
+  if (role.team_id) {
     const { data: team } = await admin.from('schedule_teams').select('name').eq('id', role.team_id).maybeSingle();
     teamName = team?.name ?? '';
   }
-  const { data: org } = await admin.from('organizations').select('slug').eq('id', a.org_id).maybeSingle();
+  const { data: org } = await admin.from('organizations').select('slug').eq('id', orgId).maybeSingle();
 
   const responderName =
     (caller.user_metadata?.full_name as string | undefined) ||
     (caller.user_metadata?.name as string | undefined) ||
     caller.email ||
     'A volunteer';
-  const verb = a.status === 'confirmed' ? 'confirmed' : a.status === 'declined' ? 'declined' : 'updated';
 
   // Managers of this workspace, minus anyone who muted, minus the responder.
   const { data: managers } = await admin
     .from('memberships')
     .select('user_id, role')
-    .eq('org_id', a.org_id)
+    .eq('org_id', orgId)
     .in('role', ['owner', 'admin', 'editor']);
-  const { data: mutes } = await admin.from('schedule_mute').select('user_id').eq('org_id', a.org_id);
+  const { data: mutes } = await admin.from('schedule_mute').select('user_id').eq('org_id', orgId);
   const mutedSet = new Set((mutes ?? []).map((m: { user_id: string }) => m.user_id));
   const recipientIds = (managers ?? [])
     .map((m: { user_id: string }) => m.user_id)
@@ -85,7 +97,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   const { data: subs } = await admin
     .from('push_subscriptions')
     .select('endpoint, p256dh, auth')
-    .eq('org_id', a.org_id)
+    .eq('org_id', orgId)
     .in('user_id', recipientIds);
 
   const vapid = {
@@ -93,10 +105,10 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     publicKey: env.VAPID_PUBLIC_KEY,
     privateKey: env.VAPID_PRIVATE_KEY,
   };
-  const roleLabel = [teamName, role?.name].filter(Boolean).join(' · ') || 'their role';
+  const roleLabel = [teamName, role.name].filter(Boolean).join(' · ') || 'their role';
   const data = {
     title: `${responderName} ${verb}`,
-    body: `${roleLabel} — ${a.serve_date}`,
+    body: `${roleLabel} — ${serveDate}`,
     url: org?.slug ? `/o/${org.slug}` : '/',
   };
 

@@ -30,6 +30,8 @@ export function JoinPage() {
 
   const [mode, setMode] = useState<'signup' | 'signin'>('signup');
   const [name, setName] = useState('');
+  const [birthday, setBirthday] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export function JoinPage() {
     try {
       const { error: err } =
         mode === 'signup'
-          ? await signUp(email.trim(), password, name)
+          ? await signUp(email.trim(), password, { name, birthday, phone })
           : await signIn(email.trim(), password);
       if (err) { setError(err); setBusy(false); return; }
       // signUp may or may not create an immediate session (depends on whether
@@ -131,10 +133,20 @@ export function JoinPage() {
         <form onSubmit={onAuthSubmit} className="mt-6 flex flex-col gap-3">
           <p className="text-sm font-medium">{mode === 'signup' ? 'Create your account to accept' : 'Sign in to accept'}</p>
           {mode === 'signup' && (
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">Your name</span>
-              <input type="text" autoComplete="name" placeholder="e.g. Jordan Smith" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-            </label>
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Your name</span>
+                <input type="text" autoComplete="name" placeholder="e.g. Jordan Smith" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Birthday</span>
+                <input type="date" autoComplete="bday" value={birthday} onChange={(e) => setBirthday(e.target.value)} className={inputCls} />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Phone number</span>
+                <input type="tel" autoComplete="tel" placeholder="(555) 555-5555" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
+              </label>
+            </>
           )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Email</span>

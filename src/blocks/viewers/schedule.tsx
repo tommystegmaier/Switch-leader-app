@@ -5,34 +5,48 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import {
-  useCreateAssignment, useCreateRole, useCreateTeam, useDeleteAssignment,
-  useDeleteRole, useDeleteTeam, useFullSchedule, useMySchedule, useRespond,
-  useScheduleMembers, useScheduleMute, useScheduleRoles, useScheduleTeams,
-  useSetScheduleMute,
-  type ScheduleRow,
+  useAddSkip, useAddToRoster, useCreateRole, useCreateTeam, useDeleteRole, useDeleteTeam,
+  useMySchedule, useOrgBirthdays, useRemoveFromRoster, useRemoveSkip, useRespondOccurrence,
+  useRoster, useRosterStatus, useScheduleMembers, useScheduleMute, useScheduleRoles,
+  useScheduleTeams, useServeWeekday, useSetScheduleMute, useSetServeWeekday, useSkips,
 } from '@/data/scheduleHooks';
 import type { ViewerCtx } from '../actions';
 
 interface ScheduleProps { title?: string }
 
-/** Today's date as YYYY-MM-DD (local). */
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-
+function isoOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function fmtDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 }
+/** Next `count` serving-day dates from today, excluding weeks off. */
+function upcomingServeDates(weekday: number, skips: Set<string>, count = 8): string[] {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(today.getDate() + ((weekday - today.getDay() + 7) % 7));
+  const out: string[] = [];
+  for (let i = 0; out.length < count && i < count + 20; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i * 7);
+    const iso = isoOf(d);
+    if (!skips.has(iso)) out.push(iso);
+  }
+  return out;
+}
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  pending: { label: 'Awaiting response', cls: 'bg-amber-100 text-amber-800' },
+  pending: { label: 'Awaiting', cls: 'bg-amber-100 text-amber-800' },
   confirmed: { label: 'Confirmed', cls: 'bg-green-100 text-green-800' },
   declined: { label: 'Declined', cls: 'bg-red-100 text-red-700' },
 };
-
 function Badge({ status }: { status: string }) {
   const b = STATUS_BADGE[status] ?? STATUS_BADGE.pending;
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${b.cls}`}>{b.label}</span>;
@@ -48,93 +62,75 @@ export function ScheduleView({ props, ctx }: { props: ScheduleProps; ctx: Viewer
   const { canEdit, isLoading } = useMembershipRole(org?.id);
   const title = props.title || 'Serving schedule';
 
-  // In the editor surface, show a static placeholder so drag/reorder isn't
-  // fighting the interactive controls. Managers use it live (Edit off).
   if (ctx.editing) {
     return (
       <div className={card} style={cardStyle}>
         <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
-        <p className="mt-1 text-sm text-gray-500">
-          Volunteers see their own assignments here and confirm or decline. Turn off Edit to manage teams, assign people, and view responses.
-        </p>
+        <p className="mt-1 text-sm text-gray-500">Turn off Edit to manage teams, roles and the weekly roster. Volunteers see their own weeks here to confirm or decline.</p>
       </div>
     );
   }
-
   if (!org || isLoading) return <div className={card} style={cardStyle}><p className="text-sm text-gray-500">Loading schedule…</p></div>;
-
   if (!user) {
     return (
       <div className={card} style={cardStyle}>
         <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
-        <p className="mt-1 text-sm text-gray-600">Sign in to see the serving assignments you&apos;ve been given.</p>
+        <p className="mt-1 text-sm text-gray-600">Sign in to see the weeks you&apos;re scheduled to serve.</p>
         <a href={`/login?next=/o/${org.slug}`} className="mt-3 inline-block rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Sign in</a>
       </div>
     );
   }
-
   return canEdit
     ? <ManagerSchedule orgId={org.id} userId={user.id} title={title} />
     : <VolunteerSchedule orgId={org.id} title={title} />;
 }
 
 // ---------------------------------------------------------------------------
-// Volunteer view — only their own assignments.
+// Volunteer — my upcoming weeks
 // ---------------------------------------------------------------------------
 function VolunteerSchedule({ orgId, title }: { orgId: string; title: string }) {
   const { data: mine, isLoading } = useMySchedule(orgId, true);
-  const respond = useRespond(orgId);
+  const respond = useRespondOccurrence(orgId);
   const [error, setError] = useState<string | null>(null);
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const upcoming = (mine ?? []).filter((a) => a.serveDate >= todayIso());
-
-  async function react(id: string, status: 'confirmed' | 'declined') {
-    setError(null); setPendingId(id);
-    try { await respond.mutateAsync({ id, status }); }
+  async function react(roleId: string, serveDate: string, status: 'confirmed' | 'declined') {
+    const k = `${roleId}|${serveDate}`; setBusy(k); setError(null);
+    try { await respond.mutateAsync({ roleId, serveDate, status }); }
     catch (e) { setError(errorMessage(e)); }
-    finally { setPendingId(null); }
+    finally { setBusy(null); }
   }
 
+  const rows = mine ?? [];
   return (
     <div className={card} style={cardStyle}>
       <p className="mb-3 font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
       {isLoading ? (
-        <p className="text-sm text-gray-500">Loading your assignments…</p>
-      ) : upcoming.length === 0 ? (
-        <p className="text-sm text-gray-500">You have no upcoming serving assignments. We&apos;ll let you know when you&apos;re scheduled.</p>
+        <p className="text-sm text-gray-500">Loading your weeks…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-gray-500">You&apos;re not on the serving schedule right now. We&apos;ll let you know when you are.</p>
       ) : (
         <ul className="flex flex-col gap-3">
-          {upcoming.map((a) => (
-            <li key={a.id} className="rounded-lg border p-3" style={cardStyle}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium">{fmtDate(a.serveDate)}</span>
-                <Badge status={a.status} />
-              </div>
-              <p className="mt-1 text-sm text-gray-600">{a.teamName} · {a.roleName}</p>
-              {a.note && <p className="mt-1 text-xs text-gray-500">{a.note}</p>}
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  disabled={pendingId === a.id || a.status === 'confirmed'}
-                  onClick={() => react(a.id, 'confirmed')}
-                  className="flex-1 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50"
-                  style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
-                >
-                  {a.status === 'confirmed' ? '✓ Confirmed' : 'Confirm'}
-                </button>
-                <button
-                  type="button"
-                  disabled={pendingId === a.id || a.status === 'declined'}
-                  onClick={() => react(a.id, 'declined')}
-                  className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50"
-                  style={{ borderColor: 'rgba(0,0,0,0.2)' }}
-                >
-                  {a.status === 'declined' ? "Can't serve" : "Can't make it"}
-                </button>
-              </div>
-            </li>
-          ))}
+          {rows.map((a) => {
+            const k = `${a.roleId}|${a.serveDate}`;
+            return (
+              <li key={k} className="rounded-lg border p-3" style={cardStyle}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">{fmtDate(a.serveDate)}</span>
+                  <Badge status={a.status} />
+                </div>
+                <p className="mt-1 text-sm text-gray-600">{a.teamName} · {a.roleName}</p>
+                <div className="mt-3 flex gap-2">
+                  <button type="button" disabled={busy === k || a.status === 'confirmed'} onClick={() => react(a.roleId, a.serveDate, 'confirmed')} className="flex-1 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+                    {a.status === 'confirmed' ? '✓ Confirmed' : 'Confirm'}
+                  </button>
+                  <button type="button" disabled={busy === k || a.status === 'declined'} onClick={() => react(a.roleId, a.serveDate, 'declined')} className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+                    {a.status === 'declined' ? "Can't serve" : "Can't make it"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
@@ -143,147 +139,114 @@ function VolunteerSchedule({ orgId, title }: { orgId: string; title: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Manager view — build teams/roles, assign people, see all responses.
+// Manager — roster, week statuses, setup
 // ---------------------------------------------------------------------------
-type Tab = 'schedule' | 'teams' | 'settings';
+type Tab = 'roster' | 'teams' | 'weeks' | 'settings';
 
 function ManagerSchedule({ orgId, userId, title }: { orgId: string; userId: string; title: string }) {
-  const [tab, setTab] = useState<Tab>('schedule');
+  const [tab, setTab] = useState<Tab>('roster');
   return (
     <div className={card} style={cardStyle}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
-        <div className="flex gap-1 text-sm">
-          {(['schedule', 'teams', 'settings'] as Tab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`rounded-full px-3 py-1 ${tab === t ? 'font-semibold' : 'opacity-60'}`}
-              style={tab === t ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid rgba(0,0,0,0.15)' }}
-            >
-              {t === 'schedule' ? 'Schedule' : t === 'teams' ? 'Teams & roles' : 'Notifications'}
-            </button>
+        <div className="flex flex-wrap gap-1 text-sm">
+          {([['roster', 'Roster'], ['teams', 'Teams & roles'], ['weeks', 'Weeks off'], ['settings', 'Notifications']] as [Tab, string][]).map(([t, label]) => (
+            <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-3 py-1 ${tab === t ? 'font-semibold' : 'opacity-60'}`} style={tab === t ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid rgba(0,0,0,0.15)' }}>{label}</button>
           ))}
         </div>
       </div>
-      {tab === 'schedule' && <ManagerScheduleTab orgId={orgId} />}
-      {tab === 'teams' && <ManagerTeamsTab orgId={orgId} />}
-      {tab === 'settings' && <ManagerSettingsTab orgId={orgId} userId={userId} />}
+      {tab === 'roster' && <RosterTab orgId={orgId} />}
+      {tab === 'teams' && <TeamsTab orgId={orgId} />}
+      {tab === 'weeks' && <WeeksTab orgId={orgId} />}
+      {tab === 'settings' && <SettingsTab orgId={orgId} userId={userId} />}
     </div>
   );
 }
 
-function ManagerScheduleTab({ orgId }: { orgId: string }) {
+function RosterTab({ orgId }: { orgId: string }) {
   const { data: teams } = useScheduleTeams(orgId);
   const { data: roles } = useScheduleRoles(orgId);
+  const { data: roster } = useRoster(orgId, true);
   const { data: members } = useScheduleMembers(orgId, true);
-  const { data: rows, isLoading } = useFullSchedule(orgId, true, todayIso());
-  const createAssignment = useCreateAssignment(orgId);
-  const deleteAssignment = useDeleteAssignment(orgId);
+  const { data: weekday = 0 } = useServeWeekday(orgId);
+  const { data: skips } = useSkips(orgId);
+  const addToRoster = useAddToRoster(orgId);
+  const removeFromRoster = useRemoveFromRoster(orgId);
 
-  const [teamId, setTeamId] = useState('');
-  const [roleId, setRoleId] = useState('');
-  const [personId, setPersonId] = useState('');
-  const [serveDate, setServeDate] = useState(todayIso());
-  const [note, setNote] = useState('');
+  const dates = useMemo(() => upcomingServeDates(weekday, new Set(skips ?? [])), [weekday, skips]);
+  const [dateIdx, setDateIdx] = useState(0);
+  const selectedDate = dates[dateIdx];
+  const { data: statuses } = useRosterStatus(orgId, selectedDate, true);
+  const [assignRole, setAssignRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const rolesForTeam = (roles ?? []).filter((r) => r.teamId === teamId);
-
-  async function add() {
-    setError(null);
-    if (!roleId || !personId || !serveDate) { setError('Pick a team, role, person and date.'); return; }
-    try {
-      await createAssignment.mutateAsync({ roleId, userId: personId, serveDate, note });
-      setPersonId(''); setNote('');
-    } catch (e) { setError(errorMessage(e)); }
-  }
+  const statusFor = (roleId: string, userId: string) =>
+    (statuses ?? []).find((s) => s.roleId === roleId && s.userId === userId)?.status ?? 'pending';
 
   const needsSetup = (teams ?? []).length === 0 || (roles ?? []).length === 0;
+  if (needsSetup) {
+    return <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Add a team and at least one role in the <strong>Teams &amp; roles</strong> tab first. Then assign people to roles here — they&apos;ll be scheduled every week automatically.</p>;
+  }
 
-  // Group rows by date for display.
-  const grouped = useMemo(() => groupByDate(rows ?? []), [rows]);
+  async function assign(roleId: string, userId: string) {
+    setError(null);
+    try { await addToRoster.mutateAsync({ roleId, userId }); setAssignRole(null); }
+    catch (e) { setError(errorMessage(e)); }
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      {needsSetup ? (
-        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">First add a team and at least one role under the <strong>Teams &amp; roles</strong> tab, then you can schedule people here.</p>
-      ) : (
-        <div className="rounded-lg border p-3" style={cardStyle}>
-          <p className="mb-2 text-sm font-medium">Assign someone</p>
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-2">
-              <select className={input + ' flex-1'} value={teamId} onChange={(e) => { setTeamId(e.target.value); setRoleId(''); }}>
-                <option value="">Team…</option>
-                {(teams ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-              <select className={input + ' flex-1'} value={roleId} onChange={(e) => setRoleId(e.target.value)} disabled={!teamId}>
-                <option value="">Role…</option>
-                {rolesForTeam.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-            </div>
-            <select className={input} value={personId} onChange={(e) => setPersonId(e.target.value)}>
-              <option value="">Person…</option>
-              {(members ?? []).map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
-            </select>
-            <div className="flex flex-wrap gap-2">
-              <input type="date" className={input + ' flex-1'} value={serveDate} onChange={(e) => setServeDate(e.target.value)} />
-              <input type="text" className={input + ' flex-1'} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-            </div>
-            <button type="button" onClick={add} disabled={createAssignment.isPending} className="self-start rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
-              {createAssignment.isPending ? 'Adding…' : '+ Add to schedule'}
-            </button>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-          </div>
+      {/* Week selector for confirm/decline statuses */}
+      {dates.length > 0 && (
+        <div className="flex items-center justify-between rounded-lg border p-2 text-sm" style={cardStyle}>
+          <button type="button" disabled={dateIdx === 0} onClick={() => setDateIdx((i) => Math.max(0, i - 1))} className="rounded px-2 py-1 disabled:opacity-30">‹</button>
+          <span className="font-medium">Responses for {fmtDate(selectedDate)}</span>
+          <button type="button" disabled={dateIdx >= dates.length - 1} onClick={() => setDateIdx((i) => Math.min(dates.length - 1, i + 1))} className="rounded px-2 py-1 disabled:opacity-30">›</button>
         </div>
       )}
 
-      <div>
-        <p className="mb-2 text-sm font-medium">Upcoming</p>
-        {isLoading ? (
-          <p className="text-sm text-gray-500">Loading…</p>
-        ) : grouped.length === 0 ? (
-          <p className="text-sm text-gray-500">Nothing scheduled yet.</p>
-        ) : (
-          <div className="flex flex-col gap-4">
-            {grouped.map(([date, items]) => (
-              <div key={date}>
-                <p className="mb-1 text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>{fmtDate(date)}</p>
-                <ul className="flex flex-col gap-1">
-                  {items.map((a) => (
-                    <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2 text-sm" style={cardStyle}>
-                      <span className="min-w-0 flex-1 truncate">
-                        <span className="font-medium">{a.personName || a.personEmail}</span>
-                        <span className="text-gray-500"> — {a.teamName} · {a.roleName}</span>
-                      </span>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Badge status={a.status} />
-                        <button type="button" onClick={() => deleteAssignment.mutate(a.id)} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Remove</button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+      {(teams ?? []).map((t) => (
+        <div key={t.id}>
+          <p className="mb-1 text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>{t.name}</p>
+          <div className="flex flex-col gap-2">
+            {(roles ?? []).filter((r) => r.teamId === t.id).map((r) => {
+              const people = (roster ?? []).filter((rr) => rr.roleId === r.id);
+              const availableMembers = (members ?? []).filter((m) => !people.some((p) => p.userId === m.userId));
+              return (
+                <div key={r.id} className="rounded-lg border p-2" style={cardStyle}>
+                  <p className="text-sm font-medium">{r.name}</p>
+                  <ul className="mt-1 flex flex-col gap-1">
+                    {people.map((p) => (
+                      <li key={p.userId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="min-w-0 flex-1 truncate">{p.name || p.email}</span>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Badge status={statusFor(r.id, p.userId)} />
+                          <button type="button" onClick={() => removeFromRoster.mutate({ roleId: r.id, userId: p.userId })} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Remove</button>
+                        </div>
+                      </li>
+                    ))}
+                    {people.length === 0 && <li className="text-xs text-gray-400">No one assigned yet.</li>}
+                  </ul>
+                  {assignRole === r.id ? (
+                    <select autoFocus className={input + ' mt-2'} defaultValue="" onChange={(e) => { if (e.target.value) assign(r.id, e.target.value); }}>
+                      <option value="">Choose a person…</option>
+                      {availableMembers.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
+                    </select>
+                  ) : (
+                    <button type="button" onClick={() => setAssignRole(r.id)} className="mt-2 rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Assign someone</button>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+        </div>
+      ))}
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );
 }
 
-function groupByDate(rows: ScheduleRow[]): [string, ScheduleRow[]][] {
-  const map = new Map<string, ScheduleRow[]>();
-  for (const r of rows) {
-    const list = map.get(r.serveDate) ?? [];
-    list.push(r);
-    map.set(r.serveDate, list);
-  }
-  return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-}
-
-function ManagerTeamsTab({ orgId }: { orgId: string }) {
+function TeamsTab({ orgId }: { orgId: string }) {
   const { data: teams } = useScheduleTeams(orgId);
   const { data: roles } = useScheduleRoles(orgId);
   const createTeam = useCreateTeam(orgId);
@@ -296,10 +259,9 @@ function ManagerTeamsTab({ orgId }: { orgId: string }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-2">
-        <input className={input} placeholder="New team name (e.g. Sunday AM)" value={newTeam} onChange={(e) => setNewTeam(e.target.value)} />
+        <input className={input} placeholder="New team (e.g. Sunday AM)" value={newTeam} onChange={(e) => setNewTeam(e.target.value)} />
         <button type="button" disabled={!newTeam.trim() || createTeam.isPending} onClick={async () => { await createTeam.mutateAsync(newTeam); setNewTeam(''); }} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>+ Team</button>
       </div>
-
       {(teams ?? []).map((t) => (
         <div key={t.id} className="rounded-lg border p-3" style={cardStyle}>
           <div className="flex items-center justify-between gap-2">
@@ -325,23 +287,128 @@ function ManagerTeamsTab({ orgId }: { orgId: string }) {
   );
 }
 
-function ManagerSettingsTab({ orgId, userId }: { orgId: string; userId: string }) {
+function WeeksTab({ orgId }: { orgId: string }) {
+  const { data: weekday = 0 } = useServeWeekday(orgId);
+  const setWeekday = useSetServeWeekday(orgId);
+  const { data: skips } = useSkips(orgId);
+  const addSkip = useAddSkip(orgId);
+  const removeSkip = useRemoveSkip(orgId);
+  const [newSkip, setNewSkip] = useState('');
+
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium">Serving day of the week</span>
+        <select className={input} value={weekday} onChange={(e) => setWeekday.mutate(Number(e.target.value))}>
+          {WEEKDAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+        </select>
+        <span className="text-xs text-gray-500">Everyone on the roster is scheduled for this day every week.</span>
+      </label>
+
+      <div className="rounded-lg border p-3" style={cardStyle}>
+        <p className="text-sm font-medium">Weeks off (no one scheduled)</p>
+        <div className="mt-2 flex gap-2">
+          <input type="date" className={input} value={newSkip} onChange={(e) => setNewSkip(e.target.value)} />
+          <button type="button" disabled={!newSkip} onClick={() => { addSkip.mutate(newSkip); setNewSkip(''); }} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>+ Week off</button>
+        </div>
+        <ul className="mt-2 flex flex-col gap-1">
+          {(skips ?? []).filter((d) => d >= todayIso()).map((d) => (
+            <li key={d} className="flex items-center justify-between gap-2 text-sm">
+              <span>{fmtDate(d)}</span>
+              <button type="button" onClick={() => removeSkip.mutate(d)} className="rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-black/5">Undo</button>
+            </li>
+          ))}
+          {(skips ?? []).filter((d) => d >= todayIso()).length === 0 && <li className="text-xs text-gray-400">No upcoming weeks off.</li>}
+        </ul>
+        <p className="mt-2 text-xs text-gray-500">Tip: pick the actual serving-day date you want to skip.</p>
+      </div>
+    </div>
+  );
+}
+
+function SettingsTab({ orgId, userId }: { orgId: string; userId: string }) {
   const { data: muted } = useScheduleMute(orgId, userId, true);
   const setMute = useSetScheduleMute(orgId, userId);
   return (
-    <div className="flex flex-col gap-2">
-      <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm" style={cardStyle}>
-        <span>
-          <span className="block font-medium">Notify me when someone confirms or declines</span>
-          <span className="block text-xs text-gray-500">Turn this off to stop receiving those push notifications (only affects you).</span>
-        </span>
-        <input
-          type="checkbox"
-          className="h-5 w-5"
-          checked={!muted}
-          onChange={(e) => setMute.mutate(!e.target.checked)}
-        />
-      </label>
+    <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm" style={cardStyle}>
+      <span>
+        <span className="block font-medium">Notify me when someone confirms or declines</span>
+        <span className="block text-xs text-gray-500">Turn off to stop these push notifications (only affects you).</span>
+      </span>
+      <input type="checkbox" className="h-5 w-5" checked={!muted} onChange={(e) => setMute.mutate(!e.target.checked)} />
+    </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Birthdays block — managers only. Pulls from what people entered at signup.
+// ---------------------------------------------------------------------------
+interface BirthdaysProps { title?: string }
+
+/** MM-DD key from a 'YYYY-MM-DD' (or 'MM-DD') birthday. */
+function monthDay(b: string): string {
+  const parts = b.split('-');
+  return parts.length === 3 ? `${parts[1]}-${parts[2]}` : b;
+}
+/** Days until the next occurrence of this month/day from today. */
+function daysUntil(md: string): number {
+  const [m, d] = md.split('-').map(Number);
+  if (!m || !d) return 999;
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  let next = new Date(now.getFullYear(), m - 1, d);
+  if (next < now) next = new Date(now.getFullYear() + 1, m - 1, d);
+  return Math.round((next.getTime() - now.getTime()) / 86400000);
+}
+function fmtMonthDay(md: string): string {
+  const [m, d] = md.split('-').map(Number);
+  if (!m || !d) return md;
+  return new Date(2000, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: ViewerCtx }) {
+  const { data: org } = useOrganization(ctx.orgSlug);
+  const { canEdit } = useMembershipRole(org?.id);
+  const { data: birthdays } = useOrgBirthdays(org?.id, Boolean(org) && canEdit);
+  const title = props.title || 'Birthdays';
+
+  if (ctx.editing) {
+    return (
+      <div className={card} style={cardStyle}>
+        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
+        <p className="mt-1 text-sm text-gray-500">Managers only. Shows upcoming birthdays from what people entered when they created their account.</p>
+      </div>
+    );
+  }
+  // Only owner/admin/editor see this at all.
+  if (!org || !canEdit) return <></>;
+
+  const sorted = [...(birthdays ?? [])]
+    .map((b) => ({ ...b, md: monthDay(b.birthday), days: daysUntil(monthDay(b.birthday)) }))
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 12);
+
+  return (
+    <div className={card} style={cardStyle}>
+      <p className="mb-3 font-semibold uppercase tracking-wide" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
+      {sorted.length === 0 ? (
+        <p className="text-sm text-gray-500">No birthdays yet. They appear here once people add their birthday at sign-up.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {sorted.map((b) => (
+            <li key={b.userId} className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm" style={cardStyle}>
+              <span className="min-w-0">
+                <span className="block truncate font-medium">🎂 {b.name || b.email}</span>
+                {b.phone && <a href={`tel:${b.phone}`} className="text-xs text-gray-500 underline">{b.phone}</a>}
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="block font-semibold" style={{ color: b.days <= 1 ? 'var(--th-accent)' : 'var(--th-text)' }}>
+                  {b.days === 0 ? 'TODAY' : b.days === 1 ? 'TOMORROW' : fmtMonthDay(b.md)}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

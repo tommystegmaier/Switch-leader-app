@@ -24,7 +24,7 @@ import {
 } from './viewers/media';
 import { DocumentView } from './viewers/document';
 import { CountdownView, MapView, QrView } from './viewers/utility';
-import { ScheduleView } from './viewers/schedule';
+import { ScheduleView, BirthdaysView } from './viewers/schedule';
 
 /**
  * THE BLOCK REGISTRY — the single source of truth for the creative palette.
@@ -363,6 +363,19 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Sunday serving' },
     ],
     Viewer: ScheduleView,
+  }),
+
+  birthdays: def({
+    type: 'birthdays',
+    label: 'Birthdays',
+    icon: '🎂',
+    description: "Upcoming birthdays pulled from members' accounts. Only managers can see it.",
+    category: 'advanced',
+    defaultProps: { title: 'Birthdays' },
+    fields: [
+      { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Birthdays & anniversaries' },
+    ],
+    Viewer: BirthdaysView,
   }),
 };
 

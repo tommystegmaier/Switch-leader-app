@@ -20,6 +20,8 @@ export function LoginPage() {
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>('signin');
   const [name, setName] = useState('');
+  const [birthday, setBirthday] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export function LoginPage() {
     const { error: err } =
       mode === 'signin'
         ? await signIn(email.trim(), password)
-        : await signUp(email.trim(), password, name);
+        : await signUp(email.trim(), password, { name, birthday, phone });
     setBusy(false);
     if (err) {
       setError(err);
@@ -88,17 +90,20 @@ export function LoginPage() {
 
         <form onSubmit={onSubmit} className="flex flex-col gap-3">
           {mode === 'signup' && (
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium">Your name</span>
-              <input
-                type="text"
-                autoComplete="name"
-                placeholder="e.g. Jordan Smith"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2"
-              />
-            </label>
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Your name</span>
+                <input type="text" autoComplete="name" placeholder="e.g. Jordan Smith" value={name} onChange={(e) => setName(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Birthday</span>
+                <input type="date" autoComplete="bday" value={birthday} onChange={(e) => setBirthday(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium">Phone number</span>
+                <input type="tel" autoComplete="tel" placeholder="(555) 555-5555" value={phone} onChange={(e) => setPhone(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
+              </label>
+            </>
           )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Email</span>

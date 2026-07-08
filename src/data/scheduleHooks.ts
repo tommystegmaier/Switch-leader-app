@@ -3,25 +3,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 
 /**
- * Volunteer-scheduling data layer. Managers (owner/admin/editor) read the full
- * schedule and the member list via SECURITY DEFINER RPCs; volunteers read only
- * their own assignments via my_schedule. Teams/roles are plain table CRUD gated
- * by RLS. Confirm/decline goes through respond_assignment, then a best-effort
- * push to managers via /api/schedule-notify.
+ * Recurring-roster scheduling (v2). Managers keep a roster (people per role,
+ * every week); weekly serving dates are generated from the serving weekday
+ * minus the weeks-off list. Volunteers confirm/decline each upcoming week.
+ * Cross-table/name reads go through SECURITY DEFINER RPCs (see migration 0017).
  */
 
 export interface ScheduleTeam { id: string; name: string; sort: number }
 export interface ScheduleRole { id: string; teamId: string; name: string; sort: number }
 export interface ScheduleMember { userId: string; name: string | null; email: string }
-export interface ScheduleRow {
-  id: string; serveDate: string; status: 'pending' | 'confirmed' | 'declined'; note: string | null;
-  teamId: string; teamName: string; roleId: string; roleName: string;
-  personId: string; personName: string | null; personEmail: string; respondedAt: string | null;
-}
-export interface MyAssignment {
-  id: string; serveDate: string; status: 'pending' | 'confirmed' | 'declined'; note: string | null;
-  teamName: string; roleName: string;
-}
+export interface RosterEntry { roleId: string; userId: string; name: string | null; email: string }
+export interface StatusEntry { roleId: string; userId: string; status: 'confirmed' | 'declined' }
+export interface MyOccurrence { roleId: string; teamName: string; roleName: string; serveDate: string; status: 'pending' | 'confirmed' | 'declined' }
+export interface Birthday { userId: string; name: string | null; email: string; phone: string | null; birthday: string }
 
 const KEY = (orgId: string | undefined, ...rest: string[]) => ['schedule', orgId, ...rest];
 
@@ -67,20 +61,30 @@ export function useScheduleMembers(orgId: string | undefined, enabled: boolean) 
   });
 }
 
-export function useFullSchedule(orgId: string | undefined, enabled: boolean, fromDate?: string) {
+export function useRoster(orgId: string | undefined, enabled: boolean) {
   return useQuery({
-    queryKey: KEY(orgId, 'full', fromDate ?? 'all'),
+    queryKey: KEY(orgId, 'roster'),
     enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
-    queryFn: async (): Promise<ScheduleRow[]> => {
+    queryFn: async (): Promise<RosterEntry[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const { data, error } = await s.rpc('list_schedule', { p_org: orgId, p_from: fromDate ?? null });
+      const { data, error } = await s.rpc('list_roster', { p_org: orgId });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({
-        id: r.id, serveDate: r.serve_date, status: r.status, note: r.note,
-        teamId: r.team_id, teamName: r.team_name, roleId: r.role_id, roleName: r.role_name,
-        personId: r.person_id, personName: r.person_name ?? null, personEmail: r.person_email, respondedAt: r.responded_at,
-      }));
+      return (data ?? []).map((r: any) => ({ roleId: r.role_id, userId: r.user_id, name: r.name ?? null, email: r.email }));
+    },
+  });
+}
+
+export function useRosterStatus(orgId: string | undefined, date: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: KEY(orgId, 'status', date ?? ''),
+    enabled: Boolean(orgId) && Boolean(date) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<StatusEntry[]> => {
+      const s = getSupabase(); if (!s || !orgId || !date) return [];
+      const { data, error } = await s.rpc('roster_status', { p_org: orgId, p_date: date });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ roleId: r.role_id, userId: r.user_id, status: r.status }));
     },
   });
 }
@@ -89,17 +93,62 @@ export function useMySchedule(orgId: string | undefined, enabled: boolean) {
   return useQuery({
     queryKey: KEY(orgId, 'mine'),
     enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
-    queryFn: async (): Promise<MyAssignment[]> => {
+    queryFn: async (): Promise<MyOccurrence[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
       const { data, error } = await s.rpc('my_schedule', { p_org: orgId });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, serveDate: r.serve_date, status: r.status, note: r.note, teamName: r.team_name, roleName: r.role_name }));
+      return (data ?? []).map((r: any) => ({ roleId: r.role_id, teamName: r.team_name, roleName: r.role_name, serveDate: r.serve_date, status: r.status }));
+    },
+  });
+}
+
+export function useServeWeekday(orgId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: KEY(orgId, 'config'),
+    enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<number> => {
+      const s = getSupabase(); if (!s || !orgId) return 0;
+      const { data, error } = await s.from('schedule_config').select('serve_weekday').eq('org_id', orgId).maybeSingle();
+      if (error) throw error;
+      return data?.serve_weekday ?? 0;
+    },
+  });
+}
+
+export function useSkips(orgId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: KEY(orgId, 'skips'),
+    enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<string[]> => {
+      const s = getSupabase(); if (!s || !orgId) return [];
+      const { data, error } = await s.from('schedule_skips').select('serve_date').eq('org_id', orgId).order('serve_date');
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => r.serve_date);
+    },
+  });
+}
+
+export function useOrgBirthdays(orgId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: KEY(orgId, 'birthdays'),
+    enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<Birthday[]> => {
+      const s = getSupabase(); if (!s || !orgId) return [];
+      const { data, error } = await s.rpc('org_birthdays', { p_org: orgId });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ userId: r.user_id, name: r.name ?? null, email: r.email, phone: r.phone ?? null, birthday: r.birthday }));
     },
   });
 }
 
 // --- mutations -------------------------------------------------------------
+
+function invalidate(qc: ReturnType<typeof useQueryClient>, orgId: string, ...suffixes: string[]) {
+  for (const s of suffixes) qc.invalidateQueries({ queryKey: KEY(orgId, s) });
+}
 
 export function useCreateTeam(orgId: string) {
   const qc = useQueryClient();
@@ -109,7 +158,7 @@ export function useCreateTeam(orgId: string) {
       const { error } = await s.from('schedule_teams').insert({ org_id: orgId, name: name.trim() });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'teams') }),
+    onSuccess: () => invalidate(qc, orgId, 'teams'),
   });
 }
 
@@ -121,7 +170,7 @@ export function useDeleteTeam(orgId: string) {
       const { error } = await s.from('schedule_teams').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: KEY(orgId, 'teams') }); qc.invalidateQueries({ queryKey: KEY(orgId, 'roles') }); },
+    onSuccess: () => invalidate(qc, orgId, 'teams', 'roles', 'roster'),
   });
 }
 
@@ -133,7 +182,7 @@ export function useCreateRole(orgId: string) {
       const { error } = await s.from('schedule_roles').insert({ org_id: orgId, team_id: teamId, name: name.trim() });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'roles') }),
+    onSuccess: () => invalidate(qc, orgId, 'roles'),
   });
 }
 
@@ -145,43 +194,78 @@ export function useDeleteRole(orgId: string) {
       const { error } = await s.from('schedule_roles').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'roles') }),
+    onSuccess: () => invalidate(qc, orgId, 'roles', 'roster'),
   });
 }
 
-export function useCreateAssignment(orgId: string) {
+export function useAddToRoster(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ roleId, userId, serveDate, note }: { roleId: string; userId: string; serveDate: string; note?: string }) => {
+    mutationFn: async ({ roleId, userId }: { roleId: string; userId: string }) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const { error } = await s.from('schedule_assignments').insert({ org_id: orgId, role_id: roleId, user_id: userId, serve_date: serveDate, note: note?.trim() || null });
+      const { error } = await s.from('schedule_roster').insert({ org_id: orgId, role_id: roleId, user_id: userId });
+      if (error && !/duplicate|unique/i.test(error.message)) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'roster'),
+  });
+}
+
+export function useRemoveFromRoster(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ roleId, userId }: { roleId: string; userId: string }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('schedule_roster').delete().eq('org_id', orgId).eq('role_id', roleId).eq('user_id', userId);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'full') }),
+    onSuccess: () => invalidate(qc, orgId, 'roster'),
   });
 }
 
-export function useDeleteAssignment(orgId: string) {
+export function useSetServeWeekday(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (weekday: number) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const { error } = await s.from('schedule_assignments').delete().eq('id', id);
+      const { error } = await s.from('schedule_config').upsert({ org_id: orgId, serve_weekday: weekday });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'full') }),
+    onSuccess: () => invalidate(qc, orgId, 'config', 'mine', 'status'),
   });
 }
 
-/** Volunteer confirms/declines, then best-effort notifies managers. */
-export function useRespond(orgId: string) {
+export function useAddSkip(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: 'confirmed' | 'declined' }) => {
+    mutationFn: async (date: string) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const { error } = await s.rpc('respond_assignment', { p_id: id, p_status: status });
+      const { error } = await s.from('schedule_skips').upsert({ org_id: orgId, serve_date: date });
       if (error) throw error;
-      // Best-effort push to managers — never blocks the response itself.
+    },
+    onSuccess: () => invalidate(qc, orgId, 'skips', 'mine'),
+  });
+}
+
+export function useRemoveSkip(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (date: string) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('schedule_skips').delete().eq('org_id', orgId).eq('serve_date', date);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'skips', 'mine'),
+  });
+}
+
+/** Volunteer confirms/declines one week, then best-effort notifies managers. */
+export function useRespondOccurrence(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ roleId, serveDate, status }: { roleId: string; serveDate: string; status: 'confirmed' | 'declined' }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('respond_occurrence', { p_role: roleId, p_date: serveDate, p_status: status });
+      if (error) throw error;
       try {
         const { data } = await s.auth.getSession();
         const token = data.session?.access_token;
@@ -189,12 +273,12 @@ export function useRespond(orgId: string) {
           await fetch('/api/schedule-notify', {
             method: 'POST',
             headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ assignmentId: id }),
+            body: JSON.stringify({ roleId, serveDate }),
           });
         }
       } catch { /* notification is best-effort */ }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'mine') }),
+    onSuccess: () => invalidate(qc, orgId, 'mine'),
   });
 }
 
