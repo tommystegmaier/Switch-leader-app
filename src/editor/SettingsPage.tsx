@@ -11,6 +11,7 @@ import { useLiveAppSettings } from '@/data/liveContent';
 import { applyTheme } from '@/lib/theme';
 import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
 import { useAllPages } from '@/data/pageHooks';
+import { NavIcon, NAV_ICON_NAMES, isNavIconName } from '@/blocks/navIcons';
 import type { AppSettings, NavStyle, NavTab, Role, ThemeColors, ViewerAccess } from '@/types';
 import { MediaPicker } from './MediaPicker';
 import { useSettingsMutations } from './useSettingsMutations';
@@ -193,14 +194,21 @@ function TabBarEditor({ orgId, tabs, onChange }: { orgId: string; tabs: NavTab[]
     [next[i], next[j]] = [next[j], next[i]];
     onChange(next);
   };
-  const add = () => onChange([...tabs, { icon: '⭐', label: 'Tab', kind: 'page', target: pages?.[0]?.slug ?? '', adminOnly: false }]);
+  const add = () => onChange([...tabs, { icon: 'home', label: 'Tab', kind: 'page', target: pages?.[0]?.slug ?? '', adminOnly: false }]);
 
   return (
     <div className="flex flex-col gap-2">
       {tabs.map((t, i) => (
         <div key={i} className="rounded-lg border border-gray-200 p-2">
           <div className="flex flex-wrap items-center gap-2">
-            <input className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-center text-lg" value={t.icon} onChange={(e) => update(i, { icon: e.target.value })} aria-label="Icon" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-300"><NavIcon name={t.icon} className="h-5 w-5" /></span>
+            <select className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={isNavIconName(t.icon) ? t.icon : '__emoji__'} onChange={(e) => update(i, { icon: e.target.value === '__emoji__' ? '⭐' : e.target.value })} aria-label="Icon">
+              {NAV_ICON_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+              <option value="__emoji__">Emoji…</option>
+            </select>
+            {!isNavIconName(t.icon) && (
+              <input className="w-14 rounded-md border border-gray-300 px-2 py-1.5 text-center text-lg" value={t.icon} onChange={(e) => update(i, { icon: e.target.value })} aria-label="Emoji" />
+            )}
             <input className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="Label" value={t.label} onChange={(e) => update(i, { label: e.target.value })} />
             <div className="flex flex-col leading-none">
               <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="px-1 text-xs disabled:opacity-25" aria-label="Move up">▲</button>

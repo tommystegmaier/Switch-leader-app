@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { isVisibleTo } from '@/blocks/BlockView';
+import { NavIcon } from '@/blocks/navIcons';
 import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks';
 import { useLiveAppSettings } from '@/data/liveContent';
 import { useAllPages } from '@/data/pageHooks';
@@ -212,47 +213,30 @@ export function ViewerLayout() {
 
       {showBottomTabs && (customTabs.length > 0 || bottomPages.length > 0) && (
         <nav
-          className="fixed inset-x-0 bottom-0 z-20 border-t"
-          style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(0,0,0,0.08)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center px-3"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.6rem)' }}
           aria-label="Bottom navigation"
         >
-          <ul className="mx-auto flex max-w-screen-sm items-stretch justify-around">
+          <ul
+            className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 rounded-full border p-1.5 shadow-lg backdrop-blur"
+            style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(127,127,127,0.25)' }}
+          >
             {customTabs.length > 0
               ? customTabs.map((tab, i) => (
                   <li key={i} className="flex-1">
                     {tab.kind === 'url' ? (
-                      <a
-                        href={tab.target || '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex flex-col items-center gap-0.5 px-1 py-2 text-xs opacity-70"
-                        style={{ color: 'var(--th-text)' }}
-                      >
-                        <span className="text-lg" aria-hidden>{tab.icon || '•'}</span>
-                        <span className="max-w-full truncate">{tab.label}</span>
+                      <a href={tab.target || '#'} target="_blank" rel="noopener noreferrer" className={tabCls(false)} style={{ color: 'var(--th-text)' }}>
+                        <NavIcon name={tab.icon} className="h-6 w-6" />
+                        <span className="max-w-full truncate text-[11px]">{tab.label}</span>
                       </a>
                     ) : (
-                      <NavLink
-                        to={`/o/${org.slug}/${tab.target}`}
-                        className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1 py-2 text-xs ${isActive ? 'font-semibold' : 'opacity-70'}`}
-                        style={{ color: 'var(--th-text)' }}
-                      >
-                        <span className="text-lg" aria-hidden>{tab.icon || '•'}</span>
-                        <span className="max-w-full truncate">{tab.label}</span>
-                      </NavLink>
+                      <TabLink to={`/o/${org.slug}/${tab.target}`} icon={tab.icon} label={tab.label} />
                     )}
                   </li>
                 ))
               : bottomPages.map((page) => (
                   <li key={page.id} className="flex-1">
-                    <NavLink
-                      to={`/o/${org.slug}/${page.slug}`}
-                      className={({ isActive }) => `flex flex-col items-center gap-0.5 px-1 py-2 text-xs ${isActive ? 'font-semibold' : 'opacity-70'}`}
-                      style={{ color: 'var(--th-text)' }}
-                    >
-                      <span className="text-lg" aria-hidden>{page.icon || '•'}</span>
-                      <span className="max-w-full truncate">{page.name}</span>
-                    </NavLink>
+                    <TabLink to={`/o/${org.slug}/${page.slug}`} icon={page.icon || 'grid'} label={page.name} />
                   </li>
                 ))}
           </ul>
@@ -276,6 +260,26 @@ export function ViewerLayout() {
         />
       )}
     </div>
+  );
+}
+
+/** Shared classes for a bottom-bar tab (icon over label, pill hit area). */
+function tabCls(active: boolean): string {
+  return `flex flex-col items-center gap-0.5 rounded-full px-2 py-1.5 ${active ? 'font-semibold' : 'opacity-70'}`;
+}
+
+/** A bottom-bar tab that links to an in-app page, with the active "bubble". */
+function TabLink({ to, icon, label }: { to: string; icon: string; label: string }) {
+  return (
+    <NavLink
+      to={to}
+      end
+      className={({ isActive }) => tabCls(isActive)}
+      style={({ isActive }) => ({ color: 'var(--th-text)', backgroundColor: isActive ? 'rgba(127,127,127,0.18)' : 'transparent' })}
+    >
+      <NavIcon name={icon} className="h-6 w-6" />
+      <span className="max-w-full truncate text-[11px]">{label}</span>
+    </NavLink>
   );
 }
 

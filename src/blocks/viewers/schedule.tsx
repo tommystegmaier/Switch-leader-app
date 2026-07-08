@@ -68,14 +68,6 @@ export function ScheduleView({ props, ctx }: { props: ScheduleProps; ctx: Viewer
   const title = props.title || 'Serving schedule';
   const size: HeaderSize = props.headerSize ?? 'md';
 
-  if (ctx.editing) {
-    return (
-      <div className={card} style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
-        <p className="mt-1 text-sm text-gray-500">Turn off Edit to manage teams, roles and the weekly roster. Volunteers see their own weeks here to confirm or decline.</p>
-      </div>
-    );
-  }
   if (!org || isLoading) return <div className={card} style={cardStyle}><p className="text-sm text-gray-500">Loading schedule…</p></div>;
   if (!user) {
     return (
