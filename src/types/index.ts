@@ -115,7 +115,8 @@ export type BlockType =
   | 'countdown'
   | 'accordion'
   | 'schedule'
-  | 'birthdays';
+  | 'birthdays'
+  | 'invite';
 
 /**
  * A single content block. `props` is an open record whose exact shape depends

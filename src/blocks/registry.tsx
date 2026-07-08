@@ -25,6 +25,7 @@ import {
 import { DocumentView } from './viewers/document';
 import { CountdownView, MapView, QrView } from './viewers/utility';
 import { ScheduleView, BirthdaysView } from './viewers/schedule';
+import { InviteView } from './viewers/invite';
 
 /**
  * THE BLOCK REGISTRY — the single source of truth for the creative palette.
@@ -384,6 +385,19 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       ] },
     ],
     Viewer: BirthdaysView,
+  }),
+
+  invite: def({
+    type: 'invite',
+    label: 'Invite teammate',
+    icon: '✉️',
+    description: 'A button/box for owners & admins to create a join link with a role. Hidden from viewers.',
+    category: 'interactive',
+    defaultProps: { title: 'Invite a teammate' },
+    fields: [
+      { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Add a leader' },
+    ],
+    Viewer: InviteView,
   }),
 };
 
