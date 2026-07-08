@@ -60,12 +60,13 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   // The response we're announcing.
   const { data: resp } = await admin
     .from('schedule_responses')
-    .select('status')
+    .select('status, note')
     .eq('role_id', roleId)
     .eq('user_id', caller.id)
     .eq('serve_date', serveDate)
     .maybeSingle();
   const verb = resp?.status === 'confirmed' ? 'confirmed' : resp?.status === 'declined' ? 'declined' : 'updated';
+  const respNote = (resp?.note as string | undefined) || '';
 
   let teamName = '';
   if (role.team_id) {
@@ -108,7 +109,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   const roleLabel = [teamName, role.name].filter(Boolean).join(' · ') || 'their role';
   const data = {
     title: `${responderName} ${verb}`,
-    body: `${roleLabel} — ${serveDate}`,
+    body: `${roleLabel} — ${serveDate}${respNote ? ` · "${respNote}"` : ''}`,
     url: org?.slug ? `/o/${org.slug}` : '/',
   };
 

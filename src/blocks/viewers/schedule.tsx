@@ -19,6 +19,7 @@ import {
   useRosterStatus, useSaveNotifyDefaults, useScheduleMembers, useScheduleMute,
   useScheduleRoles, useScheduleTeams, useServeWeekday, useSetScheduleMute,
   useSetServeWeekday, useSkips,
+  type MyOccurrence,
 } from '@/data/scheduleHooks';
 import type { ViewerCtx } from '../actions';
 
@@ -114,17 +115,12 @@ function MaybeSortable({ enabled, id, children }: { enabled: boolean; id: string
 function VolunteerSchedule({ orgId }: { orgId: string }) {
   const { data: mine, isLoading } = useMySchedule(orgId, true);
   const respond = useRespondOccurrence(orgId);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  async function react(roleId: string, serveDate: string, status: 'confirmed' | 'declined') {
-    const k = `${roleId}|${serveDate}`; setBusy(k); setError(null);
-    try { await respond.mutateAsync({ roleId, serveDate, status }); }
-    catch (e) { setError(errorMessage(e)); }
-    finally { setBusy(null); }
-  }
 
   const rows = mine ?? [];
+  const thisWeekDate = rows[0]?.serveDate;
+  const thisWeek = rows.filter((r) => r.serveDate === thisWeekDate);
+  const future = rows.filter((r) => r.serveDate !== thisWeekDate);
+
   return (
     <div className={card} style={cardStyle}>
       <p className="mb-3 font-semibold" style={{ color: 'var(--th-heading)' }}>📅 My Serving Schedule</p>
@@ -133,31 +129,69 @@ function VolunteerSchedule({ orgId }: { orgId: string }) {
       ) : rows.length === 0 ? (
         <p className="text-sm text-gray-500">You&apos;re not on the serving schedule right now. We&apos;ll let you know when you are.</p>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {rows.map((a) => {
-            const k = `${a.roleId}|${a.serveDate}`;
-            return (
-              <li key={k} className="rounded-lg border p-3" style={cardStyle}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">{fmtDate(a.serveDate)}</span>
-                  <Badge status={a.status} />
-                </div>
-                <p className="mt-1 text-sm text-gray-600">{a.teamName} · {a.roleName}</p>
-                <div className="mt-3 flex gap-2">
-                  <button type="button" disabled={busy === k || a.status === 'confirmed'} onClick={() => react(a.roleId, a.serveDate, 'confirmed')} className="flex-1 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
-                    {a.status === 'confirmed' ? '✓ Confirmed' : 'Confirm'}
-                  </button>
-                  <button type="button" disabled={busy === k || a.status === 'declined'} onClick={() => react(a.roleId, a.serveDate, 'declined')} className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
-                    {a.status === 'declined' ? "Can't serve" : "Can't make it"}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <div className="mb-4">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">This week — {fmtDate(thisWeekDate)}</p>
+            <ul className="flex flex-col gap-3">
+              {thisWeek.map((a) => <AssignmentCard key={`${a.roleId}|${a.serveDate}`} occ={a} respond={respond} />)}
+            </ul>
+          </div>
+          {future.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Upcoming weeks — respond early or block out a date</p>
+              <ul className="flex flex-col gap-3">
+                {future.map((a) => <AssignmentCard key={`${a.roleId}|${a.serveDate}`} occ={a} respond={respond} />)}
+              </ul>
+            </div>
+          )}
+        </>
       )}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </div>
+  );
+}
+
+function AssignmentCard({ occ, respond }: { occ: MyOccurrence; respond: ReturnType<typeof useRespondOccurrence> }) {
+  const [declining, setDeclining] = useState(false);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function react(status: 'confirmed' | 'declined', noteArg?: string) {
+    setBusy(true); setError(null);
+    try {
+      await respond.mutateAsync({ roleId: occ.roleId, serveDate: occ.serveDate, status, note: noteArg });
+      setDeclining(false); setNote('');
+    } catch (e) { setError(errorMessage(e)); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <li className="rounded-lg border p-3" style={cardStyle}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium">{fmtDate(occ.serveDate)}</span>
+        <Badge status={occ.status} />
+      </div>
+      <p className="mt-1 text-sm text-gray-600">{occ.teamName} · {occ.roleName}</p>
+      {declining ? (
+        <div className="mt-3">
+          <textarea className={input} rows={2} placeholder="Optional: let the team know why (e.g. out of town)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={busy} onClick={() => react('declined', note)} className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>Send decline</button>
+            <button type="button" onClick={() => { setDeclining(false); setNote(''); }} className="rounded-full px-4 py-2 text-sm">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex gap-2">
+          <button type="button" disabled={busy || occ.status === 'confirmed'} onClick={() => react('confirmed')} className="flex-1 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+            {occ.status === 'confirmed' ? '✓ Confirmed' : 'Confirm'}
+          </button>
+          <button type="button" disabled={busy} onClick={() => setDeclining(true)} className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+            {occ.status === 'declined' ? "Declined — change" : "Can't make it"}
+          </button>
+        </div>
+      )}
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </li>
   );
 }
 
@@ -232,6 +266,8 @@ function RosterTab({ orgId, userId, size, editing }: { orgId: string; userId: st
 
   const statusFor = (roleId: string, userId: string) =>
     (statuses ?? []).find((s) => s.roleId === roleId && s.userId === userId)?.status ?? 'pending';
+  const noteFor = (roleId: string, userId: string) =>
+    (statuses ?? []).find((s) => s.roleId === roleId && s.userId === userId)?.note ?? null;
 
   const needsSetup = (teams ?? []).length === 0 || (roles ?? []).length === 0;
   if (needsSetup) {
@@ -304,6 +340,9 @@ function RosterTab({ orgId, userId, size, editing }: { orgId: string; userId: st
                                         )}
                                         <button type="button" onClick={() => removeFromRoster.mutate({ roleId: r.id, userId: p.userId })} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Remove</button>
                                       </div>
+                                      {statusFor(r.id, p.userId) === 'declined' && noteFor(r.id, p.userId) && (
+                                        <p className="w-full text-xs text-gray-500">Reason: {noteFor(r.id, p.userId)}</p>
+                                      )}
                                     </li>
                                   ))}
                                   {people.length === 0 && <li className="text-xs text-gray-400">No one assigned yet.</li>}
@@ -498,6 +537,8 @@ function SettingsTab({ orgId, userId }: { orgId: string; userId: string }) {
   const { data: defaults } = useNotifyDefaults(orgId);
   const saveDefaults = useSaveNotifyDefaults(orgId);
   const notify = useNotifyRoster(orgId);
+  const { data: weekday = 0 } = useServeWeekday(orgId);
+  const { data: skips } = useSkips(orgId);
 
   const [title, setTitle] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -507,11 +548,14 @@ function SettingsTab({ orgId, userId }: { orgId: string; userId: string }) {
   // Seed the fields from saved defaults (or the built-in defaults) once loaded.
   const titleVal = title ?? (defaults?.title || DEFAULT_NOTIFY_TITLE);
   const messageVal = message ?? (defaults?.message || DEFAULT_NOTIFY_MESSAGE);
+  // The next serving day the notification is about.
+  const nextDate = useMemo(() => upcomingServeDates(weekday, new Set(skips ?? []), 1)[0], [weekday, skips]);
 
   async function send() {
     setError(null); setResult(null);
     try {
-      const r = await notify.mutateAsync({ title: titleVal, message: messageVal, url: window.location.pathname });
+      const body = nextDate ? `${messageVal}\n\nServing date: ${fmtDate(nextDate)}` : messageVal;
+      const r = await notify.mutateAsync({ title: titleVal, message: body, url: window.location.pathname });
       setResult(r.total === 0 ? 'No one on the roster has notifications turned on yet.' : `Sent to ${r.sent} of ${r.total} device(s).`);
     } catch (e) { setError(errorMessage(e)); }
   }
@@ -520,7 +564,7 @@ function SettingsTab({ orgId, userId }: { orgId: string; userId: string }) {
     <div className="flex flex-col gap-4">
       <div className="rounded-lg border p-3" style={cardStyle}>
         <p className="text-sm font-medium">Notify volunteers the schedule is posted</p>
-        <p className="mt-0.5 text-xs text-gray-500">Sends a push to everyone on the roster so they can confirm or decline. Edit the message or save it as your default.</p>
+        <p className="mt-0.5 text-xs text-gray-500">Sends a push to everyone on the roster for the next serving day{nextDate ? ` (${fmtDate(nextDate)})` : ''} so they can confirm or decline. Edit the message or save it as your default.</p>
         <label className="mt-2 block text-xs font-medium">Title</label>
         <input className={input} value={titleVal} onChange={(e) => setTitle(e.target.value)} />
         <label className="mt-2 block text-xs font-medium">Message</label>

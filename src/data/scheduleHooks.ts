@@ -13,7 +13,7 @@ export interface ScheduleTeam { id: string; name: string; sort: number }
 export interface ScheduleRole { id: string; teamId: string; name: string; sort: number }
 export interface ScheduleMember { userId: string; name: string | null; email: string }
 export interface RosterEntry { roleId: string; userId: string; name: string | null; email: string }
-export interface StatusEntry { roleId: string; userId: string; status: 'confirmed' | 'declined' }
+export interface StatusEntry { roleId: string; userId: string; status: 'confirmed' | 'declined'; note: string | null }
 export interface MyOccurrence { roleId: string; teamName: string; roleName: string; serveDate: string; status: 'pending' | 'confirmed' | 'declined' }
 export interface Birthday { userId: string; name: string | null; email: string; phone: string | null; birthday: string }
 
@@ -100,7 +100,7 @@ export function useRosterStatus(orgId: string | undefined, date: string | undefi
       const { data, error } = await s.rpc('roster_status', { p_org: orgId, p_date: date });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ roleId: r.role_id, userId: r.user_id, status: r.status }));
+      return (data ?? []).map((r: any) => ({ roleId: r.role_id, userId: r.user_id, status: r.status, note: r.note ?? null }));
     },
   });
 }
@@ -354,9 +354,9 @@ export function useRemoveSkip(orgId: string) {
 export function useRespondOccurrence(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ roleId, serveDate, status }: { roleId: string; serveDate: string; status: 'confirmed' | 'declined' }) => {
+    mutationFn: async ({ roleId, serveDate, status, note }: { roleId: string; serveDate: string; status: 'confirmed' | 'declined'; note?: string }) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const { error } = await s.rpc('respond_occurrence', { p_role: roleId, p_date: serveDate, p_status: status });
+      const { error } = await s.rpc('respond_occurrence', { p_role: roleId, p_date: serveDate, p_status: status, p_note: note ?? null });
       if (error) throw error;
       try {
         const { data } = await s.auth.getSession();
