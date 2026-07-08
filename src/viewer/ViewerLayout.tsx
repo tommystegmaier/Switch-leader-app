@@ -226,23 +226,23 @@ export function ViewerLayout() {
           aria-label="Bottom navigation"
         >
           <ul
-            className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 rounded-full border p-1.5"
+            className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 overflow-hidden rounded-[26px] border p-1.5"
             style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(127,127,127,0.22)', boxShadow: '0 2px 10px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06)' }}
           >
             {editing && canEdit ? (
-              <li className="flex-1">
+              <li className="flex min-w-0 flex-1 justify-center">
                 <Link to={`/o/${org.slug}/settings#iconbar`} className={tabCls(false)} style={{ color: 'var(--th-text)' }}>
                   <NavIcon name="grid" className="h-6 w-6" />
-                  <span className="max-w-full truncate text-[11px]">Edit icon bar</span>
+                  <span className={tabLabelCls}>Edit icon bar</span>
                 </Link>
               </li>
             ) : (
               barTabs.map((tab, i) => (
-                <li key={i} className="flex-1">
+                <li key={i} className="flex min-w-0 flex-1 justify-center">
                   {tab.kind === 'url' ? (
                     <a href={tab.target || '#'} target="_blank" rel="noopener noreferrer" className={tabCls(false)} style={{ color: 'var(--th-text)' }}>
                       <NavIcon name={tab.icon} className="h-6 w-6" />
-                      <span className="max-w-full truncate text-[11px]">{tab.label}</span>
+                      <span className={tabLabelCls}>{tab.label}</span>
                     </a>
                   ) : (
                     <TabLink to={`/o/${org.slug}/${tab.target}`} icon={tab.icon} label={tab.label} />
@@ -274,10 +274,14 @@ export function ViewerLayout() {
   );
 }
 
-/** Shared classes for a bottom-bar tab (icon over label, pill hit area). */
+/** Shared classes for a bottom-bar tab. The tab hugs its content (icon or the
+ *  wrapped label, whichever is wider) with padding, and the active "bubble" is
+ *  this element's rounded background — kept inside the pill by overflow-hidden. */
 function tabCls(active: boolean): string {
-  return `flex flex-col items-center gap-0.5 rounded-full px-2 py-1.5 ${active ? 'font-semibold' : 'opacity-70'}`;
+  return `inline-flex max-w-full flex-col items-center justify-center gap-0.5 rounded-2xl px-3 py-1.5 text-center ${active ? 'font-semibold' : 'opacity-70'}`;
 }
+
+const tabLabelCls = 'line-clamp-2 break-words text-[10px] leading-tight';
 
 /** A bottom-bar tab that links to an in-app page, with the active "bubble". */
 function TabLink({ to, icon, label }: { to: string; icon: string; label: string }) {
@@ -289,7 +293,7 @@ function TabLink({ to, icon, label }: { to: string; icon: string; label: string 
       style={({ isActive }) => ({ color: 'var(--th-text)', backgroundColor: isActive ? 'rgba(127,127,127,0.18)' : 'transparent' })}
     >
       <NavIcon name={icon} className="h-6 w-6" />
-      <span className="max-w-full truncate text-[11px]">{label}</span>
+      <span className={tabLabelCls}>{label}</span>
     </NavLink>
   );
 }
