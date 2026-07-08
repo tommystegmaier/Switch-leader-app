@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
   type DragEndEvent,
@@ -205,7 +205,14 @@ function RosterTab({ orgId, size, editing }: { orgId: string; size: HeaderSize; 
   const { data: statuses } = useRosterStatus(orgId, selectedDate, true);
   const [assignRole, setAssignRole] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Remember which teams are collapsed on this device, so they stay that way.
+  const collapseKey = `sched-collapsed-${orgId}`;
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem(collapseKey) || '{}'); } catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(collapseKey, JSON.stringify(collapsed)); } catch { /* ignore */ }
+  }, [collapseKey, collapsed]);
   const toggleTeam = (id: string) => setCollapsed((c) => ({ ...c, [id]: !c[id] }));
 
   const teamList = teams ?? [];
