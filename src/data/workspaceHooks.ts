@@ -52,6 +52,20 @@ export function slugify(input: string): string {
     .slice(0, 40);
 }
 
+/** Rename a workspace's display name (owner/admin). */
+export function useRenameWorkspace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orgId, name }: { orgId: string; name: string }) => {
+      const s = getSupabase();
+      if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('rename_workspace', { p_org: orgId, p_name: name });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-workspaces'] }),
+  });
+}
+
 /** Duplicate a workspace's structure into a new one (only the owner carries over). */
 export function useDuplicateWorkspace() {
   const qc = useQueryClient();

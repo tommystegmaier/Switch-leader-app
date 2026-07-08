@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { errorMessage } from '@/lib/errors';
-import { slugify, useDuplicateWorkspace, useMyWorkspaces, type WorkspaceMembership } from '@/data/workspaceHooks';
+import { slugify, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, type WorkspaceMembership } from '@/data/workspaceHooks';
 
 /**
  * "My Workspaces" — the creator home. Lists every app the signed-in user
@@ -45,7 +45,11 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
   const { org, role } = w;
   const navigate = useNavigate();
   const duplicate = useDuplicateWorkspace();
-  const canDuplicate = role === 'owner' || role === 'admin';
+  const rename = useRenameWorkspace();
+  const canManage = role === 'owner' || role === 'admin';
+  const canDuplicate = canManage;
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(org.name);
   const [dupOpen, setDupOpen] = useState(false);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -71,18 +75,31 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
   return (
     <li className="rounded-xl border p-4" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
       <div className="flex items-center justify-between gap-2">
-        <Link to={`/o/${org.slug}`} className="min-w-0 flex-1">
-          <span className="block font-semibold">{org.name}</span>
-          <span className="block text-sm text-gray-500">/o/{org.slug}</span>
-        </Link>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-medium capitalize">{role}</span>
-          {canDuplicate && (
-            <button type="button" onClick={() => { setDupOpen((v) => !v); setName(`${org.name} (copy)`); setSlug(''); setSlugEdited(false); }} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
-              Duplicate
-            </button>
-          )}
-        </div>
+        {renaming ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <input autoFocus className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <button type="button" disabled={rename.isPending || !newName.trim()} onClick={async () => { await rename.mutateAsync({ orgId: org.id, name: newName }); setRenaming(false); }} className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Save</button>
+            <button type="button" onClick={() => { setRenaming(false); setNewName(org.name); }} className="shrink-0 rounded-full px-3 py-1.5 text-xs">Cancel</button>
+          </div>
+        ) : (
+          <>
+            <Link to={`/o/${org.slug}`} className="min-w-0 flex-1">
+              <span className="block font-semibold">{org.name}</span>
+              <span className="block text-sm text-gray-500">/o/{org.slug}</span>
+            </Link>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-medium capitalize">{role}</span>
+              {canManage && (
+                <button type="button" onClick={() => { setNewName(org.name); setRenaming(true); }} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>Rename</button>
+              )}
+              {canDuplicate && (
+                <button type="button" onClick={() => { setDupOpen((v) => !v); setName(`${org.name} (copy)`); setSlug(''); setSlugEdited(false); }} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+                  Duplicate
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {dupOpen && (
