@@ -40,10 +40,10 @@ export function PropertyDrawer({
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={`Edit ${def.label}`}>
       <div className="absolute inset-0 bg-black/30" onClick={() => { commitAll(); onClose(); }} />
-      <div className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-xl">
+      <div className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-xl" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h2 className="text-lg font-bold">{def.icon} {def.label}</h2>
-          <button type="button" onClick={() => { commitAll(); onClose(); }} className="rounded-full px-3 py-1 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Done</button>
+          <button type="button" onClick={() => { commitAll(); onClose(); }} className="rounded-full px-4 py-2 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Done</button>
         </div>
         <div className="flex-1 overflow-y-auto p-4">
           <div className="flex flex-col gap-4">
