@@ -227,7 +227,7 @@ export function ViewerLayout() {
         >
           <ul
             className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 rounded-full border p-1.5"
-            style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(127,127,127,0.22)', boxShadow: '0 6px 24px -8px rgba(0,0,0,0.35)' }}
+            style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(127,127,127,0.22)', boxShadow: '0 2px 10px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06)' }}
           >
             {editing && canEdit ? (
               <li className="flex-1">

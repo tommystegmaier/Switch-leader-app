@@ -87,8 +87,24 @@ export function ScheduleView({ props, ctx }: { props: ScheduleProps; ctx: Viewer
     );
   }
   return canEdit
-    ? <ManagerSchedule orgId={org.id} userId={user.id} title={title} size={size} />
+    ? <ManagerSchedule orgId={org.id} userId={user.id} title={title} size={size} editing={Boolean(ctx.editing)} />
     : <VolunteerSchedule orgId={org.id} title={title} />;
+}
+
+/** Wrap a list in drag context only when editing; otherwise render plain. */
+function SortableGroup({ enabled, items, sensors, onDragEnd, children }: { enabled: boolean; items: string[]; sensors: ReturnType<typeof useDragSensors>; onDragEnd: (e: DragEndEvent) => void; children: ReactNode }) {
+  if (!enabled) return <>{children}</>;
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={items} strategy={verticalListSortingStrategy}>{children}</SortableContext>
+    </DndContext>
+  );
+}
+
+/** A row with a drag grip when editing; otherwise just its content. */
+function MaybeSortable({ enabled, id, children }: { enabled: boolean; id: string; children: ReactNode }) {
+  if (!enabled) return <>{children}</>;
+  return <SortableRow id={id}>{children}</SortableRow>;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +165,7 @@ function VolunteerSchedule({ orgId, title }: { orgId: string; title: string }) {
 // ---------------------------------------------------------------------------
 type Tab = 'roster' | 'teams' | 'weeks' | 'settings';
 
-function ManagerSchedule({ orgId, userId, title, size }: { orgId: string; userId: string; title: string; size: HeaderSize }) {
+function ManagerSchedule({ orgId, userId, title, size, editing }: { orgId: string; userId: string; title: string; size: HeaderSize; editing: boolean }) {
   const [tab, setTab] = useState<Tab>('roster');
   return (
     <div className={card} style={cardStyle}>
@@ -161,15 +177,15 @@ function ManagerSchedule({ orgId, userId, title, size }: { orgId: string; userId
           ))}
         </div>
       </div>
-      {tab === 'roster' && <RosterTab orgId={orgId} size={size} />}
-      {tab === 'teams' && <TeamsTab orgId={orgId} />}
+      {tab === 'roster' && <RosterTab orgId={orgId} size={size} editing={editing} />}
+      {tab === 'teams' && <TeamsTab orgId={orgId} editing={editing} />}
       {tab === 'weeks' && <WeeksTab orgId={orgId} />}
       {tab === 'settings' && <SettingsTab orgId={orgId} userId={userId} />}
     </div>
   );
 }
 
-function RosterTab({ orgId, size }: { orgId: string; size: HeaderSize }) {
+function RosterTab({ orgId, size, editing }: { orgId: string; size: HeaderSize; editing: boolean }) {
   const { data: teams } = useScheduleTeams(orgId);
   const { data: roles } = useScheduleRoles(orgId);
   const { data: roster } = useRoster(orgId, true);
@@ -228,23 +244,21 @@ function RosterTab({ orgId, size }: { orgId: string; size: HeaderSize }) {
         </div>
       )}
 
-      <p className="text-xs text-gray-500">Hold the ⠿ grip to drag a team or role into the order you want.</p>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTeamDrag}>
-        <SortableContext items={teamList.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+      {editing && <p className="text-xs text-gray-500">Hold the ⠿ grip to drag a team or role into the order you want.</p>}
+      <SortableGroup enabled={editing} items={teamList.map((t) => t.id)} sensors={sensors} onDragEnd={onTeamDrag}>
           {teamList.map((t) => {
             const teamRoles = (roles ?? []).filter((r) => r.teamId === t.id);
             return (
-              <SortableRow id={t.id} key={t.id}>
+              <MaybeSortable enabled={editing} id={t.id} key={t.id}>
                 <div>
                   <p className={`mb-1 font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>{t.name}</p>
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onRoleDrag(teamRoles, e)}>
-                    <SortableContext items={teamRoles.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+                  <SortableGroup enabled={editing} items={teamRoles.map((r) => r.id)} sensors={sensors} onDragEnd={(e) => onRoleDrag(teamRoles, e)}>
                       <div className="flex flex-col gap-2">
                         {teamRoles.map((r) => {
                           const people = (roster ?? []).filter((rr) => rr.roleId === r.id);
                           const availableMembers = (members ?? []).filter((m) => !people.some((p) => p.userId === m.userId));
                           return (
-                            <SortableRow id={r.id} key={r.id}>
+                            <MaybeSortable enabled={editing} id={r.id} key={r.id}>
                               <div className="rounded-lg border p-2" style={cardStyle}>
                                 <p className={`font-medium ${ROLE_CLS[size]}`}>{r.name}</p>
                                 <ul className="mt-1 flex flex-col gap-1">
@@ -268,18 +282,16 @@ function RosterTab({ orgId, size }: { orgId: string; size: HeaderSize }) {
                                   <button type="button" onClick={() => setAssignRole(r.id)} className="mt-2 rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Assign someone</button>
                                 )}
                               </div>
-                            </SortableRow>
+                            </MaybeSortable>
                           );
                         })}
                       </div>
-                    </SortableContext>
-                  </DndContext>
+                  </SortableGroup>
                 </div>
-              </SortableRow>
+              </MaybeSortable>
             );
           })}
-        </SortableContext>
-      </DndContext>
+      </SortableGroup>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );
@@ -316,7 +328,7 @@ function SortableRow({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
-function TeamsTab({ orgId }: { orgId: string }) {
+function TeamsTab({ orgId, editing }: { orgId: string; editing: boolean }) {
   const { data: teams } = useScheduleTeams(orgId);
   const { data: roles } = useScheduleRoles(orgId);
   const createTeam = useCreateTeam(orgId);
@@ -350,13 +362,12 @@ function TeamsTab({ orgId }: { orgId: string }) {
         <input className={input} placeholder="New team (e.g. Sunday AM)" value={newTeam} onChange={(e) => setNewTeam(e.target.value)} />
         <button type="button" disabled={!newTeam.trim() || createTeam.isPending} onClick={async () => { await createTeam.mutateAsync(newTeam); setNewTeam(''); }} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>+ Team</button>
       </div>
-      <p className="text-xs text-gray-500">Hold the ⠿ grip and drag to reorder, or use ▲▼.</p>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTeamDrag}>
-        <SortableContext items={teamList.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+      <p className="text-xs text-gray-500">{editing ? 'Hold the ⠿ grip and drag to reorder, or use ▲▼.' : 'Use ▲▼ to reorder (drag is available in Edit mode).'}</p>
+      <SortableGroup enabled={editing} items={teamList.map((t) => t.id)} sensors={sensors} onDragEnd={onTeamDrag}>
           {teamList.map((t, ti) => {
             const teamRoles = (roles ?? []).filter((r) => r.teamId === t.id);
             return (
-              <SortableRow id={t.id} key={t.id}>
+              <MaybeSortable enabled={editing} id={t.id} key={t.id}>
                 <div className="rounded-lg border p-3" style={cardStyle}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1">
@@ -366,10 +377,9 @@ function TeamsTab({ orgId }: { orgId: string }) {
                     <button type="button" onClick={() => { if (confirm(`Delete team "${t.name}" and its roles?`)) deleteTeam.mutate(t.id); }} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Delete team</button>
                   </div>
                   <div className="mt-2 flex flex-col gap-1">
-                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onRoleDrag(teamRoles, e)}>
-                      <SortableContext items={teamRoles.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+                    <SortableGroup enabled={editing} items={teamRoles.map((r) => r.id)} sensors={sensors} onDragEnd={(e) => onRoleDrag(teamRoles, e)}>
                         {teamRoles.map((r, ri) => (
-                          <SortableRow id={r.id} key={r.id}>
+                          <MaybeSortable enabled={editing} id={r.id} key={r.id}>
                             <div className="flex items-center justify-between gap-2 rounded bg-black/5 px-2 py-1 text-sm">
                               <div className="flex items-center gap-1">
                                 <ReorderButtons up={() => reorderRoles.mutate(moved(teamRoles, ri, -1))} down={() => reorderRoles.mutate(moved(teamRoles, ri, 1))} first={ri === 0} last={ri === teamRoles.length - 1} />
@@ -377,21 +387,19 @@ function TeamsTab({ orgId }: { orgId: string }) {
                               </div>
                               <button type="button" onClick={() => deleteRole.mutate(r.id)} className="text-xs text-red-600" aria-label={`Remove ${r.name}`}>Remove</button>
                             </div>
-                          </SortableRow>
+                          </MaybeSortable>
                         ))}
-                      </SortableContext>
-                    </DndContext>
+                    </SortableGroup>
                   </div>
                   <div className="mt-2 flex gap-2">
                     <input className={input} placeholder="Add a role (e.g. Greeter)" value={roleDraft[t.id] ?? ''} onChange={(e) => setRoleDraft((d) => ({ ...d, [t.id]: e.target.value }))} />
                     <button type="button" disabled={!(roleDraft[t.id] ?? '').trim()} onClick={async () => { await createRole.mutateAsync({ teamId: t.id, name: roleDraft[t.id] }); setRoleDraft((d) => ({ ...d, [t.id]: '' })); }} className="shrink-0 rounded-full border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>+ Role</button>
                   </div>
                 </div>
-              </SortableRow>
+              </MaybeSortable>
             );
           })}
-        </SortableContext>
-      </DndContext>
+      </SortableGroup>
       {teamList.length === 0 && <p className="text-sm text-gray-500">No teams yet. Add one above.</p>}
     </div>
   );
