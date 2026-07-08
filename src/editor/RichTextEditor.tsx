@@ -31,7 +31,7 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class:
-          'min-h-24 rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_a]:underline',
+          'min-h-24 rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6 [&_a]:underline [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold [&_blockquote]:border-l-4 [&_blockquote]:border-black/20 [&_blockquote]:pl-3 [&_blockquote]:text-gray-600',
       },
     },
   });
@@ -58,6 +58,12 @@ export function RichTextEditor({
         <span className="mx-1 h-4 w-px bg-black/20" />
         <button type="button" className={btn(editor.isActive('bulletList'))} onClick={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bullet list">• List</button>
         <button type="button" className={btn(editor.isActive('orderedList'))} onClick={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list">1. List</button>
+        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10 disabled:opacity-30" disabled={!editor.can().sinkListItem('listItem')} onClick={() => editor.chain().focus().sinkListItem('listItem').run()} aria-label="Indent" title="Indent (nest)">⇥</button>
+        <button type="button" className="rounded px-2 py-1 text-sm hover:bg-black/10 disabled:opacity-30" disabled={!editor.can().liftListItem('listItem')} onClick={() => editor.chain().focus().liftListItem('listItem').run()} aria-label="Outdent" title="Outdent">⇤</button>
+        <span className="mx-1 h-4 w-px bg-black/20" />
+        <button type="button" className={btn(editor.isActive('heading', { level: 2 }))} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} aria-label="Heading">H2</button>
+        <button type="button" className={btn(editor.isActive('heading', { level: 3 }))} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} aria-label="Subheading">H3</button>
+        <button type="button" className={btn(editor.isActive('blockquote'))} onClick={() => editor.chain().focus().toggleBlockquote().run()} aria-label="Quote">❝</button>
         <span className="mx-1 h-4 w-px bg-black/20" />
         <button
           type="button"
