@@ -226,8 +226,14 @@ export function ViewerLayout() {
           aria-label="Bottom navigation"
         >
           <ul
-            className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 overflow-hidden rounded-[26px] border p-1.5"
-            style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(127,127,127,0.22)', boxShadow: '0 2px 10px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06)' }}
+            className="pointer-events-auto flex w-full max-w-sm items-stretch justify-around gap-1 overflow-hidden rounded-full border p-1.5"
+            style={{
+              backgroundColor: 'color-mix(in srgb, var(--th-bg) 60%, transparent)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              borderColor: 'rgba(127,127,127,0.22)',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06)',
+            }}
           >
             {editing && canEdit ? (
               <li className="flex min-w-0 flex-1 justify-center">
@@ -278,7 +284,7 @@ export function ViewerLayout() {
  *  wrapped label, whichever is wider) with padding, and the active "bubble" is
  *  this element's rounded background — kept inside the pill by overflow-hidden. */
 function tabCls(active: boolean): string {
-  return `inline-flex max-w-full flex-col items-center justify-center gap-0.5 rounded-2xl px-3 py-1.5 text-center ${active ? 'font-semibold' : 'opacity-70'}`;
+  return `inline-flex max-w-full flex-col items-center justify-center gap-0.5 rounded-full px-3 py-1.5 text-center ${active ? 'font-semibold' : 'opacity-70'}`;
 }
 
 const tabLabelCls = 'line-clamp-2 break-words text-[10px] leading-tight';
