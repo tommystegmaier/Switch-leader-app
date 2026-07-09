@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { applyHubMetadata } from '@/lib/appMetadata';
 import { useAuth } from './AuthProvider';
 import { PasswordField } from './PasswordField';
 
@@ -28,6 +29,8 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => { applyHubMetadata(); }, []);
 
   useEffect(() => {
     // Already signed in — bounce to the requested destination.

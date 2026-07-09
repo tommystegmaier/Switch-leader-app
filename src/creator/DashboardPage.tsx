@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { applyHubMetadata } from '@/lib/appMetadata';
 import { errorMessage } from '@/lib/errors';
 import { slugify, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, type WorkspaceMembership } from '@/data/workspaceHooks';
 
@@ -13,6 +14,7 @@ import { slugify, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, ty
 export function DashboardPage() {
   const { user, signOut } = useAuth();
   const { data: workspaces, isLoading } = useMyWorkspaces();
+  useEffect(() => { applyHubMetadata(); }, []);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { applyHubMetadata } from '@/lib/appMetadata';
 import { slugify, useCreateWorkspace } from '@/data/workspaceHooks';
 
 /**
@@ -18,6 +19,8 @@ export function CreateWorkspacePage() {
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { applyHubMetadata(); }, []);
 
   useEffect(() => {
     if (!loading && !user) navigate('/login?next=/new', { replace: true });

@@ -62,6 +62,20 @@ export function applyWorkspaceMetadata(org: Organization, settings: AppSettings 
   }
 }
 
+/** The platform hub's name — shown at the root, outside any workspace. */
+export const HUB_TITLE = 'Create an app';
+
+/**
+ * Reset the tab/home-screen identity to the platform hub. Called on the root
+ * pages (sign-in, "My workspaces", create) so they don't inherit a workspace's
+ * name (or the baked build title) after you back out of an app.
+ */
+export function applyHubMetadata() {
+  if (typeof document === 'undefined') return;
+  document.title = HUB_TITLE;
+  setMeta('apple-mobile-web-app-title', HUB_TITLE);
+}
+
 function setMeta(name: string, content: string) {
   let el = document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
   if (!el) {
