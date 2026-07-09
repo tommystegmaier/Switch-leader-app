@@ -50,11 +50,23 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
   const canDuplicate = canManage;
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(org.name);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [dupOpen, setDupOpen] = useState(false);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function saveRename() {
+    setRenameError(null);
+    if (!newName.trim()) return setRenameError('Give the app a name.');
+    try {
+      await rename.mutateAsync({ orgId: org.id, name: newName.trim() });
+      setRenaming(false);
+    } catch (e) {
+      setRenameError(errorMessage(e));
+    }
+  }
 
   const effectiveSlug = slugEdited ? slug : slugify(name);
 
@@ -76,10 +88,13 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
     <li className="rounded-xl border p-4" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
       <div className="flex items-center justify-between gap-2">
         {renaming ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <input autoFocus className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" value={newName} onChange={(e) => setNewName(e.target.value)} />
-            <button type="button" disabled={rename.isPending || !newName.trim()} onClick={async () => { await rename.mutateAsync({ orgId: org.id, name: newName }); setRenaming(false); }} className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Save</button>
-            <button type="button" onClick={() => { setRenaming(false); setNewName(org.name); }} className="shrink-0 rounded-full px-3 py-1.5 text-xs">Cancel</button>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <input autoFocus className="min-w-0 flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void saveRename(); }} />
+              <button type="button" disabled={rename.isPending || !newName.trim()} onClick={() => void saveRename()} className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>{rename.isPending ? 'Saving…' : 'Save'}</button>
+              <button type="button" onClick={() => { setRenaming(false); setNewName(org.name); setRenameError(null); }} className="shrink-0 rounded-full px-3 py-1.5 text-xs">Cancel</button>
+            </div>
+            {renameError && <p className="text-xs text-red-600">{renameError}</p>}
           </div>
         ) : (
           <>
