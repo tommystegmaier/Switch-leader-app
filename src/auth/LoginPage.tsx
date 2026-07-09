@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from './AuthProvider';
+import { PasswordField } from './PasswordField';
 
 /**
  * Email + password sign-in for admins/editors.
@@ -119,14 +120,10 @@ export function LoginPage() {
           {mode !== 'reset' && (
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">Password</span>
-              <input
-                type="password"
-                required
-                minLength={6}
+              <PasswordField
                 autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2"
+                onChange={setPassword}
               />
             </label>
           )}

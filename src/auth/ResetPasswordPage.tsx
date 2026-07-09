@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from './AuthProvider';
+import { PasswordField } from './PasswordField';
 
 /**
  * Landing page for the password-reset email link. Supabase turns the link's
@@ -61,11 +62,11 @@ export function ResetPasswordPage() {
             <p className="mb-2 text-sm text-gray-500">Choose a new password for your account.</p>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">New password</span>
-              <input type="password" required minLength={6} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
+              <PasswordField autoComplete="new-password" value={password} onChange={setPassword} />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium">Confirm new password</span>
-              <input type="password" required minLength={6} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
+              <PasswordField autoComplete="new-password" value={confirm} onChange={setConfirm} />
             </label>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button type="submit" disabled={busy} className="mt-2 rounded-full px-6 py-3 font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
