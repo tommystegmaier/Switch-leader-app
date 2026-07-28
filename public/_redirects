@@ -1,0 +1,5 @@
+# SPA fallback for client-side routing (Cloudflare Pages).
+# Every path that isn't a real static file OR a Function (/api/*) serves
+# index.html, so per-workspace deep links like /o/your-app work on refresh
+# and direct open. Pages runs functions/ before this rule, so /api is safe.
+/*    /index.html   200
