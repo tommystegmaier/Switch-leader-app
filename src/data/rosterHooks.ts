@@ -18,6 +18,7 @@ export interface RosterPerson {
   photoUrl: string | null;
   email: string | null;
   phone: string | null;
+  userId: string | null;
   sort: number;
 }
 
@@ -43,10 +44,10 @@ export function useRosterPeople(orgId: string | undefined) {
     enabled: Boolean(orgId) && isSupabaseConfigured,
     queryFn: async (): Promise<RosterPerson[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const { data, error } = await s.from('roster_people').select('id, group_id, name, role, photo_url, email, phone, sort').eq('org_id', orgId).order('sort').order('name');
+      const { data, error } = await s.from('roster_people').select('id, group_id, name, role, photo_url, email, phone, user_id, sort').eq('org_id', orgId).order('sort').order('name');
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, groupId: r.group_id, name: r.name, role: r.role ?? null, photoUrl: r.photo_url ?? null, email: r.email ?? null, phone: r.phone ?? null, sort: r.sort }));
+      return (data ?? []).map((r: any) => ({ id: r.id, groupId: r.group_id, name: r.name, role: r.role ?? null, photoUrl: r.photo_url ?? null, email: r.email ?? null, phone: r.phone ?? null, userId: r.user_id ?? null, sort: r.sort }));
     },
   });
 }
@@ -105,7 +106,7 @@ export function useReorderRosterGroups(orgId: string) {
   });
 }
 
-export interface PersonInput { name: string; role?: string | null; email?: string | null; phone?: string | null; photoUrl?: string | null }
+export interface PersonInput { name: string; role?: string | null; email?: string | null; phone?: string | null; photoUrl?: string | null; userId?: string | null }
 
 export function useAddRosterPerson(orgId: string) {
   const qc = useQueryClient();
@@ -116,7 +117,7 @@ export function useAddRosterPerson(orgId: string) {
         org_id: orgId, group_id: groupId,
         name: person.name.trim(), role: person.role?.trim() || null,
         email: person.email?.trim() || null, phone: person.phone?.trim() || null,
-        photo_url: person.photoUrl || null,
+        photo_url: person.photoUrl || null, user_id: person.userId ?? null,
       });
       if (error) throw error;
     },
@@ -132,8 +133,21 @@ export function useUpdateRosterPerson(orgId: string) {
       const { error } = await s.from('roster_people').update({
         name: person.name.trim(), role: person.role?.trim() || null,
         email: person.email?.trim() || null, phone: person.phone?.trim() || null,
-        photo_url: person.photoUrl || null,
+        photo_url: person.photoUrl || null, user_id: person.userId ?? null,
       }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'people'),
+  });
+}
+
+/** A signed-in member sets/replaces/removes their own photo across the roster. */
+export function useSetMyRosterPhoto(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (photoUrl: string | null) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('set_my_roster_photo', { p_org: orgId, p_photo: photoUrl });
       if (error) throw error;
     },
     onSuccess: () => invalidate(qc, orgId, 'people'),

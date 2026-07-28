@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
+import { useScheduleMembers } from '@/data/scheduleHooks';
 import { errorMessage } from '@/lib/errors';
 import { uploadMedia } from '@/lib/media';
 import {
   useAddRosterPerson, useCreateRosterGroup, useDeleteRosterGroup, useDeleteRosterPerson,
   useRenameRosterGroup, useReorderRosterGroups, useReorderRosterPeople, useRosterGroups,
-  useRosterPeople, useUpdateRosterPerson,
+  useRosterPeople, useSetMyRosterPhoto, useUpdateRosterPerson,
   type PersonInput, type RosterGroup, type RosterPerson,
 } from '@/data/rosterHooks';
 import type { ViewerCtx } from '../actions';
@@ -201,9 +203,11 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
 
 // --- read-only + manage person row ----------------------------------------
 function PersonRow({ orgId, person, manage, index, total, peopleIds }: { orgId: string; person: RosterPerson; manage: boolean; index: number; total: number; peopleIds: string[] }) {
+  const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const del = useDeleteRosterPerson(orgId);
   const reorder = useReorderRosterPeople(orgId);
+  const mine = Boolean(user && person.userId && person.userId === user.id);
 
   if (editing) {
     return <PersonForm orgId={orgId} person={person} onDone={() => setEditing(false)} />;
@@ -213,14 +217,14 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds }: { orgId: 
     <div className="flex items-center gap-3 rounded-lg border p-2" style={cardStyle}>
       <Avatar person={person} />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{person.name}</p>
+        <p className="truncate font-medium">{person.name}{mine && <span className="text-gray-400"> (you)</span>}</p>
         {person.role && <p className="truncate text-sm text-gray-500">{person.role}</p>}
         <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
           {person.email && <a href={`mailto:${person.email}`} className="text-gray-500 underline">{person.email}</a>}
           {person.phone && <a href={`tel:${person.phone}`} className="text-gray-500 underline">{person.phone}</a>}
         </div>
       </div>
-      {manage && (
+      {manage ? (
         <div className="flex shrink-0 items-center gap-1">
           <span className="flex flex-col leading-none">
             <button type="button" onClick={() => reorder.mutate(move(peopleIds, index, -1))} disabled={index === 0} className="px-1 text-xs disabled:opacity-25" aria-label="Move up">▲</button>
@@ -229,7 +233,36 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds }: { orgId: 
           <button type="button" onClick={() => setEditing(true)} className="rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-black/5">Edit</button>
           <button type="button" onClick={() => { if (confirm(`Remove ${person.name} from the roster?`)) del.mutate(person.id); }} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Remove</button>
         </div>
+      ) : mine ? (
+        <MyPhotoButton orgId={orgId} person={person} />
+      ) : null}
+    </div>
+  );
+}
+
+/** A member (linked to their account) changes just their own photo. */
+function MyPhotoButton({ orgId, person }: { orgId: string; person: RosterPerson }) {
+  const setPhoto = useSetMyRosterPhoto(orgId);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return;
+    setBusy(true);
+    try { const m = await uploadMedia(orgId, file); await setPhoto.mutateAsync(m.url); }
+    catch { /* best-effort; the button re-enables */ }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-black/5 disabled:opacity-50">
+        {busy ? '…' : person.photoUrl ? 'Change photo' : 'Add photo'}
+      </button>
+      {person.photoUrl && !busy && (
+        <button type="button" onClick={() => setPhoto.mutate(null)} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Remove</button>
       )}
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={pick} />
     </div>
   );
 }
@@ -238,14 +271,23 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds }: { orgId: 
 function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?: RosterPerson; groupId?: string; onDone: () => void }) {
   const add = useAddRosterPerson(orgId);
   const update = useUpdateRosterPerson(orgId);
+  const { data: members } = useScheduleMembers(orgId, true);
   const [name, setName] = useState(person?.name ?? '');
   const [role, setRole] = useState(person?.role ?? '');
   const [email, setEmail] = useState(person?.email ?? '');
   const [phone, setPhone] = useState(person?.phone ?? '');
   const [photoUrl, setPhotoUrl] = useState<string | null>(person?.photoUrl ?? null);
+  const [userId, setUserId] = useState<string | null>(person?.userId ?? null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function pickMember(id: string) {
+    if (!id) { setUserId(null); return; }
+    const m = (members ?? []).find((x) => x.userId === id);
+    setUserId(id);
+    if (m) { setName(m.name || m.email); setEmail(m.email); }
+  }
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -259,7 +301,7 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
   async function save() {
     if (!name.trim()) { setError('Please enter a name.'); return; }
     setError(null);
-    const payload: PersonInput = { name, role, email, phone, photoUrl };
+    const payload: PersonInput = { name, role, email, phone, photoUrl, userId };
     try {
       if (person) await update.mutateAsync({ id: person.id, person: payload });
       else if (groupId) await add.mutateAsync({ groupId, person: payload });
@@ -281,6 +323,16 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
         </div>
       </div>
+      {members && members.length > 0 && (
+        <label className="mt-3 flex flex-col gap-1 text-sm">
+          <span className="font-medium">Link to an app account (optional)</span>
+          <select className={input} value={userId ?? ''} onChange={(e) => pickMember(e.target.value)}>
+            <option value="">Not linked — manual entry</option>
+            {members.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
+          </select>
+          <span className="text-xs text-gray-500">Linked people can update their own photo from the roster.</span>
+        </label>
+      )}
       <div className="mt-3 flex flex-col gap-2">
         <input className={input} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <input className={input} placeholder="Role / title (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
