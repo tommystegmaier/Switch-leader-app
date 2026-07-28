@@ -25,6 +25,7 @@ import {
 import { DocumentView } from './viewers/document';
 import { CountdownView, MapView, QrView } from './viewers/utility';
 import { ScheduleView, BirthdaysView } from './viewers/schedule';
+import { RosterView } from './viewers/roster';
 import { InviteView } from './viewers/invite';
 
 /**
@@ -385,6 +386,22 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       ] },
     ],
     Viewer: BirthdaysView,
+  }),
+
+  roster: def({
+    type: 'roster',
+    label: 'Roster (org chart)',
+    icon: '👥',
+    description: 'Groups of people with roles, photos, and contact info. Everyone can view; managers edit.',
+    category: 'advanced',
+    defaultProps: { title: 'Roster', headerSize: 'md' },
+    fields: [
+      { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Meet the team' },
+      { key: 'headerSize', label: 'Header size', type: 'select', options: [
+        { value: 'sm', label: 'Small' }, { value: 'md', label: 'Medium' }, { value: 'lg', label: 'Large' },
+      ] },
+    ],
+    Viewer: RosterView,
   }),
 
   invite: def({

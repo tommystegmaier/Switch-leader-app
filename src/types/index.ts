@@ -116,6 +116,7 @@ export type BlockType =
   | 'accordion'
   | 'schedule'
   | 'birthdays'
+  | 'roster'
   | 'invite';
 
 /**
