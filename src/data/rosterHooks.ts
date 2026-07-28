@@ -9,7 +9,7 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
  * to owner/admin/editor (see migration 0025).
  */
 
-export interface RosterGroup { id: string; name: string; sort: number }
+export interface RosterGroup { id: string; name: string; sort: number; parentId: string | null }
 export interface RosterPerson {
   id: string;
   groupId: string;
@@ -29,10 +29,10 @@ export function useRosterGroups(orgId: string | undefined) {
     enabled: Boolean(orgId) && isSupabaseConfigured,
     queryFn: async (): Promise<RosterGroup[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const { data, error } = await s.from('roster_groups').select('id, name, sort').eq('org_id', orgId).order('sort').order('name');
+      const { data, error } = await s.from('roster_groups').select('id, name, sort, parent_id').eq('org_id', orgId).order('sort').order('name');
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, name: r.name, sort: r.sort }));
+      return (data ?? []).map((r: any) => ({ id: r.id, name: r.name, sort: r.sort, parentId: r.parent_id ?? null }));
     },
   });
 }
@@ -58,9 +58,9 @@ function invalidate(qc: ReturnType<typeof useQueryClient>, orgId: string, ...suf
 export function useCreateRosterGroup(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async ({ name, parentId }: { name: string; parentId?: string | null }) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const { error } = await s.from('roster_groups').insert({ org_id: orgId, name: name.trim() });
+      const { error } = await s.from('roster_groups').insert({ org_id: orgId, name: name.trim(), parent_id: parentId ?? null });
       if (error) throw error;
     },
     onSuccess: () => invalidate(qc, orgId, 'groups'),

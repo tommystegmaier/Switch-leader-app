@@ -8,7 +8,7 @@ import {
   useAddRosterPerson, useCreateRosterGroup, useDeleteRosterGroup, useDeleteRosterPerson,
   useRenameRosterGroup, useReorderRosterGroups, useReorderRosterPeople, useRosterGroups,
   useRosterPeople, useUpdateRosterPerson,
-  type PersonInput, type RosterPerson,
+  type PersonInput, type RosterGroup, type RosterPerson,
 } from '@/data/rosterHooks';
 import type { ViewerCtx } from '../actions';
 
@@ -71,7 +71,8 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
     return <div className={card} style={cardStyle}><p className="text-sm text-gray-500">Loading roster…</p></div>;
   }
 
-  const groupList = groups ?? [];
+  const allGroups = groups ?? [];
+  const topGroups = allGroups.filter((g) => !g.parentId);
   const showManage = canEdit && manage;
 
   return (
@@ -79,16 +80,16 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className={`font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>👥 {title}</p>
         <div className="flex items-center gap-2">
-          {groupList.length > 0 && (
+          {allGroups.length > 0 && (
             <button
               type="button"
               className="text-xs text-gray-500 underline"
               onClick={() => {
-                const anyOpen = groupList.some((g) => !collapsed[g.id]);
-                setCollapsed(Object.fromEntries(groupList.map((g) => [g.id, anyOpen])));
+                const anyOpen = allGroups.some((g) => !collapsed[g.id]);
+                setCollapsed(Object.fromEntries(allGroups.map((g) => [g.id, anyOpen])));
               }}
             >
-              {groupList.some((g) => !collapsed[g.id]) ? 'Collapse all' : 'Expand all'}
+              {allGroups.some((g) => !collapsed[g.id]) ? 'Collapse all' : 'Expand all'}
             </button>
           )}
           {canEdit && !ctx.editing && (
@@ -99,49 +100,101 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
         </div>
       </div>
 
-      {groupList.length === 0 && !showManage && (
+      {allGroups.length === 0 && !showManage && (
         <p className="text-sm text-gray-500">No one added to the roster yet.</p>
       )}
 
       <div className="flex flex-col gap-3">
-        {groupList.map((g, gi) => {
-          const groupPeople = (people ?? []).filter((p) => p.groupId === g.id);
-          return (
-            <div key={g.id} className="rounded-lg border" style={cardStyle}>
-              <div className="flex items-center gap-2 px-3 py-2">
-                <button type="button" onClick={() => toggle(g.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={!collapsed[g.id]}>
-                  <span className="text-gray-400" aria-hidden>{collapsed[g.id] ? '▸' : '▾'}</span>
-                  <span className="truncate font-semibold" style={{ color: 'var(--th-heading)' }}>{g.name}</span>
-                  <span className="ml-auto shrink-0 text-xs font-normal text-gray-400">{groupPeople.length}</span>
-                </button>
-                {showManage && (
-                  <GroupControls orgId={org.id} group={g} index={gi} total={groupList.length} groupIds={groupList.map((x) => x.id)} />
-                )}
-              </div>
-
-              {!collapsed[g.id] && (
-                <div className="flex flex-col gap-2 px-3 pb-3">
-                  {groupPeople.map((p, pi) => (
-                    <PersonRow
-                      key={p.id}
-                      orgId={org.id}
-                      person={p}
-                      manage={showManage}
-                      index={pi}
-                      total={groupPeople.length}
-                      peopleIds={groupPeople.map((x) => x.id)}
-                    />
-                  ))}
-                  {groupPeople.length === 0 && <p className="text-xs text-gray-400">No one in this group yet.</p>}
-                  {showManage && <AddPerson orgId={org.id} groupId={g.id} />}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {topGroups.map((g, gi) => (
+          <GroupBlock
+            key={g.id}
+            orgId={org.id}
+            group={g}
+            level={0}
+            allGroups={allGroups}
+            people={people ?? []}
+            collapsed={collapsed}
+            toggle={toggle}
+            showManage={showManage}
+            siblingIds={topGroups.map((x) => x.id)}
+            index={gi}
+            total={topGroups.length}
+          />
+        ))}
       </div>
 
       {showManage && <AddGroup orgId={org.id} />}
+    </div>
+  );
+}
+
+// --- one group: header, its people, and (top level only) its subgroups -----
+function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle, showManage, siblingIds, index, total }: {
+  orgId: string;
+  group: RosterGroup;
+  level: 0 | 1;
+  allGroups: RosterGroup[];
+  people: RosterPerson[];
+  collapsed: Record<string, boolean>;
+  toggle: (id: string) => void;
+  showManage: boolean;
+  siblingIds: string[];
+  index: number;
+  total: number;
+}) {
+  const directPeople = people.filter((p) => p.groupId === group.id);
+  const subs = level === 0 ? allGroups.filter((g) => g.parentId === group.id) : [];
+  const subPeople = subs.reduce((n, s) => n + people.filter((p) => p.groupId === s.id).length, 0);
+  const count = directPeople.length + subPeople;
+  const open = !collapsed[group.id];
+
+  return (
+    <div className="rounded-lg border" style={{ ...cardStyle, ...(level === 1 ? { backgroundColor: 'rgba(0,0,0,0.02)' } : {}) }}>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button type="button" onClick={() => toggle(group.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
+          <span className="text-gray-400" aria-hidden>{open ? '▾' : '▸'}</span>
+          <span className={`truncate font-semibold ${level === 1 ? 'text-sm' : ''}`} style={{ color: 'var(--th-heading)' }}>{group.name}</span>
+          <span className="ml-auto shrink-0 text-xs font-normal text-gray-400">{count}</span>
+        </button>
+        {showManage && (
+          <GroupControls orgId={orgId} group={group} index={index} total={total} groupIds={siblingIds} />
+        )}
+      </div>
+
+      {open && (
+        <div className="flex flex-col gap-2 px-3 pb-3">
+          {directPeople.map((p, pi) => (
+            <PersonRow key={p.id} orgId={orgId} person={p} manage={showManage} index={pi} total={directPeople.length} peopleIds={directPeople.map((x) => x.id)} />
+          ))}
+          {showManage && <AddPerson orgId={orgId} groupId={group.id} />}
+
+          {subs.length > 0 && (
+            <div className="mt-1 flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: 'rgba(0,0,0,0.1)' }}>
+              {subs.map((sub, si) => (
+                <GroupBlock
+                  key={sub.id}
+                  orgId={orgId}
+                  group={sub}
+                  level={1}
+                  allGroups={allGroups}
+                  people={people}
+                  collapsed={collapsed}
+                  toggle={toggle}
+                  showManage={showManage}
+                  siblingIds={subs.map((x) => x.id)}
+                  index={si}
+                  total={subs.length}
+                />
+              ))}
+            </div>
+          )}
+
+          {showManage && level === 0 && <AddGroup orgId={orgId} parentId={group.id} />}
+          {!showManage && directPeople.length === 0 && subs.length === 0 && (
+            <p className="text-xs text-gray-400">No one in this group yet.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -283,13 +336,15 @@ function GroupControls({ orgId, group, index, total, groupIds }: { orgId: string
   );
 }
 
-function AddGroup({ orgId }: { orgId: string }) {
+function AddGroup({ orgId, parentId }: { orgId: string; parentId?: string | null }) {
   const create = useCreateRosterGroup(orgId);
   const [name, setName] = useState('');
+  const sub = Boolean(parentId);
+  const submit = () => { if (name.trim()) { create.mutate({ name, parentId: parentId ?? null }); setName(''); } };
   return (
-    <div className="mt-3 flex gap-2">
-      <input className={input} placeholder="New group (e.g. Leadership Team)" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { create.mutate(name); setName(''); } }} />
-      <button type="button" disabled={!name.trim() || create.isPending} onClick={() => { create.mutate(name); setName(''); }} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>+ Group</button>
+    <div className={`flex gap-2 ${sub ? 'mt-1' : 'mt-3'}`}>
+      <input className={input} placeholder={sub ? 'New subgroup (e.g. Middle School Boys)' : 'New group (e.g. Leadership Team)'} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} />
+      <button type="button" disabled={!name.trim() || create.isPending} onClick={submit} className="shrink-0 rounded-full border px-4 py-2 text-sm font-semibold disabled:opacity-50" style={sub ? { borderColor: 'rgba(0,0,0,0.25)' } : { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', borderColor: 'transparent' }}>{sub ? '+ Subgroup' : '+ Group'}</button>
     </div>
   );
 }
