@@ -6,10 +6,12 @@ import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import { uploadMedia } from '@/lib/media';
 import {
-  useAddRosterPerson, useCreateRosterGroup, useDeleteRosterGroup, useDeleteRosterPerson,
-  useRenameRosterGroup, useReorderRosterGroups, useReorderRosterPeople, useRosterGroups,
-  useRosterAccountOptions, useRosterPeople, useSetMyRosterPhoto, useUpdateRosterPerson,
-  type PersonInput, type RosterGroup, type RosterPerson,
+  useAddRosterPerson, useCreateRosterGroup, useCreateRosterRole, useDeleteRosterGroup,
+  useDeleteRosterPerson, useDeleteRosterRole, useRenameRosterGroup, useRenameRosterRole,
+  useReorderRosterGroups, useReorderRosterPeople, useReorderRosterRoles, useRosterGroups,
+  useRosterAccountOptions, useRosterPeople, useRosterRoles, useSeedRosterRoles,
+  useSetMyRosterPhoto, useUpdateRosterPerson,
+  type PersonInput, type RosterGroup, type RosterPerson, type RosterRole,
 } from '@/data/rosterHooks';
 import type { ViewerCtx } from '../actions';
 
@@ -47,7 +49,8 @@ function Avatar({ person, size = 48 }: { person: { name: string; photoUrl: strin
 
 export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx }) {
   const { data: org } = useOrganization(ctx.orgSlug);
-  const { canEdit, isLoading } = useMembershipRole(org?.id);
+  const { role, canEdit, isLoading } = useMembershipRole(org?.id);
+  const isAdmin = role === 'owner' || role === 'admin';
   const { data: groups } = useRosterGroups(org?.id);
   const { data: people } = useRosterPeople(org?.id);
 
@@ -125,6 +128,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
       </div>
 
       {showManage && <AddGroup orgId={org.id} />}
+      {showManage && isAdmin && <RoleListEditor orgId={org.id} />}
     </div>
   );
 }
@@ -272,6 +276,7 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
   const add = useAddRosterPerson(orgId);
   const update = useUpdateRosterPerson(orgId);
   const { data: members } = useRosterAccountOptions(orgId, true);
+  const { data: roles } = useRosterRoles(orgId);
   const [name, setName] = useState(person?.name ?? '');
   const [role, setRole] = useState(person?.role ?? '');
   const [phone, setPhone] = useState(person?.phone ?? '');
@@ -334,7 +339,11 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
       )}
       <div className="mt-3 flex flex-col gap-2">
         <input className={input} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input className={input} placeholder="Role / title (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
+        <select className={input} value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="">No title</option>
+          {(roles ?? []).map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
+          {role && !(roles ?? []).some((r) => r.name === role) && <option value={role}>{role}</option>}
+        </select>
         <input className={input} type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
@@ -395,6 +404,71 @@ function AddGroup({ orgId, parentId }: { orgId: string; parentId?: string | null
     <div className={`flex gap-2 ${sub ? 'mt-1' : 'mt-3'}`}>
       <input className={input} placeholder={sub ? 'New subgroup (e.g. Middle School Boys)' : 'New group (e.g. Leadership Team)'} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} />
       <button type="button" disabled={!name.trim() || create.isPending} onClick={submit} className="shrink-0 rounded-full border px-4 py-2 text-sm font-semibold disabled:opacity-50" style={sub ? { borderColor: 'rgba(0,0,0,0.25)' } : { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', borderColor: 'transparent' }}>{sub ? '+ Subgroup' : '+ Group'}</button>
+    </div>
+  );
+}
+
+// --- owner/admin: edit the list of titles/roles ---------------------------
+function RoleListEditor({ orgId }: { orgId: string }) {
+  const { data: roles } = useRosterRoles(orgId);
+  const create = useCreateRosterRole(orgId);
+  const seed = useSeedRosterRoles(orgId);
+  const [open, setOpen] = useState(false);
+  const [newRole, setNewRole] = useState('');
+  const list = roles ?? [];
+  const ids = list.map((r) => r.id);
+  const submit = () => { if (newRole.trim()) { create.mutate(newRole); setNewRole(''); } };
+
+  return (
+    <div className="mt-4 rounded-lg border" style={cardStyle}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold" aria-expanded={open}>
+        <span className="text-gray-400" aria-hidden>{open ? '▾' : '▸'}</span>
+        ⚙︎ Titles / roles list
+        <span className="ml-auto text-xs font-normal text-gray-400">{list.length}</span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-2 px-3 pb-3">
+          <p className="text-xs text-gray-500">The titles you can pick from when adding people. Only owners &amp; admins can edit this.</p>
+          {list.length === 0 && (
+            <button type="button" onClick={() => seed.mutate()} disabled={seed.isPending} className="self-start rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>Add starter titles</button>
+          )}
+          {list.map((r, i) => <RoleRow key={r.id} orgId={orgId} role={r} index={i} total={list.length} ids={ids} />)}
+          <div className="mt-1 flex gap-2">
+            <input className={input} placeholder="Add a title (e.g. Worship)" value={newRole} onChange={(e) => setNewRole(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} />
+            <button type="button" disabled={!newRole.trim() || create.isPending} onClick={submit} className="shrink-0 rounded-full border px-3 py-2 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Add</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RoleRow({ orgId, role, index, total, ids }: { orgId: string; role: RosterRole; index: number; total: number; ids: string[] }) {
+  const rename = useRenameRosterRole(orgId);
+  const del = useDeleteRosterRole(orgId);
+  const reorder = useReorderRosterRoles(orgId);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(role.name);
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1 rounded bg-black/5 px-2 py-1 text-sm">
+        <input autoFocus className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { rename.mutate({ id: role.id, name }); setEditing(false); } }} />
+        <button type="button" onClick={() => { if (name.trim()) { rename.mutate({ id: role.id, name }); setEditing(false); } }} className="rounded-full px-2 py-1 text-xs font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Save</button>
+        <button type="button" onClick={() => { setEditing(false); setName(role.name); }} className="px-1 text-xs">✕</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 rounded bg-black/5 px-2 py-1 text-sm">
+      <span className="flex flex-col leading-none">
+        <button type="button" onClick={() => reorder.mutate(move(ids, index, -1))} disabled={index === 0} className="px-1 text-xs disabled:opacity-25" aria-label="Move up">▲</button>
+        <button type="button" onClick={() => reorder.mutate(move(ids, index, 1))} disabled={index === total - 1} className="px-1 text-xs disabled:opacity-25" aria-label="Move down">▼</button>
+      </span>
+      <span className="min-w-0 flex-1 truncate">{role.name}</span>
+      <button type="button" onClick={() => setEditing(true)} className="rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-black/5">Rename</button>
+      <button type="button" onClick={() => del.mutate(role.id)} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Delete</button>
     </div>
   );
 }

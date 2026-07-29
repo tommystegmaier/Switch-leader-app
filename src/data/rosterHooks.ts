@@ -52,6 +52,88 @@ export function useRosterPeople(orgId: string | undefined) {
   });
 }
 
+export interface RosterRole { id: string; name: string; sort: number }
+
+export function useRosterRoles(orgId: string | undefined) {
+  return useQuery({
+    queryKey: KEY(orgId, 'roles'),
+    enabled: Boolean(orgId) && isSupabaseConfigured,
+    queryFn: async (): Promise<RosterRole[]> => {
+      const s = getSupabase(); if (!s || !orgId) return [];
+      const { data, error } = await s.from('roster_roles').select('id, name, sort').eq('org_id', orgId).order('sort').order('name');
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ id: r.id, name: r.name, sort: r.sort }));
+    },
+  });
+}
+
+export function useCreateRosterRole(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('roster_roles').insert({ org_id: orgId, name: name.trim() });
+      if (error && !/duplicate|unique/i.test(error.message)) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'roles'),
+  });
+}
+
+export function useRenameRosterRole(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('roster_roles').update({ name: name.trim() }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'roles'),
+  });
+}
+
+export function useDeleteRosterRole(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('roster_roles').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'roles'),
+  });
+}
+
+export function useReorderRosterRoles(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      for (let i = 0; i < ids.length; i++) {
+        const { error } = await s.from('roster_roles').update({ sort: i }).eq('id', ids[i]);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => invalidate(qc, orgId, 'roles'),
+  });
+}
+
+const DEFAULT_ROLE_NAMES = ['Coach', 'Group Leader', 'Hospitality', 'Check-In', 'Admin', 'Greeter', 'Safety Team', 'Photography', 'ProPresenter', 'Social Media'];
+
+/** One-tap starter list for a workspace whose titles are still empty. */
+export function useSeedRosterRoles(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const rows = DEFAULT_ROLE_NAMES.map((name, i) => ({ org_id: orgId, name, sort: i }));
+      const { error } = await s.from('roster_roles').insert(rows);
+      if (error && !/duplicate|unique/i.test(error.message)) throw error;
+    },
+    onSuccess: () => invalidate(qc, orgId, 'roles'),
+  });
+}
+
 export interface RosterAccountOption { userId: string; name: string | null; email: string; phone: string | null }
 
 /** App members a manager can pick from (with their sign-up phone). Manager-only. */
