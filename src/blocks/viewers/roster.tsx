@@ -64,7 +64,7 @@ function RoleTag({ role }: { role: string }) {
         className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
         style={{ backgroundColor: 'color-mix(in srgb, var(--th-accent) 18%, transparent)', color: 'var(--th-accent)' }}
       >
-        ★ {role}
+        {role}
       </span>
     );
   }
