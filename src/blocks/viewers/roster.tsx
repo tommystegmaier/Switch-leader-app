@@ -11,7 +11,7 @@ import {
   useReorderRosterGroups, useReorderRosterPeople, useReorderRosterRoles, useRosterGroups,
   useRosterAccountOptions, useRosterPeople, useRosterRoles, useSeedRosterRoles,
   useSetMyRosterPhoto, useUpdateRosterPerson,
-  type PersonInput, type RosterGroup, type RosterPerson, type RosterRole,
+  type PersonInput, type RosterAccountOption, type RosterGroup, type RosterPerson, type RosterRole,
 } from '@/data/rosterHooks';
 import type { ViewerCtx } from '../actions';
 
@@ -306,6 +306,56 @@ function MyPhotoButton({ orgId, person }: { orgId: string; person: RosterPerson 
   );
 }
 
+// --- searchable account picker (type to filter a long member list) --------
+function MemberPicker({ members, value, onPick }: { members: RosterAccountOption[]; value: string | null; onPick: (id: string | null) => void }) {
+  const [query, setQuery] = useState('');
+  const [focused, setFocused] = useState(false);
+  const selected = value ? members.find((m) => m.userId === value) : null;
+
+  if (selected) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm">
+        <span className="min-w-0 truncate">Linked to <span className="font-medium">{selected.name || selected.email}</span></span>
+        <button type="button" onClick={() => onPick(null)} className="shrink-0 text-xs text-gray-500 underline">Unlink</button>
+      </div>
+    );
+  }
+
+  const q = query.trim().toLowerCase();
+  const results = (q
+    ? members.filter((m) => (m.name || '').toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
+    : members
+  ).slice(0, 8);
+  const open = focused || q.length > 0;
+
+  return (
+    <div className="relative">
+      <input
+        className={input}
+        placeholder="Search by name or email…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+      />
+      {open && (
+        <ul className="mt-1 max-h-56 overflow-y-auto rounded-md border border-gray-200 bg-white">
+          {results.map((m) => (
+            <li key={m.userId}>
+              <button type="button" onClick={() => { onPick(m.userId); setQuery(''); }} className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-black/5">
+                <span className="font-medium">{m.name || m.email}</span>
+                {m.name && <span className="text-xs text-gray-500">{m.email}</span>}
+              </button>
+            </li>
+          ))}
+          {results.length === 0 && <li className="px-3 py-2 text-xs text-gray-500">No matches.</li>}
+          {!q && members.length > results.length && <li className="px-3 py-1.5 text-xs text-gray-400">Keep typing to narrow {members.length} people…</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // --- add / edit person form ------------------------------------------------
 function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?: RosterPerson; groupId?: string; onDone: () => void }) {
   const add = useAddRosterPerson(orgId);
@@ -363,14 +413,11 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
         </div>
       </div>
       {members && members.length > 0 && (
-        <label className="mt-3 flex flex-col gap-1 text-sm">
+        <div className="mt-3 flex flex-col gap-1 text-sm">
           <span className="font-medium">Link to an app account (optional)</span>
-          <select className={input} value={userId ?? ''} onChange={(e) => pickMember(e.target.value)}>
-            <option value="">Not linked — manual entry</option>
-            {members.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
-          </select>
+          <MemberPicker members={members} value={userId} onPick={(id) => pickMember(id ?? '')} />
           <span className="text-xs text-gray-500">Pulls in their name and sign-up phone; they can update their own photo from the roster.</span>
-        </label>
+        </div>
       )}
       <div className="mt-3 flex flex-col gap-2">
         <input className={input} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
