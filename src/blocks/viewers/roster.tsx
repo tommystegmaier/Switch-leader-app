@@ -56,19 +56,13 @@ function coachFirst(list: RosterPerson[]): RosterPerson[] {
   return [...list].sort((a, b) => (isCoach(a) ? 0 : 1) - (isCoach(b) ? 0 : 1));
 }
 
-/** A person's title: Coaches get a bold accent badge; others a subtle pill. */
+/** A person's title: Coaches get bold ALL-CAPS text so they stand out;
+ *  other titles show as subtle gray text. */
 function RoleTag({ role }: { role: string }) {
   if (isCoach({ role })) {
-    return (
-      <span
-        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--th-accent) 18%, transparent)', color: 'var(--th-accent)' }}
-      >
-        {role}
-      </span>
-    );
+    return <span className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--th-heading)' }}>{role}</span>;
   }
-  return <span className="inline-block rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-gray-600">{role}</span>;
+  return <span className="text-sm text-gray-500">{role}</span>;
 }
 
 export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx }) {
@@ -176,31 +170,34 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
   const subPeople = subs.reduce((n, s) => n + people.filter((p) => p.groupId === s.id).length, 0);
   const count = directPeople.length + subPeople;
   const open = !collapsed[group.id];
-  const headerBg = level === 0
-    ? 'color-mix(in srgb, var(--th-primary) 12%, transparent)'
-    : 'color-mix(in srgb, var(--th-primary) 6%, transparent)';
+  const isTop = level === 0;
+  // Top group: the app theme's Headings color as a solid bar, with the Button-
+  // text color on top. Subgroup: a softened (lightened) version of that color.
+  const headerBg = isTop ? 'var(--th-heading)' : 'color-mix(in srgb, var(--th-heading) 16%, white)';
+  const headerFg = isTop ? 'var(--th-primary-text)' : 'var(--th-heading)';
 
   return (
-    <div className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(level === 0 ? { borderColor: 'rgba(0,0,0,0.18)' } : {}) }}>
+    <div className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(isTop ? { borderColor: 'rgba(0,0,0,0.18)' } : {}) }}>
       <div className="flex items-center gap-2 px-3 py-2.5" style={{ backgroundColor: headerBg }}>
         <button type="button" onClick={() => toggle(group.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
-          <span className="shrink-0" aria-hidden style={{ color: 'var(--th-primary)' }}>{open ? '▾' : '▸'}</span>
-          {level === 0 && <span className="h-4 w-1 shrink-0 rounded-full" aria-hidden style={{ backgroundColor: 'var(--th-primary)' }} />}
+          <span className="shrink-0" aria-hidden style={{ color: headerFg, opacity: 0.85 }}>{open ? '▾' : '▸'}</span>
           <span
-            className={level === 0 ? 'truncate font-bold uppercase tracking-wide' : 'truncate text-sm font-semibold'}
-            style={{ color: 'var(--th-heading)' }}
+            className={isTop ? 'truncate font-bold uppercase tracking-wide' : 'truncate text-sm font-semibold'}
+            style={{ color: headerFg }}
           >
             {group.name}
           </span>
           <span
-            className="ml-auto shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold text-gray-500"
-            style={{ borderColor: 'rgba(0,0,0,0.12)', backgroundColor: 'rgba(255,255,255,0.65)' }}
+            className="ml-auto shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold"
+            style={isTop
+              ? { backgroundColor: 'rgba(255,255,255,0.22)', color: headerFg }
+              : { backgroundColor: 'rgba(255,255,255,0.65)', color: '#6b7280', border: '1px solid rgba(0,0,0,0.12)' }}
           >
             {count}
           </span>
         </button>
         {showManage && (
-          <GroupControls orgId={orgId} group={group} index={index} total={total} groupIds={siblingIds} />
+          <GroupControls orgId={orgId} group={group} index={index} total={total} groupIds={siblingIds} onDark={isTop} />
         )}
       </div>
 
@@ -404,19 +401,24 @@ function AddPerson({ orgId, groupId }: { orgId: string; groupId: string }) {
 }
 
 // --- group controls + add group -------------------------------------------
-function GroupControls({ orgId, group, index, total, groupIds }: { orgId: string; group: { id: string; name: string }; index: number; total: number; groupIds: string[] }) {
+function GroupControls({ orgId, group, index, total, groupIds, onDark }: { orgId: string; group: { id: string; name: string }; index: number; total: number; groupIds: string[]; onDark?: boolean }) {
   const rename = useRenameRosterGroup(orgId);
   const del = useDeleteRosterGroup(orgId);
   const reorder = useReorderRosterGroups(orgId);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(group.name);
 
+  const btn = onDark ? 'rounded border px-2 py-0.5 text-xs' : 'rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-black/5';
+  const btnStyle = onDark ? { borderColor: 'rgba(255,255,255,0.45)', color: '#fff' } : undefined;
+  const delStyle = onDark ? { borderColor: 'rgba(255,255,255,0.45)', color: '#fecaca' } : undefined;
+  const arrowStyle = onDark ? { color: '#fff' } : undefined;
+
   if (editing) {
     return (
       <div className="flex shrink-0 items-center gap-1">
         <input autoFocus className="w-32 rounded-md border border-gray-300 px-2 py-1 text-sm" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { rename.mutate({ id: group.id, name }); setEditing(false); } }} />
         <button type="button" onClick={() => { if (name.trim()) { rename.mutate({ id: group.id, name }); setEditing(false); } }} className="rounded-full px-2 py-1 text-xs font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Save</button>
-        <button type="button" onClick={() => { setEditing(false); setName(group.name); }} className="px-1 text-xs">✕</button>
+        <button type="button" onClick={() => { setEditing(false); setName(group.name); }} className="px-1 text-xs" style={onDark ? { color: '#fff' } : undefined}>✕</button>
       </div>
     );
   }
@@ -424,11 +426,11 @@ function GroupControls({ orgId, group, index, total, groupIds }: { orgId: string
   return (
     <div className="flex shrink-0 items-center gap-1">
       <span className="flex flex-col leading-none">
-        <button type="button" onClick={() => reorder.mutate(move(groupIds, index, -1))} disabled={index === 0} className="px-1 text-xs disabled:opacity-25" aria-label="Move group up">▲</button>
-        <button type="button" onClick={() => reorder.mutate(move(groupIds, index, 1))} disabled={index === total - 1} className="px-1 text-xs disabled:opacity-25" aria-label="Move group down">▼</button>
+        <button type="button" onClick={() => reorder.mutate(move(groupIds, index, -1))} disabled={index === 0} className="px-1 text-xs disabled:opacity-25" style={arrowStyle} aria-label="Move group up">▲</button>
+        <button type="button" onClick={() => reorder.mutate(move(groupIds, index, 1))} disabled={index === total - 1} className="px-1 text-xs disabled:opacity-25" style={arrowStyle} aria-label="Move group down">▼</button>
       </span>
-      <button type="button" onClick={() => setEditing(true)} className="rounded border border-gray-300 px-2 py-0.5 text-xs hover:bg-black/5">Rename</button>
-      <button type="button" onClick={() => { if (confirm(`Delete group "${group.name}" and everyone in it?`)) del.mutate(group.id); }} className="rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5">Delete</button>
+      <button type="button" onClick={() => setEditing(true)} className={btn} style={btnStyle}>Rename</button>
+      <button type="button" onClick={() => { if (confirm(`Delete group "${group.name}" and everyone in it?`)) del.mutate(group.id); }} className={onDark ? btn : 'rounded border border-gray-300 px-2 py-0.5 text-xs text-red-600 hover:bg-black/5'} style={delStyle}>Delete</button>
     </div>
   );
 }
