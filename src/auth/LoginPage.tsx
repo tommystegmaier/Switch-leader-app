@@ -51,9 +51,9 @@ export function LoginPage() {
       return;
     }
 
-    if (mode === 'signup' && (!birthday.trim() || !phone.trim())) {
+    if (mode === 'signup' && (!name.trim() || !birthday.trim() || !phone.trim())) {
       setBusy(false);
-      setError('Please add your birthday and phone number to create your account.');
+      setError('Please add your name, birthday, and phone number to create your account.');
       return;
     }
 
@@ -103,7 +103,7 @@ export function LoginPage() {
             <>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium">Your name</span>
-                <input type="text" autoComplete="name" placeholder="e.g. Jordan Smith" value={name} onChange={(e) => setName(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
+                <input type="text" required autoComplete="name" placeholder="e.g. Jordan Smith" value={name} onChange={(e) => setName(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium">Birthday</span>
