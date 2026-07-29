@@ -51,6 +51,12 @@ export function LoginPage() {
       return;
     }
 
+    if (mode === 'signup' && (!birthday.trim() || !phone.trim())) {
+      setBusy(false);
+      setError('Please add your birthday and phone number to create your account.');
+      return;
+    }
+
     const { error: err } =
       mode === 'signin'
         ? await signIn(email.trim(), password)
@@ -101,11 +107,11 @@ export function LoginPage() {
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium">Birthday</span>
-                <input type="date" autoComplete="bday" value={birthday} onChange={(e) => setBirthday(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
+                <input type="date" required autoComplete="bday" value={birthday} onChange={(e) => setBirthday(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium">Phone number</span>
-                <input type="tel" autoComplete="tel" placeholder="(555) 555-5555" value={phone} onChange={(e) => setPhone(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
+                <input type="tel" required autoComplete="tel" placeholder="(555) 555-5555" value={phone} onChange={(e) => setPhone(e.target.value)} className="rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2" />
               </label>
             </>
           )}

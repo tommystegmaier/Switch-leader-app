@@ -53,6 +53,10 @@ export function JoinPage() {
     e.preventDefault();
     setError(null);
     setNotice(null);
+    if (mode === 'signup' && (!birthday.trim() || !phone.trim())) {
+      setError('Please add your birthday and phone number to create your account.');
+      return;
+    }
     setBusy(true);
     try {
       const { error: err } =
@@ -140,11 +144,11 @@ export function JoinPage() {
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium">Birthday</span>
-                <input type="date" autoComplete="bday" value={birthday} onChange={(e) => setBirthday(e.target.value)} className={inputCls} />
+                <input type="date" required autoComplete="bday" value={birthday} onChange={(e) => setBirthday(e.target.value)} className={inputCls} />
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium">Phone number</span>
-                <input type="tel" autoComplete="tel" placeholder="(555) 555-5555" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
+                <input type="tel" required autoComplete="tel" placeholder="(555) 555-5555" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
               </label>
             </>
           )}
