@@ -47,6 +47,30 @@ function Avatar({ person, size = 48 }: { person: { name: string; photoUrl: strin
   );
 }
 
+function isCoach(p: { role: string | null }): boolean {
+  return (p.role ?? '').trim().toLowerCase() === 'coach';
+}
+/** Coaches to the top, everyone else after — each keeps its added/sorted order
+ *  (JS sort is stable), so multiple coaches stay in the order they were added. */
+function coachFirst(list: RosterPerson[]): RosterPerson[] {
+  return [...list].sort((a, b) => (isCoach(a) ? 0 : 1) - (isCoach(b) ? 0 : 1));
+}
+
+/** A person's title: Coaches get a bold accent badge; others a subtle pill. */
+function RoleTag({ role }: { role: string }) {
+  if (isCoach({ role })) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--th-accent) 18%, transparent)', color: 'var(--th-accent)' }}
+      >
+        ★ {role}
+      </span>
+    );
+  }
+  return <span className="inline-block rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-gray-600">{role}</span>;
+}
+
 export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx }) {
   const { data: org } = useOrganization(ctx.orgSlug);
   const { role, canEdit, isLoading } = useMembershipRole(org?.id);
@@ -147,19 +171,33 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
   index: number;
   total: number;
 }) {
-  const directPeople = people.filter((p) => p.groupId === group.id);
+  const directPeople = coachFirst(people.filter((p) => p.groupId === group.id));
   const subs = level === 0 ? allGroups.filter((g) => g.parentId === group.id) : [];
   const subPeople = subs.reduce((n, s) => n + people.filter((p) => p.groupId === s.id).length, 0);
   const count = directPeople.length + subPeople;
   const open = !collapsed[group.id];
+  const headerBg = level === 0
+    ? 'color-mix(in srgb, var(--th-primary) 12%, transparent)'
+    : 'color-mix(in srgb, var(--th-primary) 6%, transparent)';
 
   return (
-    <div className="rounded-lg border" style={{ ...cardStyle, ...(level === 1 ? { backgroundColor: 'rgba(0,0,0,0.02)' } : {}) }}>
-      <div className="flex items-center gap-2 px-3 py-2">
+    <div className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(level === 0 ? { borderColor: 'rgba(0,0,0,0.18)' } : {}) }}>
+      <div className="flex items-center gap-2 px-3 py-2.5" style={{ backgroundColor: headerBg }}>
         <button type="button" onClick={() => toggle(group.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
-          <span className="text-gray-400" aria-hidden>{open ? '▾' : '▸'}</span>
-          <span className={`truncate font-semibold ${level === 1 ? 'text-sm' : ''}`} style={{ color: 'var(--th-heading)' }}>{group.name}</span>
-          <span className="ml-auto shrink-0 text-xs font-normal text-gray-400">{count}</span>
+          <span className="shrink-0" aria-hidden style={{ color: 'var(--th-primary)' }}>{open ? '▾' : '▸'}</span>
+          {level === 0 && <span className="h-4 w-1 shrink-0 rounded-full" aria-hidden style={{ backgroundColor: 'var(--th-primary)' }} />}
+          <span
+            className={level === 0 ? 'truncate font-bold uppercase tracking-wide' : 'truncate text-sm font-semibold'}
+            style={{ color: 'var(--th-heading)' }}
+          >
+            {group.name}
+          </span>
+          <span
+            className="ml-auto shrink-0 rounded-full border px-2 py-0.5 text-xs font-semibold text-gray-500"
+            style={{ borderColor: 'rgba(0,0,0,0.12)', backgroundColor: 'rgba(255,255,255,0.65)' }}
+          >
+            {count}
+          </span>
         </button>
         {showManage && (
           <GroupControls orgId={orgId} group={group} index={index} total={total} groupIds={siblingIds} />
@@ -221,9 +259,9 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds }: { orgId: 
       <Avatar person={person} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{person.name}{mine && <span className="text-gray-400"> (you)</span>}</p>
-        {person.role && <p className="truncate text-sm text-gray-500">{person.role}</p>}
+        {person.role && <div className="mt-1"><RoleTag role={person.role} /></div>}
         {person.phone && (
-          <div className="mt-0.5 text-xs">
+          <div className="mt-1 text-xs">
             <a href={`tel:${person.phone}`} className="text-gray-500 underline">{person.phone}</a>
           </div>
         )}
