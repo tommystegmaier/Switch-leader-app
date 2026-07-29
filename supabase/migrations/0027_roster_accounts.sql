@@ -30,6 +30,29 @@ end; $$;
 revoke all on function public.set_my_roster_photo(uuid, text) from public;
 grant execute on function public.set_my_roster_photo(uuid, text) to authenticated;
 
+-- Members a manager can pick when adding to the roster — includes the phone
+-- number they entered at sign-up, so it auto-fills into their roster info.
+create or replace function public.roster_account_options(p_org uuid)
+returns table (user_id uuid, name text, email text, phone text)
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.has_org_role(p_org, array['owner','admin','editor']) then
+    raise exception 'only a manager can view members';
+  end if;
+  return query
+  select m.user_id,
+         nullif(trim(coalesce(u.raw_user_meta_data->>'full_name', u.raw_user_meta_data->>'name','')),''),
+         u.email::text,
+         nullif(trim(coalesce(u.raw_user_meta_data->>'phone','')),'')
+  from public.memberships m
+  join auth.users u on u.id = m.user_id
+  where m.org_id = p_org
+  order by 2 nulls last, 3;
+end; $$;
+
+revoke all on function public.roster_account_options(uuid) from public;
+grant execute on function public.roster_account_options(uuid) to authenticated;
+
 -- Let any org member upload into their org's media folder (self-photos).
 -- The editor-only media_write policy still governs update/delete; this only
 -- adds INSERT for members (RLS policies are OR-ed).

@@ -3,13 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
-import { useScheduleMembers } from '@/data/scheduleHooks';
 import { errorMessage } from '@/lib/errors';
 import { uploadMedia } from '@/lib/media';
 import {
   useAddRosterPerson, useCreateRosterGroup, useDeleteRosterGroup, useDeleteRosterPerson,
   useRenameRosterGroup, useReorderRosterGroups, useReorderRosterPeople, useRosterGroups,
-  useRosterPeople, useSetMyRosterPhoto, useUpdateRosterPerson,
+  useRosterAccountOptions, useRosterPeople, useSetMyRosterPhoto, useUpdateRosterPerson,
   type PersonInput, type RosterGroup, type RosterPerson,
 } from '@/data/rosterHooks';
 import type { ViewerCtx } from '../actions';
@@ -219,10 +218,11 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds }: { orgId: 
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{person.name}{mine && <span className="text-gray-400"> (you)</span>}</p>
         {person.role && <p className="truncate text-sm text-gray-500">{person.role}</p>}
-        <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-          {person.email && <a href={`mailto:${person.email}`} className="text-gray-500 underline">{person.email}</a>}
-          {person.phone && <a href={`tel:${person.phone}`} className="text-gray-500 underline">{person.phone}</a>}
-        </div>
+        {person.phone && (
+          <div className="mt-0.5 text-xs">
+            <a href={`tel:${person.phone}`} className="text-gray-500 underline">{person.phone}</a>
+          </div>
+        )}
       </div>
       {manage ? (
         <div className="flex shrink-0 items-center gap-1">
@@ -271,10 +271,9 @@ function MyPhotoButton({ orgId, person }: { orgId: string; person: RosterPerson 
 function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?: RosterPerson; groupId?: string; onDone: () => void }) {
   const add = useAddRosterPerson(orgId);
   const update = useUpdateRosterPerson(orgId);
-  const { data: members } = useScheduleMembers(orgId, true);
+  const { data: members } = useRosterAccountOptions(orgId, true);
   const [name, setName] = useState(person?.name ?? '');
   const [role, setRole] = useState(person?.role ?? '');
-  const [email, setEmail] = useState(person?.email ?? '');
   const [phone, setPhone] = useState(person?.phone ?? '');
   const [photoUrl, setPhotoUrl] = useState<string | null>(person?.photoUrl ?? null);
   const [userId, setUserId] = useState<string | null>(person?.userId ?? null);
@@ -286,7 +285,7 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
     if (!id) { setUserId(null); return; }
     const m = (members ?? []).find((x) => x.userId === id);
     setUserId(id);
-    if (m) { setName(m.name || m.email); setEmail(m.email); }
+    if (m) { setName(m.name || m.email); if (m.phone) setPhone(m.phone); }
   }
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -301,7 +300,7 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
   async function save() {
     if (!name.trim()) { setError('Please enter a name.'); return; }
     setError(null);
-    const payload: PersonInput = { name, role, email, phone, photoUrl, userId };
+    const payload: PersonInput = { name, role, phone, photoUrl, userId };
     try {
       if (person) await update.mutateAsync({ id: person.id, person: payload });
       else if (groupId) await add.mutateAsync({ groupId, person: payload });
@@ -330,13 +329,12 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
             <option value="">Not linked — manual entry</option>
             {members.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
           </select>
-          <span className="text-xs text-gray-500">Linked people can update their own photo from the roster.</span>
+          <span className="text-xs text-gray-500">Pulls in their name and sign-up phone; they can update their own photo from the roster.</span>
         </label>
       )}
       <div className="mt-3 flex flex-col gap-2">
         <input className={input} placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <input className={input} placeholder="Role / title (optional)" value={role} onChange={(e) => setRole(e.target.value)} />
-        <input className={input} type="email" placeholder="Email (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
         <input className={input} type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}

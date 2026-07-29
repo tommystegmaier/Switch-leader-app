@@ -52,6 +52,23 @@ export function useRosterPeople(orgId: string | undefined) {
   });
 }
 
+export interface RosterAccountOption { userId: string; name: string | null; email: string; phone: string | null }
+
+/** App members a manager can pick from (with their sign-up phone). Manager-only. */
+export function useRosterAccountOptions(orgId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: KEY(orgId, 'account-options'),
+    enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<RosterAccountOption[]> => {
+      const s = getSupabase(); if (!s || !orgId) return [];
+      const { data, error } = await s.rpc('roster_account_options', { p_org: orgId });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ userId: r.user_id, name: r.name ?? null, email: r.email, phone: r.phone ?? null }));
+    },
+  });
+}
+
 function invalidate(qc: ReturnType<typeof useQueryClient>, orgId: string, ...suffixes: string[]) {
   for (const s of suffixes) qc.invalidateQueries({ queryKey: KEY(orgId, s) });
 }
