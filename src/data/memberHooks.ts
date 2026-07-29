@@ -9,6 +9,8 @@ export interface OrgMember {
   name: string | null;
   role: Role;
   joinedAt: string | null;
+  birthday: string | null;
+  phone: string | null;
 }
 
 /** List members (email + role) of a workspace. Owner/admin only, per RPC. */
@@ -28,6 +30,8 @@ export function useOrgMembers(orgId: string | undefined, enabled: boolean) {
         name: r.name ?? null,
         role: r.role,
         joinedAt: r.created_at ?? null,
+        birthday: r.birthday ?? null,
+        phone: r.phone ?? null,
       }));
     },
   });
@@ -43,6 +47,28 @@ export function useSetMemberRole(orgId: string) {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['org', orgId, 'members'] }),
+  });
+}
+
+export interface MemberProfileInput { name: string; birthday: string; phone: string }
+
+/** Owner/admin fixes a member's name / birthday / phone. */
+export function useUpdateMemberProfile(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, profile }: { userId: string; profile: MemberProfileInput }) => {
+      const s = getSupabase();
+      if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('admin_update_member', {
+        p_org: orgId, p_user: userId,
+        p_name: profile.name, p_birthday: profile.birthday, p_phone: profile.phone,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['org', orgId, 'members'] });
+      qc.invalidateQueries({ queryKey: ['schedule', orgId, 'birthdays'] });
+    },
   });
 }
 

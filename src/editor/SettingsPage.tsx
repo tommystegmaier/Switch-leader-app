@@ -12,7 +12,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useInvites, useCreateInvite, useRevokeInvite } from '@/data/inviteHooks';
-import { useOrgMembers, useSetMemberRole, useRemoveMember } from '@/data/memberHooks';
+import { useOrgMembers, useSetMemberRole, useRemoveMember, useUpdateMemberProfile, type OrgMember } from '@/data/memberHooks';
 import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import { useLiveAppSettings } from '@/data/liveContent';
@@ -304,6 +304,7 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
   const [inviteEmail, setInviteEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<string | null>(null);
   const isOwner = currentRole === 'owner';
 
   const joinLinkFor = (code: string) => `${window.location.origin}/join?code=${code}`;
@@ -345,35 +346,47 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
           {(members ?? []).map((m) => {
             const isSelf = m.userId === user?.id;
             return (
-              <li key={m.userId} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="font-medium">
-                    {m.name || m.email}{isSelf && <span className="font-normal text-gray-400"> (you)</span>}
+              <li key={m.userId} className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium">
+                      {m.name || m.email}{isSelf && <span className="font-normal text-gray-400"> (you)</span>}
+                    </span>
+                    {m.name && <span className="block truncate text-xs text-gray-500">{m.email}</span>}
                   </span>
-                  {m.name && <span className="block truncate text-xs text-gray-500">{m.email}</span>}
-                </span>
-                <div className="flex items-center gap-2">
-                  <select
-                    className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-60"
-                    value={m.role}
-                    disabled={isSelf || (m.role === 'owner' && !isOwner)}
-                    onChange={(e) => run(() => setRole.mutateAsync({ userId: m.userId, role: e.target.value as Role }))}
-                  >
-                    <option value="owner">Owner</option>
-                    <option value="admin">Admin</option>
-                    <option value="editor">Editor</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
-                  {!isSelf && (
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-60"
+                      value={m.role}
+                      disabled={isSelf || (m.role === 'owner' && !isOwner)}
+                      onChange={(e) => run(() => setRole.mutateAsync({ userId: m.userId, role: e.target.value as Role }))}
+                    >
+                      <option value="owner">Owner</option>
+                      <option value="admin">Admin</option>
+                      <option value="editor">Editor</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
                     <button
                       type="button"
-                      className="rounded border border-gray-300 px-2 py-1 text-xs text-red-600 hover:bg-black/5"
-                      onClick={() => run(() => removeMember.mutateAsync(m.userId))}
+                      className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-black/5"
+                      onClick={() => setEditingMember((id) => (id === m.userId ? null : m.userId))}
                     >
-                      Remove
+                      {editingMember === m.userId ? 'Close' : 'Edit info'}
                     </button>
-                  )}
+                    {!isSelf && (
+                      <button
+                        type="button"
+                        className="rounded border border-gray-300 px-2 py-1 text-xs text-red-600 hover:bg-black/5"
+                        onClick={() => run(() => removeMember.mutateAsync(m.userId))}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {editingMember === m.userId && (
+                  <MemberEditor orgId={orgId} member={m} onDone={() => setEditingMember(null)} />
+                )}
               </li>
             );
           })}
@@ -442,6 +455,46 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
 }
 
 const input = 'w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus-visible:ring-2';
+
+/** Owner/admin fixes a member's name / birthday / phone (email stays their login). */
+function MemberEditor({ orgId, member, onDone }: { orgId: string; member: OrgMember; onDone: () => void }) {
+  const update = useUpdateMemberProfile(orgId);
+  const [name, setName] = useState(member.name ?? '');
+  const [birthday, setBirthday] = useState(member.birthday ?? '');
+  const [phone, setPhone] = useState(member.phone ?? '');
+  const [err, setErr] = useState<string | null>(null);
+  const field = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm';
+
+  async function save() {
+    setErr(null);
+    try { await update.mutateAsync({ userId: member.userId, profile: { name, birthday, phone } }); onDone(); }
+    catch (e) { setErr(errorMessage(e)); }
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 p-3" style={{ backgroundColor: 'rgba(0,0,0,0.02)' }}>
+      <p className="mb-2 text-xs text-gray-500">Fix this person&apos;s details. Their email ({member.email}) is their login and can&apos;t be changed here.</p>
+      <div className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1 text-xs font-medium">Name
+          <input className={field} value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium">Birthday
+          <input type="date" className={field} value={birthday} onChange={(e) => setBirthday(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium">Phone
+          <input type="tel" className={field} value={phone} onChange={(e) => setPhone(e.target.value)} />
+        </label>
+      </div>
+      {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+      <div className="mt-2 flex gap-2">
+        <button type="button" onClick={save} disabled={update.isPending} className="rounded-full px-4 py-2 text-xs font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+          {update.isPending ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" onClick={onDone} className="rounded-full px-4 py-2 text-xs">Cancel</button>
+      </div>
+    </div>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
