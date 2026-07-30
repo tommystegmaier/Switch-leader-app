@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 
 import type { Block, Role, VisibilityRule } from '@/types';
 import type { ViewerCtx } from './actions';
@@ -33,15 +33,45 @@ export function blockFlexStyle(block: Block): CSSProperties {
  */
 export function BlockView({ block, ctx }: { block: Block; ctx: ViewerCtx }) {
   const def = getBlockDef(block.type);
-  if (!def) {
-    return (
-      <div className="rounded-md border border-dashed border-gray-300 p-3 text-sm text-gray-500">
-        Unknown block type "{block.type}".
-      </div>
-    );
-  }
+  if (!def) return <StaleBlockNotice />;
   const Viewer = def.Viewer;
   return <Viewer props={block.props as never} ctx={{ ...ctx, blockId: block.id }} />;
+}
+
+/**
+ * An unrecognized block type almost always means this browser is running an
+ * older cached build (e.g. a desktop tab left open before a new block shipped).
+ * Instead of a dead "unknown block" message, pull the newest version and reload
+ * once (guarded so it can't loop); if that doesn't resolve it, offer a button.
+ */
+function StaleBlockNotice() {
+  useEffect(() => {
+    if (sessionStorage.getItem('th-stale-reloaded')) return;
+    sessionStorage.setItem('th-stale-reloaded', '1');
+    const reload = () => window.location.reload();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration()
+        .then((reg) => (reg ? reg.update().catch(() => {}) : undefined))
+        .finally(reload);
+    } else {
+      reload();
+    }
+  }, []);
+
+  return (
+    <div className="rounded-xl border p-4 text-center text-sm text-gray-600" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+      <p className="font-medium" style={{ color: 'var(--th-heading)' }}>Updating to the latest version…</p>
+      <p className="mt-1 text-gray-500">If this doesn&apos;t refresh on its own, tap below.</p>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="mt-3 rounded-full px-5 py-2 text-sm font-semibold"
+        style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+      >
+        Refresh
+      </button>
+    </div>
+  );
 }
 
 /**

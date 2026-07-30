@@ -43,6 +43,10 @@ if ('serviceWorker' in navigator) {
       const check = () => { if (document.visibilityState === 'visible') void reg.update(); };
       document.addEventListener('visibilitychange', check);
       window.addEventListener('focus', check);
+      // Check right away, then poll — so even a tab that stays open for hours
+      // (a desktop browser left on the page) picks up new deploys on its own.
+      check();
+      setInterval(check, 60_000);
     })
     .catch(() => { /* no SW (e.g. dev) — ignore */ });
 }
