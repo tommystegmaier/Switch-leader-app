@@ -322,10 +322,9 @@ function MemberPicker({ members, value, onPick }: { members: RosterAccountOption
   }
 
   const q = query.trim().toLowerCase();
-  const results = (q
+  const results = q
     ? members.filter((m) => (m.name || '').toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
-    : members
-  ).slice(0, 8);
+    : members;
   const open = focused || q.length > 0;
 
   return (
@@ -349,7 +348,6 @@ function MemberPicker({ members, value, onPick }: { members: RosterAccountOption
             </li>
           ))}
           {results.length === 0 && <li className="px-3 py-2 text-xs text-gray-500">No matches.</li>}
-          {!q && members.length > results.length && <li className="px-3 py-1.5 text-xs text-gray-400">Keep typing to narrow {members.length} people…</li>}
         </ul>
       )}
     </div>
