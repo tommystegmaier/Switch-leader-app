@@ -1,0 +1,16 @@
+# Cloudflare Pages response headers.
+#
+# Never let the browser/CDN hold a stale copy of the app "shell" or the service
+# worker — always revalidate against the server so a new deploy is picked up on
+# the next visit. Hashed files under /assets/* are content-addressed and stay
+# long-cached (their names change every build), so this doesn't hurt speed.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+/registerSW.js
+  Cache-Control: public, max-age=0, must-revalidate
+/manifest.webmanifest
+  Cache-Control: public, max-age=0, must-revalidate
