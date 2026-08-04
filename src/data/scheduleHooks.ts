@@ -240,6 +240,22 @@ function invalidate(qc: ReturnType<typeof useQueryClient>, orgId: string, ...suf
   for (const s of suffixes) qc.invalidateQueries({ queryKey: KEY(orgId, s) });
 }
 
+/** Fill the schedule from the Roster: groups→teams, titles→roles, people added. */
+export function useSyncScheduleFromRoster(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<{ teamsCreated: number; peopleAdded: number }> => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { data, error } = await s.rpc('sync_schedule_from_roster', { p_org: orgId });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row: any = Array.isArray(data) ? data[0] : data;
+      return { teamsCreated: row?.teams_created ?? 0, peopleAdded: row?.people_added ?? 0 };
+    },
+    onSuccess: () => invalidate(qc, orgId, 'teams', 'roles', 'roster'),
+  });
+}
+
 export function useCreateTeam(orgId: string) {
   const qc = useQueryClient();
   return useMutation({

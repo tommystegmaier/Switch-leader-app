@@ -19,7 +19,7 @@ import {
   useRemoveSkip, useReorderRoles, useReorderTeams, useRespondOccurrence, useRoster,
   useRosterStatus, useSaveNotifyDefaults, useScheduleMembers, useScheduleMute,
   useScheduleRoles, useScheduleTeams, useServeWeekday, useSetScheduleMute,
-  useSetServeWeekday, useSkips,
+  useSetServeWeekday, useSkips, useSyncScheduleFromRoster,
   type MyOccurrence,
 } from '@/data/scheduleHooks';
 import type { ViewerCtx } from '../actions';
@@ -413,9 +413,19 @@ function TeamsTab({ orgId, editing }: { orgId: string; editing: boolean }) {
   const deleteRole = useDeleteRole(orgId);
   const reorderTeams = useReorderTeams(orgId);
   const reorderRoles = useReorderRoles(orgId);
+  const syncRoster = useSyncScheduleFromRoster(orgId);
   const [newTeam, setNewTeam] = useState('');
   const [roleDraft, setRoleDraft] = useState<Record<string, string>>({});
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const sensors = useDragSensors();
+
+  async function runSync() {
+    setSyncMsg(null);
+    try {
+      const r = await syncRoster.mutateAsync();
+      setSyncMsg(`Synced from Roster — ${r.peopleAdded} added${r.teamsCreated ? `, ${r.teamsCreated} new team(s)` : ''}.`);
+    } catch (e) { setSyncMsg(errorMessage(e)); }
+  }
 
   const teamList = teams ?? [];
 
@@ -437,6 +447,17 @@ function TeamsTab({ orgId, editing }: { orgId: string; editing: boolean }) {
       <div className="flex gap-2">
         <input className={input} placeholder="New team (e.g. Sunday AM)" value={newTeam} onChange={(e) => setNewTeam(e.target.value)} />
         <button type="button" disabled={!newTeam.trim() || createTeam.isPending} onClick={async () => { await createTeam.mutateAsync(newTeam); setNewTeam(''); }} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>+ Team</button>
+      </div>
+
+      <div className="rounded-lg border p-3" style={cardStyle}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium">Fill from the Roster</span>
+          <button type="button" onClick={runSync} disabled={syncRoster.isPending} className="rounded-full border px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>
+            {syncRoster.isPending ? 'Syncing…' : '⟳ Sync from Roster'}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">Turns each Roster group into a team and adds everyone with an account (their title becomes their role). It only adds — it won&apos;t remove anyone you scheduled by hand.</p>
+        {syncMsg && <p className="mt-2 text-xs text-green-700">{syncMsg}</p>}
       </div>
       <p className="text-xs text-gray-500">{editing ? 'Hold the ⠿ grip and drag to reorder, or use ▲▼.' : 'Use ▲▼ to reorder (drag is available in Edit mode).'}</p>
       <SortableGroup enabled={editing} items={teamList.map((t) => t.id)} sensors={sensors} onDragEnd={onTeamDrag}>
