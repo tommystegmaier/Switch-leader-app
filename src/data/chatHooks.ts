@@ -9,7 +9,7 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
  * without the extra moving parts of a realtime socket.
  */
 
-export interface ChatChannel { groupId: string; name: string; parentId: string | null; sort: number; unread: number }
+export interface ChatChannel { groupId: string; name: string; parentId: string | null; parentName: string | null; sort: number; unread: number }
 export interface ChatMessage { id: string; groupId: string; userId: string; authorName: string | null; body: string | null; imageUrl: string | null; createdAt: string }
 export interface ChatReaction { messageId: string; userId: string; emoji: string }
 
@@ -26,7 +26,7 @@ export function useChatChannels(orgId: string | undefined, enabled = true) {
       const { data, error } = await s.rpc('my_chat_groups', { p_org: orgId });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ groupId: r.group_id, name: r.name, parentId: r.parent_id ?? null, sort: r.sort, unread: r.unread ?? 0 }));
+      return (data ?? []).map((r: any) => ({ groupId: r.group_id, name: r.name, parentId: r.parent_id ?? null, parentName: r.parent_name ?? null, sort: r.sort, unread: r.unread ?? 0 }));
     },
   });
 }

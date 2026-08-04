@@ -65,13 +65,23 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
   const [active, setActive] = useState<string | null>(null);
   const markRead = useMarkChatRead(orgId);
 
-  // Default to the first channel with unread, else the first channel.
+  // Land on the subgroup they're in first (prefer an unread one), falling back
+  // to any subgroup, then any unread channel, then the first channel.
   useEffect(() => {
     if (active || !channels || channels.length === 0) return;
-    setActive((channels.find((c) => c.unread > 0) ?? channels[0]).groupId);
+    const pick =
+      channels.find((c) => c.parentId && c.unread > 0) ??
+      channels.find((c) => c.parentId) ??
+      channels.find((c) => c.unread > 0) ??
+      channels[0];
+    setActive(pick.groupId);
   }, [channels, active]);
 
   const list = channels ?? [];
+  const activeCh = list.find((c) => c.groupId === active);
+  // Show the larger (parent) group in the header; fall back to the channel's
+  // own name (top-level groups) or the block title.
+  const headerName = activeCh?.parentName || activeCh?.name || title;
   if (list.length === 0) {
     return (
       <div className={`${card} p-4`} style={cardStyle}>
@@ -84,7 +94,7 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
   return (
     <div className={`${card} flex flex-col`} style={{ ...cardStyle, height: 'min(70vh, 640px)' }}>
       <div className="flex items-center gap-2 border-b px-4 py-3" style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {title}</p>
+        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {headerName}</p>
       </div>
 
       {/* Channel tabs */}
