@@ -4,8 +4,8 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import {
-  useChatChannels, useChatMessages, useChatMutes, useChatReactions, useMarkChatRead,
-  useSendChatMessage, useSetChatMute, useToggleReaction,
+  useChatChannels, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useMarkChatRead,
+  useSendChatMessage, useSetChatMute, useToggleReaction, useVoteChatPoll,
   type ChatMessage,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
@@ -137,20 +137,39 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
   );
 }
 
+interface PollTally { counts: Record<number, number>; total: number; mine: number | null }
+
 function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; onSeen: () => void }) {
   const { data: messages } = useChatMessages(orgId, groupId);
   const { data: reactions } = useChatReactions(orgId, groupId);
+  const { data: pollVotes } = useChatPollVotes(orgId, groupId);
   const send = useSendChatMessage(orgId);
   const toggle = useToggleReaction(orgId);
+  const vote = useVoteChatPoll(orgId);
 
   const [text, setText] = useState('');
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [gifOpen, setGifOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const msgs = useMemo(() => messages ?? [], [messages]);
+
+  // Poll votes grouped by message → { counts per option, total, my choice }.
+  const pollByMessage = useMemo(() => {
+    const map = new Map<string, PollTally>();
+    for (const v of pollVotes ?? []) {
+      const cur = map.get(v.messageId) ?? { counts: {}, total: 0, mine: null };
+      cur.counts[v.optionIndex] = (cur.counts[v.optionIndex] ?? 0) + 1;
+      cur.total += 1;
+      if (v.userId === userId) cur.mine = v.optionIndex;
+      map.set(v.messageId, cur);
+    }
+    return map;
+  }, [pollVotes, userId]);
 
   // Mark read + scroll to bottom whenever the message set changes.
   useEffect(() => {
@@ -199,6 +218,18 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
     setReactingId(null);
   }
 
+  async function postPoll(question: string, options: string[]) {
+    setError(null);
+    try { await send.mutateAsync({ groupId, userId, authorName, body: question, poll: { options } }); setPollOpen(false); }
+    catch (e) { setError(errorMessage(e)); }
+  }
+
+  async function sendGif(url: string) {
+    setError(null);
+    try { await send.mutateAsync({ groupId, userId, authorName, imageUrl: url }); setGifOpen(false); }
+    catch (e) { setError(errorMessage(e)); }
+  }
+
   return (
     <>
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
@@ -209,6 +240,8 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
             m={m}
             mine={m.userId === userId}
             reactions={byMessage.get(m.id)}
+            poll={m.poll ? pollByMessage.get(m.id) : undefined}
+            onVote={(opt) => vote.mutate({ groupId, messageId: m.id, option: opt })}
             open={reactingId === m.id}
             onToggleBar={() => setReactingId((id) => (id === m.id ? null : m.id))}
             onReact={(emoji, wasMine) => react(m.id, emoji, wasMine)}
@@ -218,8 +251,10 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
 
       {error && <p className="px-4 text-xs text-red-600">{error}</p>}
 
-      <div className="flex items-center gap-2 border-t px-3 py-2" style={cardStyle}>
-        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="shrink-0 rounded-full px-2 py-2 text-lg disabled:opacity-50" aria-label="Send a photo">{uploading ? '⏳' : '📷'}</button>
+      <div className="flex items-center gap-1.5 border-t px-3 py-2" style={cardStyle}>
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="shrink-0 rounded-full px-1.5 py-2 text-lg disabled:opacity-50" aria-label="Send a photo">{uploading ? '⏳' : '📷'}</button>
+        <button type="button" onClick={() => setGifOpen(true)} className="shrink-0 rounded-full px-2 py-1.5 text-xs font-bold" aria-label="Send a GIF" style={{ border: '1px solid var(--th-hairline-strong)', color: 'var(--th-text)' }}>GIF</button>
+        <button type="button" onClick={() => setPollOpen(true)} className="shrink-0 rounded-full px-1.5 py-2 text-lg" aria-label="Create a poll">📊</button>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
         <input
           className="min-w-0 flex-1 rounded-full border border-gray-300 px-4 py-2 text-sm focus:outline-none focus-visible:ring-2"
@@ -230,18 +265,163 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
         />
         <button type="button" onClick={() => void onSend()} disabled={!text.trim() || send.isPending} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Send</button>
       </div>
+
+      {pollOpen && <PollComposer busy={send.isPending} onCancel={() => setPollOpen(false)} onPost={postPoll} />}
+      {gifOpen && <GifPicker onCancel={() => setGifOpen(false)} onPick={sendGif} />}
     </>
   );
 }
 
-function MessageRow({ m, mine, reactions, open, onToggleBar, onReact }: {
+/** Compose a poll: a question and 2–6 options. */
+function PollComposer({ busy, onCancel, onPost }: { busy: boolean; onCancel: () => void; onPost: (question: string, options: string[]) => void }) {
+  const [question, setQuestion] = useState('');
+  const [options, setOptions] = useState<string[]>(['', '']);
+  const clean = options.map((o) => o.trim()).filter(Boolean);
+  const canPost = question.trim().length > 0 && clean.length >= 2;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl">
+        <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>New poll</h3>
+        <input
+          autoFocus
+          className="mt-3 w-full rounded-lg border px-3 py-2.5 text-base"
+          style={{ borderColor: 'var(--th-hairline-strong)' }}
+          placeholder="Ask a question…"
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+        />
+        <div className="mt-3 flex flex-col gap-2">
+          {options.map((o, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
+                style={{ borderColor: 'var(--th-hairline-strong)' }}
+                placeholder={`Option ${i + 1}`}
+                value={o}
+                onChange={(e) => setOptions((prev) => prev.map((x, idx) => (idx === i ? e.target.value : x)))}
+              />
+              {options.length > 2 && (
+                <button type="button" onClick={() => setOptions((prev) => prev.filter((_, idx) => idx !== i))} className="shrink-0 text-gray-400" aria-label="Remove option">✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+        {options.length < 6 && (
+          <button type="button" onClick={() => setOptions((prev) => [...prev, ''])} className="mt-2 text-sm underline" style={{ color: 'var(--th-text)' }}>+ Add option</button>
+        )}
+        <div className="mt-4 flex gap-2">
+          <button type="button" disabled={!canPost || busy} onClick={() => onPost(question.trim(), clean)} className="rounded-full px-5 py-2.5 text-sm font-semibold disabled:opacity-40" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+            {busy ? 'Posting…' : 'Post poll'}
+          </button>
+          <button type="button" onClick={onCancel} className="rounded-full px-5 py-2.5 text-sm">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface Gif { id: string; preview: string | null; url: string }
+
+/** Search GIPHY (via /api/gif-search) and tap a GIF to send it. */
+function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: string) => void }) {
+  const [q, setQ] = useState('');
+  const [gifs, setGifs] = useState<Gif[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [configured, setConfigured] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/gif-search?q=${encodeURIComponent(q)}`);
+        const d = await r.json();
+        if (cancelled) return;
+        setConfigured(d.configured !== false);
+        setGifs(Array.isArray(d.gifs) ? d.gifs : []);
+      } catch { if (!cancelled) setGifs([]); }
+      finally { if (!cancelled) setLoading(false); }
+    }, q ? 350 : 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative z-10 flex max-h-[80vh] w-full max-w-md flex-col rounded-t-2xl bg-white p-4 shadow-xl sm:rounded-2xl">
+        <div className="flex items-center gap-2">
+          <input
+            autoFocus
+            className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm"
+            style={{ borderColor: 'var(--th-hairline-strong)' }}
+            placeholder="Search GIFs…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <button type="button" onClick={onCancel} aria-label="Close" className="rounded-full px-2 text-2xl leading-none text-gray-400 hover:bg-black/5">×</button>
+        </div>
+        <div className="mt-3 flex-1 overflow-y-auto">
+          {loading && <p className="py-6 text-center text-sm text-gray-400">Loading…</p>}
+          {!loading && !configured && <p className="py-6 text-center text-sm text-gray-500">GIF search isn’t set up yet. (Add a GIPHY API key on the server.)</p>}
+          {!loading && configured && gifs.length === 0 && <p className="py-6 text-center text-sm text-gray-400">No GIFs found.</p>}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {gifs.map((g) => (
+              <button key={g.id} type="button" onClick={() => onPick(g.url)} className="overflow-hidden rounded-lg">
+                <img src={g.preview || g.url} alt="" className="h-28 w-full object-cover" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        </div>
+        {configured && <p className="pt-2 text-center text-[0.65rem] text-gray-400">Powered by GIPHY</p>}
+      </div>
+    </div>
+  );
+}
+
+function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onReact }: {
   m: ChatMessage;
   mine: boolean;
   reactions: Map<string, { count: number; mine: boolean }> | undefined;
+  poll: PollTally | undefined;
+  onVote: (option: number) => void;
   open: boolean;
   onToggleBar: () => void;
   onReact: (emoji: string, wasMine: boolean) => void;
 }) {
+  // A poll renders as a tappable, live-tallied card instead of a chat bubble.
+  if (m.poll) {
+    const opts = m.poll.options;
+    const total = poll?.total ?? 0;
+    return (
+      <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+        {!mine && m.authorName && <span className="mb-0.5 px-1 text-xs text-gray-500">{m.authorName}</span>}
+        <div className="w-full max-w-[85%] rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--th-hairline-strong)', backgroundColor: 'var(--th-surface)' }}>
+          <p className="text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>📊 {m.body}</p>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {opts.map((o, i) => {
+              const c = poll?.counts[i] ?? 0;
+              const pct = total ? Math.round((c / total) * 100) : 0;
+              const isMine = poll?.mine === i;
+              return (
+                <button key={i} type="button" onClick={() => onVote(i)} className="relative block w-full overflow-hidden rounded-lg border px-2.5 py-2 text-left" style={{ borderColor: isMine ? 'var(--th-primary)' : 'var(--th-hairline-strong)' }}>
+                  <span className="absolute inset-y-0 left-0" style={{ width: `${pct}%`, backgroundColor: 'color-mix(in srgb, var(--th-primary) 16%, transparent)' }} aria-hidden />
+                  <span className="relative flex items-center justify-between gap-2 text-sm">
+                    <span style={{ color: 'var(--th-text)' }}>{isMine ? '✓ ' : ''}{o}</span>
+                    <span className="tabular-nums text-gray-500">{c} · {pct}%</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[0.65rem] text-gray-400">{total} vote{total === 1 ? '' : 's'} · tap to vote, tap again to remove yours</p>
+        </div>
+        <span className="mt-0.5 px-1 text-[0.65rem] text-gray-400">{fmtTime(m.createdAt)}</span>
+      </div>
+    );
+  }
+
   const pills = reactions ? Array.from(reactions.entries()) : [];
   return (
     <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>

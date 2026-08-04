@@ -10,8 +10,10 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
  */
 
 export interface ChatChannel { groupId: string; name: string; parentId: string | null; parentName: string | null; sort: number; unread: number }
-export interface ChatMessage { id: string; groupId: string; userId: string; authorName: string | null; body: string | null; imageUrl: string | null; createdAt: string }
+export interface ChatPoll { options: string[] }
+export interface ChatMessage { id: string; groupId: string; userId: string; authorName: string | null; body: string | null; imageUrl: string | null; poll: ChatPoll | null; createdAt: string }
 export interface ChatReaction { messageId: string; userId: string; emoji: string }
+export interface ChatPollVote { messageId: string; userId: string; optionIndex: number }
 
 const KEY = (orgId: string | undefined, ...rest: string[]) => ['chat', orgId, ...rest];
 
@@ -39,11 +41,11 @@ export function useChatMessages(orgId: string | undefined, groupId: string | und
     queryFn: async (): Promise<ChatMessage[]> => {
       const s = getSupabase(); if (!s || !groupId) return [];
       const { data, error } = await s.from('chat_messages')
-        .select('id, group_id, user_id, author_name, body, image_url, created_at')
+        .select('id, group_id, user_id, author_name, body, image_url, poll, created_at')
         .eq('group_id', groupId).order('created_at').limit(500);
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, groupId: r.group_id, userId: r.user_id, authorName: r.author_name ?? null, body: r.body ?? null, imageUrl: r.image_url ?? null, createdAt: r.created_at }));
+      return (data ?? []).map((r: any) => ({ id: r.id, groupId: r.group_id, userId: r.user_id, authorName: r.author_name ?? null, body: r.body ?? null, imageUrl: r.image_url ?? null, poll: r.poll && Array.isArray(r.poll.options) ? { options: r.poll.options as string[] } : null, createdAt: r.created_at }));
     },
   });
 }
@@ -67,10 +69,10 @@ export function useChatReactions(orgId: string | undefined, groupId: string | un
 export function useSendChatMessage(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ groupId, userId, authorName, body, imageUrl }: { groupId: string; userId: string; authorName: string | null; body?: string; imageUrl?: string | null }): Promise<string | null> => {
+    mutationFn: async ({ groupId, userId, authorName, body, imageUrl, poll }: { groupId: string; userId: string; authorName: string | null; body?: string; imageUrl?: string | null; poll?: ChatPoll | null }): Promise<string | null> => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
       const { data, error } = await s.from('chat_messages')
-        .insert({ org_id: orgId, group_id: groupId, user_id: userId, author_name: authorName, body: body?.trim() || null, image_url: imageUrl || null })
+        .insert({ org_id: orgId, group_id: groupId, user_id: userId, author_name: authorName, body: body?.trim() || null, image_url: imageUrl || null, poll: poll ?? null })
         .select('id').single();
       if (error) throw error;
       // Best-effort per-group push (don't block the UI on it).
@@ -109,6 +111,36 @@ export function useToggleReaction(orgId: string) {
       }
     },
     onSuccess: (_r, v) => qc.invalidateQueries({ queryKey: KEY(orgId, 'reactions', v.groupId) }),
+  });
+}
+
+/** Live poll votes for a channel (message → who voted for which option). */
+export function useChatPollVotes(orgId: string | undefined, groupId: string | undefined) {
+  return useQuery({
+    queryKey: KEY(orgId, 'pollvotes', groupId ?? ''),
+    enabled: Boolean(orgId) && Boolean(groupId) && isSupabaseConfigured,
+    refetchInterval: 4_000,
+    queryFn: async (): Promise<ChatPollVote[]> => {
+      const s = getSupabase(); if (!s || !groupId) return [];
+      const { data, error } = await s.from('chat_poll_votes')
+        .select('message_id, user_id, option_index').eq('group_id', groupId);
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ messageId: r.message_id, userId: r.user_id, optionIndex: r.option_index }));
+    },
+  });
+}
+
+/** Cast, change, or (tap-again) retract the current user's vote on a poll. */
+export function useVoteChatPoll(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ messageId, option }: { groupId: string; messageId: string; option: number }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('vote_chat_poll', { p_message: messageId, p_option: option });
+      if (error) throw error;
+    },
+    onSuccess: (_r, v) => qc.invalidateQueries({ queryKey: KEY(orgId, 'pollvotes', v.groupId) }),
   });
 }
 
