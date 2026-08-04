@@ -34,6 +34,9 @@ revoke all on function public.can_access_chat_group(uuid) from public;
 grant execute on function public.can_access_chat_group(uuid) to authenticated;
 
 -- Channels the current user can see (now including auto groups they qualify for).
+-- Drop first: this adds the parent_name column, which changes the return type
+-- (safe whether or not migration 0033 was run).
+drop function if exists public.my_chat_groups(uuid);
 create or replace function public.my_chat_groups(p_org uuid)
 returns table (group_id uuid, name text, parent_id uuid, parent_name text, sort int, unread int)
 language plpgsql security definer set search_path = public as $$
