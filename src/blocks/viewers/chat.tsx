@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
@@ -153,8 +153,10 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   const [error, setError] = useState<string | null>(null);
   const [pollOpen, setPollOpen] = useState(false);
   const [gifOpen, setGifOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
   const msgs = useMemo(() => messages ?? [], [messages]);
 
@@ -203,14 +205,16 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   }
 
   async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
+    setAttachOpen(false);
     setUploading(true); setError(null);
     try {
       const m = await uploadMedia(orgId, file);
       await send.mutateAsync({ groupId, userId, authorName, imageUrl: m.url });
     } catch (err) { setError(errorMessage(err)); }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ''; }
+    finally { setUploading(false); input.value = ''; }
   }
 
   function react(messageId: string, emoji: string, mine: boolean) {
@@ -251,19 +255,54 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
 
       {error && <p className="px-4 text-xs text-red-600">{error}</p>}
 
-      <div className="flex items-center gap-1.5 border-t px-3 py-2" style={cardStyle}>
-        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="shrink-0 rounded-full px-1.5 py-2 text-lg disabled:opacity-50" aria-label="Send a photo">{uploading ? '⏳' : '📷'}</button>
-        <button type="button" onClick={() => setGifOpen(true)} className="shrink-0 rounded-full px-2 py-1.5 text-xs font-bold" aria-label="Send a GIF" style={{ border: '1px solid var(--th-hairline-strong)', color: 'var(--th-text)' }}>GIF</button>
-        <button type="button" onClick={() => setPollOpen(true)} className="shrink-0 rounded-full px-1.5 py-2 text-lg" aria-label="Create a poll">📊</button>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
-        <input
-          className="min-w-0 flex-1 rounded-full border border-gray-300 px-4 py-2 text-sm focus:outline-none focus-visible:ring-2"
-          placeholder="Write a message"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
-        />
-        <button type="button" onClick={() => void onSend()} disabled={!text.trim() || send.isPending} className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Send</button>
+      <div className="relative border-t" style={cardStyle}>
+        {/* iMessage-style "+" attachment menu */}
+        {attachOpen && (
+          <>
+            <button type="button" aria-label="Close menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setAttachOpen(false)} />
+            <div className="absolute bottom-full left-2 z-50 mb-2 w-56 overflow-hidden rounded-2xl border shadow-xl" style={{ backgroundColor: 'var(--th-surface)', borderColor: 'var(--th-hairline)' }}>
+              <AttachRow icon={<CameraIcon />} label="Camera" onClick={() => { setAttachOpen(false); cameraRef.current?.click(); }} />
+              <AttachRow icon={<PhotosIcon />} label="Photos" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />
+              <AttachRow icon={<PollsIcon />} label="Polls" onClick={() => { setAttachOpen(false); setPollOpen(true); }} />
+              <AttachRow icon={<GifIcon />} label="GIF" onClick={() => { setAttachOpen(false); setGifOpen(true); }} last />
+            </div>
+          </>
+        )}
+
+        <div className="flex items-center gap-2 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setAttachOpen((v) => !v)}
+            disabled={uploading}
+            aria-label="Add attachment"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-2xl leading-none disabled:opacity-50"
+            style={{ backgroundColor: 'var(--th-hairline)', color: 'var(--th-text)' }}
+          >
+            {uploading ? '⏳' : '+'}
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickPhoto} />
+          <input
+            className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm focus:outline-none focus-visible:ring-2"
+            style={{ borderColor: 'var(--th-hairline-strong)' }}
+            placeholder="Message"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
+          />
+          {text.trim() && (
+            <button
+              type="button"
+              onClick={() => void onSend()}
+              disabled={send.isPending}
+              aria-label="Send"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none disabled:opacity-50"
+              style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+            >
+              ↑
+            </button>
+          )}
+        </div>
       </div>
 
       {pollOpen && <PollComposer busy={send.isPending} onCancel={() => setPollOpen(false)} onPost={postPoll} />}
@@ -271,6 +310,39 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
     </>
   );
 }
+
+/** One row of the iMessage-style "+" attachment menu. */
+function AttachRow({ icon, label, onClick, last }: { icon: ReactNode; label: string; onClick: () => void; last?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-black/5 ${last ? '' : 'border-b'}`}
+      style={last ? undefined : { borderColor: 'var(--th-hairline)' }}
+    >
+      {icon}
+      <span className="text-base font-medium" style={{ color: 'var(--th-text)' }}>{label}</span>
+    </button>
+  );
+}
+
+function IconCircle({ bg, children }: { bg: string; children?: ReactNode }) {
+  return <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: bg }} aria-hidden>{children}</span>;
+}
+const CameraIcon = () => (
+  <IconCircle bg="#6b7280">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z" /><circle cx="12" cy="13" r="3.2" /></svg>
+  </IconCircle>
+);
+const PhotosIcon = () => <IconCircle bg="conic-gradient(from 210deg, #f94144, #f9c74f, #90be6d, #43aa8b, #577590, #f94144)" />;
+const PollsIcon = () => (
+  <IconCircle bg="#f59e0b">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><rect x="4" y="6" width="12" height="3" rx="1.5" /><rect x="4" y="11" width="16" height="3" rx="1.5" /><rect x="4" y="16" width="9" height="3" rx="1.5" /></svg>
+  </IconCircle>
+);
+const GifIcon = () => (
+  <IconCircle bg="#111827"><span className="text-[0.6rem] font-bold text-white">GIF</span></IconCircle>
+);
 
 /** Compose a poll: a question and 2–6 options. */
 function PollComposer({ busy, onCancel, onPost }: { busy: boolean; onCancel: () => void; onPost: (question: string, options: string[]) => void }) {
@@ -348,12 +420,15 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
   }, [q]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative z-10 flex max-h-[80vh] w-full max-w-md flex-col rounded-t-2xl bg-white p-4 shadow-xl sm:rounded-2xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div
+        className="relative z-10 flex w-full max-w-md flex-col rounded-t-2xl bg-white p-4 shadow-xl"
+        style={{ maxHeight: '58vh', paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
+      >
+        <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full" style={{ backgroundColor: 'var(--th-hairline-strong)' }} aria-hidden />
         <div className="flex items-center gap-2">
           <input
-            autoFocus
             className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm"
             style={{ borderColor: 'var(--th-hairline-strong)' }}
             placeholder="Search GIFs…"
