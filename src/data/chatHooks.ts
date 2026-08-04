@@ -129,6 +129,41 @@ export function useMarkChatRead(orgId: string) {
   });
 }
 
+/** The channel ids the current user has muted (no push for new messages). */
+export function useChatMutes(orgId: string | undefined) {
+  return useQuery({
+    queryKey: KEY(orgId, 'mutes'),
+    enabled: Boolean(orgId) && isSupabaseConfigured,
+    queryFn: async (): Promise<string[]> => {
+      const s = getSupabase(); if (!s || !orgId) return [];
+      const { data, error } = await s.from('chat_mutes').select('group_id').eq('org_id', orgId);
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => r.group_id);
+    },
+  });
+}
+
+export function useSetChatMute(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ groupId, muted }: { groupId: string; muted: boolean }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { data: sess } = await s.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) throw new Error('Please sign in again.');
+      if (muted) {
+        const { error } = await s.from('chat_mutes').upsert({ org_id: orgId, group_id: groupId, user_id: uid });
+        if (error) throw error;
+      } else {
+        const { error } = await s.from('chat_mutes').delete().eq('group_id', groupId).eq('user_id', uid);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'mutes') }),
+  });
+}
+
 /** Total unread across the user's channels — drives the bottom-bar badge. */
 export function useChatUnreadTotal(orgId: string | undefined, enabled = true) {
   return useQuery({

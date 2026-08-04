@@ -4,8 +4,8 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import {
-  useChatChannels, useChatMessages, useChatReactions, useMarkChatRead,
-  useSendChatMessage, useToggleReaction,
+  useChatChannels, useChatMessages, useChatMutes, useChatReactions, useMarkChatRead,
+  useSendChatMessage, useSetChatMute, useToggleReaction,
   type ChatMessage,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
@@ -62,8 +62,11 @@ function displayName(user: any): string {
 
 function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title: string; userId: string; authorName: string }) {
   const { data: channels } = useChatChannels(orgId);
+  const { data: mutes } = useChatMutes(orgId);
+  const setMute = useSetChatMute(orgId);
   const [active, setActive] = useState<string | null>(null);
   const markRead = useMarkChatRead(orgId);
+  const mutedSet = new Set(mutes ?? []);
 
   // Land on the subgroup they're in first (prefer an unread one), falling back
   // to any subgroup, then any unread channel, then the first channel.
@@ -94,7 +97,18 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
   return (
     <div className={`${card} flex flex-col`} style={{ ...cardStyle, height: 'min(70vh, 640px)' }}>
       <div className="flex items-center gap-2 border-b px-4 py-3" style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {headerName}</p>
+        <p className="min-w-0 flex-1 truncate font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {headerName}</p>
+        {active && (
+          <button
+            type="button"
+            onClick={() => setMute.mutate({ groupId: active, muted: !mutedSet.has(active) })}
+            className="shrink-0 rounded-full px-2 py-1 text-lg"
+            title={mutedSet.has(active) ? 'Notifications off for this channel — tap to turn on' : 'Notifications on for this channel — tap to mute'}
+            aria-label="Toggle notifications for this channel"
+          >
+            {mutedSet.has(active) ? '🔕' : '🔔'}
+          </button>
+        )}
       </div>
 
       {/* Channel tabs */}

@@ -53,12 +53,20 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     return json({ error: 'Message not found.' }, 403);
   }
 
-  const { data: grp } = await admin.from('roster_groups').select('name').eq('id', groupId).maybeSingle();
+  const { data: grp } = await admin.from('roster_groups').select('name, auto_role').eq('id', groupId).maybeSingle();
   const groupName = (grp?.name as string) || 'Group chat';
 
-  // Recipients = people assigned to this roster group, minus the sender.
-  const { data: people } = await admin.from('roster_people').select('user_id').eq('group_id', groupId).not('user_id', 'is', null);
-  const recipientIds = [...new Set((people ?? []).map((p: { user_id: string }) => p.user_id))].filter((id) => id && id !== senderId);
+  // Recipients: an auto group (e.g. Coaches) = everyone in the org with that
+  // title; a normal group = its assigned people. Minus the sender and anyone
+  // who muted this channel.
+  const peopleQuery = grp?.auto_role
+    ? admin.from('roster_people').select('user_id').eq('org_id', orgId).eq('role', grp.auto_role).not('user_id', 'is', null)
+    : admin.from('roster_people').select('user_id').eq('group_id', groupId).not('user_id', 'is', null);
+  const { data: people } = await peopleQuery;
+  const { data: muted } = await admin.from('chat_mutes').select('user_id').eq('group_id', groupId);
+  const mutedSet = new Set((muted ?? []).map((m: { user_id: string }) => m.user_id));
+  const recipientIds = [...new Set((people ?? []).map((p: { user_id: string }) => p.user_id))]
+    .filter((id) => id && id !== senderId && !mutedSet.has(id));
   if (recipientIds.length === 0) return json({ sent: 0, total: 0 });
 
   const { data: subs } = await admin
