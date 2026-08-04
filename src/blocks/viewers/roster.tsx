@@ -168,9 +168,17 @@ function PersonModal({ person, onClose }: { person: RosterPerson; onClose: () =>
         <p className="mt-4 text-xl font-bold" style={{ color: 'var(--th-heading)' }}>{person.name}</p>
         {person.role && <div className="mt-1 flex justify-center"><RoleTag role={person.role} /></div>}
         {person.phone && (
-          <a href={`sms:${person.phone}`} className="mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--th-hairline-strong)' }}>
-            💬 {person.phone}
-          </a>
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <p className="text-sm text-gray-500">{person.phone}</p>
+            <div className="flex justify-center gap-2">
+              <a href={`tel:${person.phone}`} className="inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--th-hairline-strong)' }}>
+                📞 Call
+              </a>
+              <a href={`sms:${person.phone}`} className="inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--th-hairline-strong)' }}>
+                💬 Text
+              </a>
+            </div>
+          </div>
         )}
       </div>
     </div>
