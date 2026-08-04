@@ -515,7 +515,7 @@ function GroupControls({ orgId, group, index, total, groupIds, onDark }: { orgId
   if (editing) {
     return (
       <div className="flex shrink-0 items-center gap-1">
-        <input autoFocus className="w-32 rounded-md border border-gray-300 px-2 py-1 text-sm" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { rename.mutate({ id: group.id, name }); setEditing(false); } }} />
+        <input autoFocus className="w-32 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) { rename.mutate({ id: group.id, name }); setEditing(false); } }} />
         <button type="button" onClick={() => { if (name.trim()) { rename.mutate({ id: group.id, name }); setEditing(false); } }} className="rounded-full px-2 py-1 text-xs font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Save</button>
         <button type="button" onClick={() => { setEditing(false); setName(group.name); }} className="px-1 text-xs" style={onDark ? { color: '#fff' } : undefined}>✕</button>
       </div>
