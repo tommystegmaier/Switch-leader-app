@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 
-import { enablePush, pushConfigured, pushPermission, pushSupported } from '@/lib/push';
+import { enablePush, ensurePushSubscribed, pushConfigured, pushPermission, pushSupported } from '@/lib/push';
 
 /**
- * Prompt that appears when the app is opened from the Home Screen (installed /
- * standalone) and notifications haven't been enabled yet. Works on Android and
- * iOS — and on iOS this is the only place push can be enabled, since Apple only
- * allows it for the installed app. Shows once permission is still "default".
+ * Nudge to turn on notifications. Shows on EVERY app open until notifications
+ * are actually on (permission granted + subscribed), then never again. Covers
+ * people who tapped "Not now" before or previously blocked it.
+ *
+ * On iOS push only works inside the installed (Home Screen) app, so there we
+ * wait until it's launched standalone (the InstallPrompt handles the install
+ * nudge). On Android/desktop it can be enabled straight from the browser.
  */
 function isStandalone(): boolean {
   return (
@@ -14,20 +17,32 @@ function isStandalone(): boolean {
     (window.navigator as unknown as { standalone?: boolean }).standalone === true
   );
 }
+function isIOS(): boolean {
+  return /iphone|ipad|ipod/i.test(window.navigator.userAgent || '');
+}
 
 export function NotificationPrompt({ appName, orgId }: { appName: string; orgId: string }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     if (!pushSupported() || !pushConfigured()) return;
-    if (!isStandalone()) return; // only inside the installed (Home Screen) app
-    if (pushPermission() !== 'default') return; // already granted or denied
-    // Small delay so it doesn't fight the first paint.
+    // iOS: notifications only work once added to the Home Screen.
+    if (isIOS() && !isStandalone()) return;
+
+    const perm = pushPermission();
+    if (perm === 'granted') {
+      // Already on — make sure this device is subscribed (keeps the tag right)
+      // and never show the prompt.
+      void ensurePushSubscribed(orgId);
+      return;
+    }
+    setBlocked(perm === 'denied');
     const t = setTimeout(() => setShow(true), 800);
     return () => clearTimeout(t);
-  }, []);
+  }, [orgId]);
 
   if (!show) return null;
 
@@ -38,7 +53,9 @@ export function NotificationPrompt({ appName, orgId }: { appName: string; orgId:
           <div>
             <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>🔔 Turn on notifications</p>
             <p className="mt-1 text-sm text-gray-600">
-              Get updates from {appName} right on your phone.
+              {blocked
+                ? `Notifications are blocked right now. Turn them on in your device/browser settings to get updates and group messages from ${appName}.`
+                : `Get updates and group messages from ${appName} right on your phone.`}
             </p>
           </div>
           <button type="button" onClick={() => setShow(false)} aria-label="Not now" className="rounded-full px-2 text-xl leading-none text-gray-400 hover:bg-black/5">×</button>

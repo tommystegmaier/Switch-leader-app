@@ -90,6 +90,21 @@ export async function enablePush(orgId: string): Promise<void> {
   }
 }
 
+/**
+ * If permission is already granted but this device has no active subscription
+ * saved, subscribe now. Keeps the owner's "notifications on" tag accurate and
+ * covers a device that granted permission on a past visit. Best-effort.
+ */
+export async function ensurePushSubscribed(orgId: string): Promise<void> {
+  if (!pushSupported() || !pushConfigured()) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (!existing) await enablePush(orgId);
+  } catch { /* best-effort */ }
+}
+
 /** Unsubscribe this device and remove its stored subscription. */
 export async function disablePush(): Promise<void> {
   if (!pushSupported()) return;
