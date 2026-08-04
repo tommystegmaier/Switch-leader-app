@@ -96,16 +96,30 @@ export function FormView({ props, ctx }: { props: FormProps; ctx: ViewerCtx }) {
     }
   }
 
+  // Once-per-user and already submitted: the form vanishes completely for the
+  // person who submitted — as if it were never on the page. Owners/admins keep
+  // a small, quiet link so they can still open what's been collected.
+  if (alreadySubmitted) {
+    if (!isAdmin || !org || !ctx.blockId) return <></>;
+    return (
+      <div className="rounded-xl border p-3 text-sm" style={hairline}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-gray-500">“{props.title}” is hidden after submitting (visible to admins only).</span>
+          <button type="button" onClick={() => setShowResponses(true)} className="shrink-0 font-semibold underline" style={{ color: 'var(--th-text)' }}>
+            View responses ({count})
+          </button>
+        </div>
+        {showResponses && <ResponsesModal orgId={org.id} blockId={ctx.blockId} title={props.title} onClose={() => setShowResponses(false)} />}
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-xl border p-5" style={hairline}>
       <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{props.title}</h3>
-      {props.description && !alreadySubmitted && <p className="mt-1 text-sm text-gray-500">{props.description}</p>}
+      {props.description && <p className="mt-1 text-sm text-gray-500">{props.description}</p>}
 
-      {alreadySubmitted ? (
-        <div className="mt-4 rounded-lg border p-4 text-center" style={hairline}>
-          <p className="font-medium" style={{ color: 'var(--th-heading)' }}>✓ {props.successMessage || 'You’ve already submitted this form.'}</p>
-        </div>
-      ) : done ? (
+      {done ? (
         <div className="mt-4 rounded-lg border p-4 text-center" style={hairline}>
           <p className="font-medium" style={{ color: 'var(--th-heading)' }}>{props.successMessage || 'Thanks — your response was submitted!'}</p>
           <button type="button" onClick={() => setDone(false)} className="mt-3 text-sm underline" style={{ color: 'var(--th-text)' }}>

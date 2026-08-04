@@ -92,6 +92,13 @@
   border-color: rgba(255, 255, 255, 0.18);
 }
 
+/* A block that renders nothing (e.g. a once-per-user form hidden after the
+ * viewer submitted) collapses completely, leaving no gap on the page — so it
+ * reads as if the block were never there. */
+.th-block:empty {
+  display: none;
+}
+
 html,
 body,
 #root {

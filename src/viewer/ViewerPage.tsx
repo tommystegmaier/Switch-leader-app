@@ -101,7 +101,7 @@ export function ViewerPage() {
     <div className="flex flex-wrap items-stretch gap-4">
       {blocksLoading && <p className="w-full text-sm text-gray-500">Loading page…</p>}
       {visible.map((block) => (
-        <div key={block.id} style={blockFlexStyle(block)}>
+        <div key={block.id} className="th-block" style={blockFlexStyle(block)}>
           <BlockView block={block} ctx={ctx} />
         </div>
       ))}
