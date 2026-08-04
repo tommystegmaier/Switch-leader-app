@@ -28,6 +28,7 @@ import { ScheduleView, BirthdaysView } from './viewers/schedule';
 import { RosterView } from './viewers/roster';
 import { ChatView } from './viewers/chat';
 import { InviteView } from './viewers/invite';
+import { FormView } from './viewers/form';
 import { TeamAccessBlockView } from './viewers/teamaccess';
 
 /**
@@ -430,6 +431,51 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Team Chat' },
     ],
     Viewer: ChatView,
+  }),
+
+  form: def({
+    type: 'form',
+    label: 'Form',
+    icon: '📥',
+    description: 'Collect responses — sign-ups, RSVPs, contact or request forms. Owners & admins see everything collected.',
+    category: 'interactive',
+    defaultProps: {
+      title: 'Contact us',
+      description: '',
+      submitLabel: 'Submit',
+      successMessage: 'Thanks — we got your response!',
+      fields: [
+        { label: 'Your name', type: 'short', required: true, placeholder: '', options: '' },
+        { label: 'Email', type: 'email', required: true, placeholder: '', options: '' },
+        { label: 'Message', type: 'long', required: false, placeholder: '', options: '' },
+      ],
+    },
+    fields: [
+      { key: 'title', label: 'Form title', type: 'text' },
+      { key: 'description', label: 'Description (optional)', type: 'textarea' },
+      { key: 'submitLabel', label: 'Submit button text', type: 'text' },
+      { key: 'successMessage', label: 'Thank-you message', type: 'textarea' },
+      { key: 'fields', label: 'Questions', type: 'items',
+        itemDefault: { label: 'New question', type: 'short', required: false, placeholder: '', options: '' },
+        itemFields: [
+          { key: 'label', label: 'Question / label', type: 'text' },
+          { key: 'type', label: 'Answer type', type: 'select', options: [
+            { value: 'short', label: 'Short answer' },
+            { value: 'long', label: 'Paragraph' },
+            { value: 'email', label: 'Email' },
+            { value: 'phone', label: 'Phone' },
+            { value: 'number', label: 'Number' },
+            { value: 'date', label: 'Date' },
+            { value: 'dropdown', label: 'Dropdown (choices)' },
+            { value: 'checkbox', label: 'Checkbox (agree)' },
+          ] },
+          { key: 'required', label: 'Required', type: 'boolean' },
+          { key: 'placeholder', label: 'Placeholder (optional)', type: 'text' },
+          { key: 'options', label: 'Dropdown choices (comma-separated)', type: 'text', help: 'Only used when the answer type is Dropdown.' },
+        ],
+      },
+    ],
+    Viewer: FormView,
   }),
 
   'team-access': def({

@@ -119,6 +119,7 @@ export type BlockType =
   | 'roster'
   | 'chat'
   | 'invite'
+  | 'form'
   | 'team-access';
 
 /**

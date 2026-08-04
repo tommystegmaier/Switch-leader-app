@@ -139,3 +139,31 @@ export interface AccordionProps {
   html: string; // sanitized rich text
   openByDefault: boolean;
 }
+
+/** One field on a Form block. */
+export type FormFieldType =
+  | 'short'    // single-line text
+  | 'long'     // multi-line paragraph
+  | 'email'
+  | 'phone'
+  | 'number'
+  | 'date'
+  | 'dropdown' // pick one from `options`
+  | 'checkbox'; // single yes/no agreement
+
+export interface FormField {
+  label: string;
+  type: FormFieldType;
+  required?: boolean;
+  placeholder?: string;
+  /** Comma-separated choices — used by `dropdown`. */
+  options?: string;
+}
+
+export interface FormProps {
+  title: string;
+  description?: string;
+  submitLabel: string;
+  successMessage: string;
+  fields: FormField[];
+}

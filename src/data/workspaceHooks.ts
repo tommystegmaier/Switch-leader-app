@@ -85,6 +85,28 @@ export function useDuplicateWorkspace() {
   });
 }
 
+/** Create a workspace pre-built from a template (pages/blocks/theme + owner). */
+export function useCreateWorkspaceFromTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { name: string; slug: string; settings: unknown; pages: unknown }): Promise<Organization> => {
+      const s = getSupabase();
+      if (!s) throw new Error('Creating a workspace requires a configured backend.');
+      const { data, error } = await s.rpc('create_workspace_from_template', {
+        p_name: args.name,
+        p_slug: args.slug,
+        p_settings: args.settings,
+        p_pages: args.pages,
+      });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const o = data as any;
+      return { id: o.id, name: o.name, slug: o.slug, createdAt: o.created_at };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-workspaces'] }),
+  });
+}
+
 export function useCreateWorkspace() {
   const qc = useQueryClient();
   return useMutation({
