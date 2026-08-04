@@ -47,7 +47,7 @@ export function ViewerLayout() {
   const { data: liveSettings } = useLiveAppSettings(org?.id, liveMode);
   const { data: schedulePageId } = useSchedulePageId(org?.id);
   const { data: chatPageSlug } = useChatPageSlug(org?.id);
-  const { data: chatUnread = 0 } = useChatUnreadTotal(org?.id);
+  const { data: chatUnread = 0 } = useChatUnreadTotal(org?.id, Boolean(user));
 
   // Editors preview the draft theme/title; viewers see the published one.
   const settings = liveMode ? (liveSettings ?? publishedSettings) : publishedSettings;
