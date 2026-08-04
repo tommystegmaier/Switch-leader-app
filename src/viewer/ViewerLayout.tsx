@@ -236,7 +236,7 @@ export function ViewerLayout() {
                   style={{ color: 'var(--th-text)' }}
                 >
                   <span aria-hidden>⧉</span>
-                  <span>My apps — create or switch</span>
+                  <span>My apps</span>
                 </Link>
               </div>
             )}

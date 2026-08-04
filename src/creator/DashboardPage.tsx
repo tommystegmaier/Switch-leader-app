@@ -11,26 +11,29 @@ import { slugify, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, ty
  * belongs to (with their role) and offers Create + Duplicate. This is the
  * Jotform-style hub: one account, many apps, each fully isolated.
  */
-export function DashboardPage() {
+export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boolean }) {
   const { user, signOut } = useAuth();
   const { data: workspaces, isLoading } = useMyWorkspaces();
   const navigate = useNavigate();
   useEffect(() => { applyHubMetadata(); }, []);
 
-  // If someone belongs to exactly one app, skip this hub and drop them straight
-  // into their app. The hub is only useful when there are several.
+  // Only when this hub is the app's initial landing (root route) do we skip it
+  // for single-app users and drop them straight into their app. When someone
+  // deliberately opens "My apps" from the menu (/workspaces), we always show the
+  // hub — even view-only users with a single app — so they can reach it.
+  const skipToSingle = redirectSingle && workspaces?.length === 1;
   useEffect(() => {
-    if (workspaces && workspaces.length === 1) {
+    if (skipToSingle && workspaces) {
       navigate(`/o/${workspaces[0].org.slug}`, { replace: true });
     }
-  }, [workspaces, navigate]);
+  }, [skipToSingle, workspaces, navigate]);
 
   const list = workspaces ?? [];
   const hasApps = list.length > 0;
   const multiple = list.length > 1;
 
   // While we redirect a single-app user, don't flash the hub.
-  if (isLoading || list.length === 1) {
+  if (isLoading || skipToSingle) {
     return <div className="mx-auto max-w-2xl px-4 py-8 text-sm text-gray-500">Opening your app…</div>;
   }
 

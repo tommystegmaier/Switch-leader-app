@@ -16,14 +16,17 @@ export function HomeRoute() {
   if (isSupabaseConfigured && env.defaultOrgSlug) {
     return <Navigate to={`/o/${env.defaultOrgSlug}`} replace />;
   }
-  return <WorkspacesRoute />;
+  // The root landing: a single-app user is dropped straight into their app.
+  return <WorkspacesRoute redirectSingle />;
 }
 
 /**
  * Creator hub ("My workspaces"). Reachable at `/workspaces` even when a default
- * workspace is configured, so owners/editors can still manage their apps.
+ * workspace is configured, so owners/editors — and view-only users — can always
+ * open "My apps" from the menu. `redirectSingle` (root landing only) sends a
+ * single-app user straight into their app instead of showing the hub.
  */
-export function WorkspacesRoute() {
+export function WorkspacesRoute({ redirectSingle = false }: { redirectSingle?: boolean }) {
   const { user, loading } = useAuth();
 
   if (!isSupabaseConfigured) {
@@ -35,5 +38,5 @@ export function WorkspacesRoute() {
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  return <DashboardPage />;
+  return <DashboardPage redirectSingle={redirectSingle} />;
 }
