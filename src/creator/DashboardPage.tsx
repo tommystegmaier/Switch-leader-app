@@ -14,37 +14,69 @@ import { slugify, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, ty
 export function DashboardPage() {
   const { user, signOut } = useAuth();
   const { data: workspaces, isLoading } = useMyWorkspaces();
+  const navigate = useNavigate();
   useEffect(() => { applyHubMetadata(); }, []);
+
+  // If someone belongs to exactly one app, skip this hub and drop them straight
+  // into their app. The hub is only useful when there are several.
+  useEffect(() => {
+    if (workspaces && workspaces.length === 1) {
+      navigate(`/o/${workspaces[0].org.slug}`, { replace: true });
+    }
+  }, [workspaces, navigate]);
+
+  const list = workspaces ?? [];
+  const hasApps = list.length > 0;
+  const multiple = list.length > 1;
+
+  // While we redirect a single-app user, don't flash the hub.
+  if (isLoading || list.length === 1) {
+    return <div className="mx-auto max-w-2xl px-4 py-8 text-sm text-gray-500">Opening your app…</div>;
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>My workspaces</h1>
-        <button type="button" onClick={() => void signOut()} className="text-sm text-gray-500 underline">Sign out</button>
+        <div className="flex shrink-0 items-center gap-3 text-sm">
+          {multiple && <Link to="/new" className="text-gray-500 underline">Create an app</Link>}
+          <button type="button" onClick={() => void signOut()} className="text-gray-500 underline">Sign out</button>
+        </div>
       </div>
       <p className="mb-6 text-sm text-gray-500">Signed in as {user?.email}</p>
 
-      {isLoading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
-      ) : workspaces && workspaces.length > 0 ? (
+      {hasApps ? (
         <ul className="mb-6 flex flex-col gap-3">
-          {workspaces.map((w) => <WorkspaceCard key={w.org.id} w={w} />)}
+          {list.map((w) => <WorkspaceCard key={w.org.id} w={w} />)}
         </ul>
       ) : (
-        <div className="mb-6 rounded-xl border border-dashed p-8 text-center text-sm text-gray-500" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
-          You don&apos;t have any apps yet. Create your first one!
-        </div>
+        <>
+          <div className="mb-6 rounded-xl border border-dashed p-8 text-center text-sm text-gray-500" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+            You don&apos;t have any apps yet. Create your first one!
+          </div>
+          <Link to="/new" className="inline-block rounded-full px-6 py-3 font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+            + Create a new app
+          </Link>
+        </>
       )}
-
-      <Link to="/new" className="inline-block rounded-full px-6 py-3 font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
-        + Create a new app
-      </Link>
     </div>
   );
 }
 
+/** The app's logo/icon (or an initial fallback) for a workspace card. */
+function WorkspaceLogo({ name, iconUrl }: { name: string; iconUrl: string | null }) {
+  if (iconUrl) {
+    return <img src={iconUrl} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />;
+  }
+  return (
+    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base font-bold text-white" style={{ backgroundColor: 'var(--th-primary)' }}>
+      {(name.trim()[0] || '?').toUpperCase()}
+    </span>
+  );
+}
+
 function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
-  const { org, role } = w;
+  const { org, role, iconUrl } = w;
   const navigate = useNavigate();
   const duplicate = useDuplicateWorkspace();
   const rename = useRenameWorkspace();
@@ -100,9 +132,12 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
           </div>
         ) : (
           <>
-            <Link to={`/o/${org.slug}`} className="min-w-0 flex-1">
-              <span className="block font-semibold">{org.name}</span>
-              <span className="block text-sm text-gray-500">/o/{org.slug}</span>
+            <Link to={`/o/${org.slug}`} className="flex min-w-0 flex-1 items-center gap-3">
+              <WorkspaceLogo name={org.name} iconUrl={iconUrl} />
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">{org.name}</span>
+                <span className="block truncate text-sm text-gray-500">/o/{org.slug}</span>
+              </span>
             </Link>
             <div className="flex shrink-0 items-center gap-2">
               <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-medium capitalize">{role}</span>

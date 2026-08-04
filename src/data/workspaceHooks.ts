@@ -14,6 +14,8 @@ import type { Organization, Role } from '@/types';
 export interface WorkspaceMembership {
   role: Role;
   org: Organization;
+  /** The app's icon (or logo) so the card can show its brand. */
+  iconUrl: string | null;
 }
 
 export function useMyWorkspaces() {
@@ -26,16 +28,18 @@ export function useMyWorkspaces() {
       if (!s || !user) return [];
       const { data, error } = await s
         .from('memberships')
-        .select('role, organizations(id, name, slug, created_at)')
+        .select('role, organizations(id, name, slug, created_at, app_settings(icon_url, logo_url))')
         .eq('user_id', user.id);
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).flatMap((row: any) => {
         const o = row.organizations;
         if (!o) return [];
+        const set = Array.isArray(o.app_settings) ? o.app_settings[0] : o.app_settings;
         return [{
           role: row.role as Role,
           org: { id: o.id, name: o.name, slug: o.slug, createdAt: o.created_at },
+          iconUrl: set?.icon_url || set?.logo_url || null,
         }];
       });
     },
