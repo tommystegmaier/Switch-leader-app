@@ -16,6 +16,7 @@ export interface FormAnswer {
 export interface FormSubmission {
   id: string;
   data: FormAnswer[];
+  submitterName: string | null;
   submitterEmail: string | null;
   createdAt: string;
 }
@@ -91,6 +92,7 @@ export function useFormSubmissions(orgId: string | undefined, blockId: string | 
       return ((data ?? []) as any[]).map((r) => ({
         id: r.id,
         data: Array.isArray(r.data) ? r.data : [],
+        submitterName: r.submitter_name ?? null,
         submitterEmail: r.submitter_email ?? null,
         createdAt: r.created_at,
       }));

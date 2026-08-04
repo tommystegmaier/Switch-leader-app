@@ -281,7 +281,7 @@ function ResponsesView({ orgId, blockId, title, fields, onClose }: { orgId: stri
             {subs.map((s) => (
               <li key={s.id} className="rounded-lg border p-3" style={{ borderColor: 'var(--th-hairline)' }}>
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-500">{new Date(s.createdAt).toLocaleString()}{s.submitterEmail ? ` · ${s.submitterEmail}` : ''}</span>
+                  <span className="text-xs text-gray-500">{new Date(s.createdAt).toLocaleString()}{(s.submitterName || s.submitterEmail) ? ` · ${s.submitterName || s.submitterEmail}` : ''}</span>
                   <button type="button" onClick={() => { if (window.confirm('Delete this response?')) del.mutate(s.id); }} className="text-xs text-red-600 underline">Delete</button>
                 </div>
                 <dl className="flex flex-col gap-2">
@@ -343,14 +343,14 @@ function ChoiceSummary({ field, subs }: { field: FormField; subs: FormSubmission
 }
 
 /** Build a CSV string from the responses (question labels as columns). */
-function buildCsv(subs: { data: FormAnswer[]; submitterEmail: string | null; createdAt: string }[]): string {
+function buildCsv(subs: { data: FormAnswer[]; submitterName: string | null; submitterEmail: string | null; createdAt: string }[]): string {
   const labels: string[] = [];
   subs.forEach((s) => s.data.forEach((a) => { if (!labels.includes(a.label)) labels.push(a.label); }));
   const esc = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`;
-  const header = ['Submitted', 'Email', ...labels].map(esc).join(',');
+  const header = ['Submitted', 'Name', 'Email', ...labels].map(esc).join(',');
   const rows = subs.map((s) => {
     const map = new Map(s.data.map((a) => [a.label, a.value]));
-    return [new Date(s.createdAt).toLocaleString(), s.submitterEmail ?? '', ...labels.map((l) => map.get(l) ?? '')].map(esc).join(',');
+    return [new Date(s.createdAt).toLocaleString(), s.submitterName ?? '', s.submitterEmail ?? '', ...labels.map((l) => map.get(l) ?? '')].map(esc).join(',');
   });
   return [header, ...rows].join('\r\n');
 }
