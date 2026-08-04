@@ -59,7 +59,7 @@ export default function PdfViewer({ url, title }: { url: string; title: string }
   const fileUrl = bust > 0 ? `${safe}${safe.includes('?') ? '&' : '?'}_r=${bust}` : safe;
 
   return (
-    <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+    <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--th-hairline)' }}>
       <div className="flex flex-wrap items-center gap-2 border-b bg-black/5 px-3 py-2 text-sm">
         <span className="mr-auto truncate font-medium">{title}</span>
         <button type="button" className="rounded px-2 py-1 hover:bg-black/10 disabled:opacity-40" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} aria-label="Previous page">‹</button>

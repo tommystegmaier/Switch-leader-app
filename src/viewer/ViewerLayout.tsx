@@ -125,7 +125,7 @@ export function ViewerLayout() {
     <div className="min-h-full" style={{ backgroundColor: 'var(--th-bg)' }}>
       <header
         className="sticky top-0 z-20 border-b"
-        style={{ backgroundColor: 'var(--th-bg)', borderColor: 'rgba(0,0,0,0.08)', paddingTop: 'env(safe-area-inset-top)' }}
+        style={{ backgroundColor: 'var(--th-bg)', borderColor: 'var(--th-hairline)', paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="mx-auto flex max-w-screen-sm flex-wrap items-center justify-between gap-2 px-4 py-3">
           <span className="min-w-0 truncate text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{appName}</span>
@@ -153,7 +153,7 @@ export function ViewerLayout() {
                 type="button"
                 onClick={() => setNotifyOpen(true)}
                 className="rounded-full border px-3 py-1.5 text-sm font-semibold"
-                style={{ color: 'var(--th-text)', borderColor: 'rgba(0,0,0,0.2)' }}
+                style={{ color: 'var(--th-text)', borderColor: 'var(--th-hairline-strong)' }}
               >
                 🔔 Send Push Notification
               </button>
@@ -166,7 +166,7 @@ export function ViewerLayout() {
                 className="rounded-full border px-3 py-1.5 text-sm font-semibold"
                 style={editing
                   ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', borderColor: 'var(--th-primary)' }
-                  : { color: 'var(--th-text)', borderColor: 'rgba(0,0,0,0.2)' }}
+                  : { color: 'var(--th-text)', borderColor: 'var(--th-hairline-strong)' }}
               >
                 {editing ? '✓ Editing' : '✎ Edit'}
               </button>
@@ -209,7 +209,7 @@ export function ViewerLayout() {
         )}
 
         {menuOpen && (
-          <nav className="border-t" style={{ borderColor: 'rgba(0,0,0,0.08)' }} aria-label="Pages">
+          <nav className="border-t" style={{ borderColor: 'var(--th-hairline)' }} aria-label="Pages">
             <ul className="mx-auto max-w-screen-sm px-2 py-2">
               {navPages.map((page) => (
                 <li key={page.id}>
@@ -228,7 +228,7 @@ export function ViewerLayout() {
             </ul>
 
             {user && (
-              <div className="mx-auto max-w-screen-sm border-t px-3 py-2" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+              <div className="mx-auto max-w-screen-sm border-t px-3 py-2" style={{ borderColor: 'var(--th-hairline)' }}>
                 <Link
                   to="/workspaces"
                   onClick={() => setMenuOpen(false)}
@@ -241,11 +241,11 @@ export function ViewerLayout() {
               </div>
             )}
 
-            <div className="mx-auto max-w-screen-sm border-t px-3 py-2" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+            <div className="mx-auto max-w-screen-sm border-t px-3 py-2" style={{ borderColor: 'var(--th-hairline)' }}>
               <NotifyButton orgId={org.id} className="mb-2" />
             </div>
 
-            <div className="mx-auto max-w-screen-sm border-t px-3 py-2 text-sm" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+            <div className="mx-auto max-w-screen-sm border-t px-3 py-2 text-sm" style={{ borderColor: 'var(--th-hairline)' }}>
               {canEdit && (
                 <button type="button" onClick={() => { setMenuOpen(false); setPagesOpen(true); }} className="mr-4 underline">Manage pages</button>
               )}

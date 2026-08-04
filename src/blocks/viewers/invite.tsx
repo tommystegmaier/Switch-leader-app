@@ -17,7 +17,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const card = 'rounded-xl border p-4';
-const cardStyle = { borderColor: 'rgba(0,0,0,0.12)' } as const;
+const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
 const input = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2';
 
 /**

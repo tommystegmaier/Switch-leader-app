@@ -22,7 +22,7 @@ interface RosterProps { title?: string; headerSize?: HeaderSize }
 const HEADER_CLS: Record<HeaderSize, string> = { sm: 'text-sm', md: 'text-lg', lg: 'text-2xl' };
 
 const card = 'rounded-xl border p-4';
-const cardStyle = { borderColor: 'rgba(0,0,0,0.12)' } as const;
+const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
 const input = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2';
 
 /** First letters of the first two words — a clean avatar fallback when there's no photo. */
@@ -118,7 +118,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
             </button>
           )}
           {canEdit && !ctx.editing && (
-            <button type="button" onClick={() => setManage((m) => !m)} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+            <button type="button" onClick={() => setManage((m) => !m)} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)' }}>
               {manage ? 'Done' : '✎ Edit'}
             </button>
           )}
@@ -168,7 +168,7 @@ function PersonModal({ person, onClose }: { person: RosterPerson; onClose: () =>
         <p className="mt-4 text-xl font-bold" style={{ color: 'var(--th-heading)' }}>{person.name}</p>
         {person.role && <div className="mt-1 flex justify-center"><RoleTag role={person.role} /></div>}
         {person.phone && (
-          <a href={`sms:${person.phone}`} className="mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+          <a href={`sms:${person.phone}`} className="mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'var(--th-hairline-strong)' }}>
             💬 {person.phone}
           </a>
         )}
@@ -211,7 +211,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
     : (dark ? '#c7cdd6' : 'var(--th-heading)');
 
   return (
-    <div className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(isTop ? { borderColor: dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.18)' } : {}) }}>
+    <div className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(isTop ? { borderColor: 'var(--th-hairline-strong)' } : {}) }}>
       <div className="flex items-center gap-2 px-3 py-2.5" style={{ backgroundColor: headerBg }}>
         <button type="button" onClick={() => toggle(group.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
           <span className="shrink-0" aria-hidden style={{ color: headerFg, opacity: 0.85 }}>{open ? '▾' : '▸'}</span>
@@ -227,7 +227,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
               ? { backgroundColor: 'rgba(255,255,255,0.22)', color: headerFg }
               : dark
                 ? { backgroundColor: 'rgba(255,255,255,0.12)', color: '#c7cdd6', border: '1px solid rgba(255,255,255,0.14)' }
-                : { backgroundColor: 'rgba(255,255,255,0.65)', color: '#6b7280', border: '1px solid rgba(0,0,0,0.12)' }}
+                : { backgroundColor: 'rgba(255,255,255,0.65)', color: '#6b7280', border: '1px solid var(--th-hairline)' }}
           >
             {count}
           </span>
@@ -245,7 +245,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
           {showManage && <AddPerson orgId={orgId} groupId={group.id} />}
 
           {subs.length > 0 && (
-            <div className="mt-1 flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }}>
+            <div className="mt-1 flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: 'var(--th-hairline)' }}>
               {subs.map((sub, si) => (
                 <GroupBlock
                   key={sub.id}
@@ -449,7 +449,7 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
       <div className="flex items-center gap-3">
         <Avatar person={{ name: name || '?', photoUrl }} />
         <div className="flex flex-col gap-1">
-          <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} className="rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)' }}>
             {uploading ? 'Uploading…' : photoUrl ? 'Change photo' : 'Add photo'}
           </button>
           {photoUrl && !uploading && <button type="button" onClick={() => setPhotoUrl(null)} className="text-xs text-gray-500 underline">Remove photo</button>}
@@ -487,7 +487,7 @@ function AddPerson({ orgId, groupId }: { orgId: string; groupId: string }) {
   const [open, setOpen] = useState(false);
   if (open) return <PersonForm orgId={orgId} groupId={groupId} onDone={() => setOpen(false)} />;
   return (
-    <button type="button" onClick={() => setOpen(true)} className="self-start rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Add person</button>
+    <button type="button" onClick={() => setOpen(true)} className="self-start rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'var(--th-hairline-strong)' }}>+ Add person</button>
   );
 }
 
@@ -534,7 +534,7 @@ function AddGroup({ orgId, parentId }: { orgId: string; parentId?: string | null
   return (
     <div className={`flex gap-2 ${sub ? 'mt-1' : 'mt-3'}`}>
       <input className={input} placeholder={sub ? 'New subgroup (e.g. Middle School Boys)' : 'New group (e.g. Leadership Team)'} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} />
-      <button type="button" disabled={!name.trim() || create.isPending} onClick={submit} className="shrink-0 rounded-full border px-4 py-2 text-sm font-semibold disabled:opacity-50" style={sub ? { borderColor: 'rgba(0,0,0,0.25)' } : { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', borderColor: 'transparent' }}>{sub ? '+ Subgroup' : '+ Group'}</button>
+      <button type="button" disabled={!name.trim() || create.isPending} onClick={submit} className="shrink-0 rounded-full border px-4 py-2 text-sm font-semibold disabled:opacity-50" style={sub ? { borderColor: 'var(--th-hairline-strong)' } : { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', borderColor: 'transparent' }}>{sub ? '+ Subgroup' : '+ Group'}</button>
     </div>
   );
 }
@@ -561,12 +561,12 @@ function RoleListEditor({ orgId }: { orgId: string }) {
         <div className="flex flex-col gap-2 px-3 pb-3">
           <p className="text-xs text-gray-500">The titles you can pick from when adding people. Only owners &amp; admins can edit this.</p>
           {list.length === 0 && (
-            <button type="button" onClick={() => seed.mutate()} disabled={seed.isPending} className="self-start rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>Add starter titles</button>
+            <button type="button" onClick={() => seed.mutate()} disabled={seed.isPending} className="self-start rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)' }}>Add starter titles</button>
           )}
           {list.map((r, i) => <RoleRow key={r.id} orgId={orgId} role={r} index={i} total={list.length} ids={ids} />)}
           <div className="mt-1 flex gap-2">
             <input className={input} placeholder="Add a title (e.g. Worship)" value={newRole} onChange={(e) => setNewRole(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} />
-            <button type="button" disabled={!newRole.trim() || create.isPending} onClick={submit} className="shrink-0 rounded-full border px-3 py-2 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Add</button>
+            <button type="button" disabled={!newRole.trim() || create.isPending} onClick={submit} className="shrink-0 rounded-full border px-3 py-2 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)' }}>+ Add</button>
           </div>
         </div>
       )}

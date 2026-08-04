@@ -54,7 +54,7 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
         </ul>
       ) : (
         <>
-          <div className="mb-6 rounded-xl border border-dashed p-8 text-center text-sm text-gray-500" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+          <div className="mb-6 rounded-xl border border-dashed p-8 text-center text-sm text-gray-500" style={{ borderColor: 'var(--th-hairline-strong)' }}>
             You don&apos;t have any apps yet. Create your first one!
           </div>
           <Link to="/new" className="inline-block rounded-full px-6 py-3 font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
@@ -122,7 +122,7 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
   }
 
   return (
-    <li className="rounded-xl border p-4" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+    <li className="rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
       {renaming ? (
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex min-w-0 items-center gap-2">
@@ -144,10 +144,10 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-black/5 px-3 py-1 text-xs font-medium capitalize">{role}</span>
             {canManage && (
-              <button type="button" onClick={() => { setNewName(org.name); setRenaming(true); }} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>Rename</button>
+              <button type="button" onClick={() => { setNewName(org.name); setRenaming(true); }} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)' }}>Rename</button>
             )}
             {canDuplicate && (
-              <button type="button" onClick={() => { setDupOpen((v) => !v); setName(`${org.name} (copy)`); setSlug(''); setSlugEdited(false); }} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+              <button type="button" onClick={() => { setDupOpen((v) => !v); setName(`${org.name} (copy)`); setSlug(''); setSlugEdited(false); }} className="rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)' }}>
                 Duplicate
               </button>
             )}
@@ -156,7 +156,7 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
       )}
 
       {dupOpen && (
-        <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+        <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
           <p className="text-xs text-gray-500">Copies the pages, layout, theme, and schedule teams/roles into a new app. No people carry over — only you, as owner.</p>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">New app name</span>

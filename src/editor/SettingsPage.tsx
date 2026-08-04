@@ -112,7 +112,7 @@ export function SettingsPage() {
         <p className="text-sm text-gray-500">Pick a preset, then fine-tune. Changes preview live.</p>
         <div className="flex flex-wrap gap-2">
           {THEME_PRESETS.map((p) => (
-            <button key={p.id} type="button" onClick={() => set({ theme: p.colors })} className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm hover:bg-black/5" style={{ borderColor: 'rgba(0,0,0,0.15)' }}>
+            <button key={p.id} type="button" onClick={() => set({ theme: p.colors })} className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm hover:bg-black/5" style={{ borderColor: 'var(--th-hairline-strong)' }}>
               <span className="flex">
                 {[p.colors.primary, p.colors.accent, p.colors.heading].map((c, i) => (
                   <span key={i} className="h-4 w-4 rounded-full border border-white" style={{ backgroundColor: c, marginLeft: i ? -6 : 0 }} />
@@ -265,7 +265,7 @@ function TabBarEditor({ orgId, tabs, onChange }: { orgId: string; tabs: NavTab[]
       ))}
       </SortableContext>
       </DndContext>
-      <button type="button" onClick={add} className="self-start rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Add tab</button>
+      <button type="button" onClick={add} className="self-start rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: 'var(--th-hairline-strong)' }}>+ Add tab</button>
     </div>
   );
 }
@@ -488,7 +488,7 @@ function MemberEditor({ orgId, member, onDone }: { orgId: string; member: OrgMem
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 p-3" style={{ backgroundColor: 'rgba(0,0,0,0.02)' }}>
+    <div className="rounded-lg border border-gray-200 p-3" style={{ backgroundColor: 'var(--th-hairline)' }}>
       <p className="mb-2 text-xs text-gray-500">Fix this person&apos;s details. Their email ({member.email}) is their login and can&apos;t be changed here.</p>
       <div className="flex flex-col gap-2">
         <label className="flex flex-col gap-1 text-xs font-medium">Name
@@ -514,7 +514,7 @@ function MemberEditor({ orgId, member, onDone }: { orgId: string; member: OrgMem
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="mb-6 rounded-xl border p-4" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+    <section className="mb-6 rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
       <h2 className="mb-3 text-lg font-semibold" style={{ color: 'var(--th-heading)' }}>{title}</h2>
       <div className="flex flex-col gap-3">{children}</div>
     </section>
@@ -541,7 +541,7 @@ function ImageSlot({ label, url, onPick, onClear }: { label: string; url: string
   return (
     <div className="flex flex-col gap-1 text-sm">
       <span className="font-medium">{label}</span>
-      <button type="button" onClick={onPick} className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-dashed hover:bg-black/5" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>
+      <button type="button" onClick={onPick} className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-dashed hover:bg-black/5" style={{ borderColor: 'var(--th-hairline-strong)' }}>
         {url ? <img src={url} alt="" className="h-full w-full object-contain" /> : <span className="text-xs text-gray-400">Upload</span>}
       </button>
       {url && <button type="button" onClick={onClear} className="text-xs text-red-600 underline">Remove</button>}

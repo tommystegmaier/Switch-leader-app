@@ -17,7 +17,7 @@ interface ChatProps { title?: string }
 const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 
 const card = 'rounded-xl border';
-const cardStyle = { borderColor: 'rgba(0,0,0,0.12)' } as const;
+const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
@@ -121,7 +121,7 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
               type="button"
               onClick={() => setActive(c.groupId)}
               className={`relative shrink-0 rounded-full px-3 py-1 text-sm ${on ? 'font-semibold' : 'opacity-70'}`}
-              style={on ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid rgba(0,0,0,0.15)' }}
+              style={on ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid var(--th-hairline-strong)' }}
             >
               {c.name}
               {c.unread > 0 && !on && (
@@ -257,7 +257,7 @@ function MessageRow({ m, mine, reactions, open, onToggleBar, onReact }: {
             className="whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm"
             style={mine
               ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }
-              : { backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--th-text)' }}
+              : { backgroundColor: 'var(--th-hairline)', color: 'var(--th-text)' }}
           >
             {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
             {m.body}
@@ -281,7 +281,7 @@ function MessageRow({ m, mine, reactions, open, onToggleBar, onReact }: {
               type="button"
               onClick={() => onReact(emoji, info.mine)}
               className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs"
-              style={{ borderColor: info.mine ? 'var(--th-primary)' : 'rgba(0,0,0,0.15)', backgroundColor: info.mine ? 'color-mix(in srgb, var(--th-primary) 12%, transparent)' : 'transparent' }}
+              style={{ borderColor: info.mine ? 'var(--th-primary)' : 'var(--th-hairline-strong)', backgroundColor: info.mine ? 'color-mix(in srgb, var(--th-primary) 12%, transparent)' : 'transparent' }}
             >
               <span>{emoji}</span><span className="text-gray-600">{info.count}</span>
             </button>

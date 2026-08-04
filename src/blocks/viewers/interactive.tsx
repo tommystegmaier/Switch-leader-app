@@ -109,14 +109,13 @@ export function LinkView({ props }: { props: LinkProps }) {
     if (bg && colorIsDark(bg)) bg = DARK_SURFACE;
     if (props.textColor && colorIsDark(props.textColor)) fg = DARK_INK;
   }
-  const hairline = dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
   return (
     <a
       href={url ?? '#'}
       target={props.openInNewTab ? '_blank' : undefined}
       rel={props.openInNewTab ? 'noopener noreferrer' : undefined}
       className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-opacity hover:opacity-90"
-      style={{ backgroundColor: bg || 'transparent', borderColor: bg ? 'transparent' : hairline }}
+      style={{ backgroundColor: bg || 'transparent', borderColor: bg ? 'transparent' : 'var(--th-hairline)' }}
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center">{iconEl}</span>
       <span className="min-w-0">
@@ -174,7 +173,7 @@ export function ListView({ props, ctx }: { props: ListProps; ctx: ViewerCtx }) {
           {props.title}
         </h3>
       )}
-      <ul className="divide-y rounded-xl border" style={{ borderColor: getDark() ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)' }}>
+      <ul className="divide-y rounded-xl border" style={{ borderColor: 'var(--th-hairline)' }}>
         {props.items.map((item, i) => {
           const resolved = resolveAction(item.action, ctx);
           const row = (

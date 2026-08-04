@@ -29,7 +29,7 @@ export function DocumentView({ props }: { props: DocumentProps }) {
         target="_blank"
         rel="noopener noreferrer"
         className="flex items-center gap-3 rounded-xl border px-4 py-3 hover:bg-black/5"
-        style={{ borderColor: 'rgba(0,0,0,0.12)' }}
+        style={{ borderColor: 'var(--th-hairline)' }}
       >
         <span className="text-2xl" aria-hidden>📄</span>
         <span className="font-medium underline">{props.title || 'Open document'}</span>

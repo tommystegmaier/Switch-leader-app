@@ -48,7 +48,7 @@ export function NotificationPrompt({ appName, orgId }: { appName: string; orgId:
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 p-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}>
-      <div className="mx-auto max-w-screen-sm rounded-2xl border bg-white p-4 shadow-xl" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+      <div className="mx-auto max-w-screen-sm rounded-2xl border bg-white p-4 shadow-xl" style={{ borderColor: 'var(--th-hairline)' }}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>🔔 Turn on notifications</p>

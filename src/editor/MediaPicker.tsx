@@ -94,7 +94,7 @@ export function MediaPicker({
                   type="button"
                   onClick={() => { onSelect(item.url); onClose(); }}
                   className="block aspect-square w-full overflow-hidden rounded-lg border hover:ring-2 hover:ring-black/20"
-                  style={{ borderColor: 'rgba(0,0,0,0.12)' }}
+                  style={{ borderColor: 'var(--th-hairline)' }}
                 >
                   {isPdf(item.url) ? (
                     <span className="flex h-full w-full items-center justify-center text-3xl">📄</span>

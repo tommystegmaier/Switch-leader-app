@@ -67,7 +67,7 @@ export function InstallPrompt({ appName, slug, orgId }: { appName: string; slug:
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 p-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}>
-      <div className="mx-auto max-w-screen-sm rounded-2xl border bg-white p-4 shadow-xl" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+      <div className="mx-auto max-w-screen-sm rounded-2xl border bg-white p-4 shadow-xl" style={{ borderColor: 'var(--th-hairline)' }}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>
@@ -101,7 +101,7 @@ export function InstallPrompt({ appName, slug, orgId }: { appName: string; slug:
           </p>
         )}
 
-        <div className="mt-3 border-t pt-3" style={{ borderColor: 'rgba(0,0,0,0.08)' }}>
+        <div className="mt-3 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
           <p className="mb-2 text-sm text-gray-600">Get notified about updates:</p>
           <NotifyButton orgId={orgId} />
           {isIOS && <p className="mt-1 text-xs text-gray-400">On iPhone, add to your Home Screen first, then open it from there to turn on notifications.</p>}

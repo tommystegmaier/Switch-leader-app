@@ -15,7 +15,7 @@ export function MapView({ props }: { props: MapProps }) {
       title="Map"
       src={src}
       className="w-full rounded-xl border"
-      style={{ height: props.height, borderColor: 'rgba(0,0,0,0.12)' }}
+      style={{ height: props.height, borderColor: 'var(--th-hairline)' }}
       loading="lazy"
     />
   );
@@ -26,7 +26,7 @@ export function QrView({ props }: { props: QrProps }) {
   if (!url) return <Placeholder label="Add a URL to encode" />;
   return (
     <figure className="m-0 flex flex-col items-center gap-2">
-      <div className="rounded-xl bg-white p-3" style={{ border: '1px solid rgba(0,0,0,0.12)' }}>
+      <div className="rounded-xl bg-white p-3" style={{ border: '1px solid var(--th-hairline)' }}>
         <QRCodeSVG value={url} size={props.size} />
       </div>
       {props.caption && <figcaption className="text-sm text-gray-500">{props.caption}</figcaption>}
@@ -87,7 +87,7 @@ function Unit({ n, label }: { n: number; label: string }) {
 
 function Placeholder({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center rounded-xl border border-dashed p-8 text-sm text-gray-400" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+    <div className="flex items-center justify-center rounded-xl border border-dashed p-8 text-sm text-gray-400" style={{ borderColor: 'var(--th-hairline-strong)' }}>
       {label}
     </div>
   );

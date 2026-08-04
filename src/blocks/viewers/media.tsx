@@ -173,7 +173,7 @@ export function EmbedView({ props }: { props: EmbedProps }) {
       src={src}
       title={props.title || 'Embedded content'}
       className="w-full rounded-xl border"
-      style={{ height: props.height, borderColor: 'rgba(0,0,0,0.12)' }}
+      style={{ height: props.height, borderColor: 'var(--th-hairline)' }}
       loading="lazy"
       sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
     />
@@ -182,7 +182,7 @@ export function EmbedView({ props }: { props: EmbedProps }) {
 
 function Placeholder({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center rounded-xl border border-dashed p-8 text-sm text-gray-400" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+    <div className="flex items-center justify-center rounded-xl border border-dashed p-8 text-sm text-gray-400" style={{ borderColor: 'var(--th-hairline-strong)' }}>
       {label}
     </div>
   );

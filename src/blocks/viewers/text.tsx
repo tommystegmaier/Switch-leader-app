@@ -130,7 +130,7 @@ export function SpacerView({ props }: { props: SpacerProps }) {
 export function AccordionView({ props, ctx }: { props: AccordionProps; ctx: ViewerCtx }) {
   const [open, setOpen] = useState(props.openByDefault);
   return (
-    <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+    <div className="overflow-hidden rounded-xl border" style={{ borderColor: 'var(--th-hairline)' }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

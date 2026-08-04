@@ -69,7 +69,7 @@ function Badge({ status }: { status: string }) {
 }
 
 const card = 'rounded-xl border p-4';
-const cardStyle = { borderColor: 'rgba(0,0,0,0.12)' } as const;
+const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
 const input = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2';
 
 export function ScheduleView({ props, ctx }: { props: ScheduleProps; ctx: ViewerCtx }) {
@@ -177,7 +177,7 @@ function AssignmentCard({ occ, respond }: { occ: MyOccurrence; respond: ReturnTy
         <div className="mt-3">
           <textarea className={input} rows={2} placeholder="Optional: let the team know why (e.g. out of town)" value={note} onChange={(e) => setNote(e.target.value)} />
           <div className="mt-2 flex gap-2">
-            <button type="button" disabled={busy} onClick={() => react('declined', note)} className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>Send decline</button>
+            <button type="button" disabled={busy} onClick={() => react('declined', note)} className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)' }}>Send decline</button>
             <button type="button" onClick={() => { setDeclining(false); setNote(''); }} className="rounded-full px-4 py-2 text-sm">Cancel</button>
           </div>
         </div>
@@ -186,7 +186,7 @@ function AssignmentCard({ occ, respond }: { occ: MyOccurrence; respond: ReturnTy
           <button type="button" disabled={busy || occ.status === 'confirmed'} onClick={() => react('confirmed')} className="flex-1 rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
             {occ.status === 'confirmed' ? '✓ Confirmed' : 'Confirm'}
           </button>
-          <button type="button" disabled={busy} onClick={() => setDeclining(true)} className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+          <button type="button" disabled={busy} onClick={() => setDeclining(true)} className="flex-1 rounded-full border px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)' }}>
             {occ.status === 'declined' ? "Declined — change" : "Can't make it"}
           </button>
         </div>
@@ -209,7 +209,7 @@ function ManagerSchedule({ orgId, userId, title, size, editing }: { orgId: strin
         <p className={`font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
         <div className="flex flex-wrap gap-1 text-sm">
           {([['roster', 'Roster'], ['teams', 'Teams & roles'], ['weeks', 'Weeks off'], ['settings', 'Notifications']] as [Tab, string][]).map(([t, label]) => (
-            <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-3 py-1 ${tab === t ? 'font-semibold' : 'opacity-60'}`} style={tab === t ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid rgba(0,0,0,0.15)' }}>{label}</button>
+            <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-3 py-1 ${tab === t ? 'font-semibold' : 'opacity-60'}`} style={tab === t ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid var(--th-hairline-strong)' }}>{label}</button>
           ))}
         </div>
       </div>
@@ -334,7 +334,7 @@ function RosterTab({ orgId, userId, size, editing }: { orgId: string; userId: st
                                         {p.userId === userId && selectedDate ? (
                                           <>
                                             <button type="button" onClick={() => respond.mutate({ roleId: r.id, serveDate: selectedDate, status: 'confirmed' })} disabled={statusFor(r.id, p.userId) === 'confirmed'} className="rounded-full px-3 py-0.5 text-xs font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>{statusFor(r.id, p.userId) === 'confirmed' ? '✓ Confirmed' : 'Confirm'}</button>
-                                            <button type="button" onClick={() => respond.mutate({ roleId: r.id, serveDate: selectedDate, status: 'declined' })} disabled={statusFor(r.id, p.userId) === 'declined'} className="rounded-full border px-3 py-0.5 text-xs font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>{statusFor(r.id, p.userId) === 'declined' ? "Can't" : "Can't make it"}</button>
+                                            <button type="button" onClick={() => respond.mutate({ roleId: r.id, serveDate: selectedDate, status: 'declined' })} disabled={statusFor(r.id, p.userId) === 'declined'} className="rounded-full border px-3 py-0.5 text-xs font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)' }}>{statusFor(r.id, p.userId) === 'declined' ? "Can't" : "Can't make it"}</button>
                                           </>
                                         ) : (
                                           <Badge status={statusFor(r.id, p.userId)} />
@@ -354,7 +354,7 @@ function RosterTab({ orgId, userId, size, editing }: { orgId: string; userId: st
                                     {availableMembers.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
                                   </select>
                                 ) : (
-                                  <button type="button" onClick={() => setAssignRole(r.id)} className="mt-2 rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>+ Assign someone</button>
+                                  <button type="button" onClick={() => setAssignRole(r.id)} className="mt-2 rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'var(--th-hairline-strong)' }}>+ Assign someone</button>
                                 )}
                               </div>
                             </MaybeSortable>
@@ -452,7 +452,7 @@ function TeamsTab({ orgId, editing }: { orgId: string; editing: boolean }) {
       <div className="rounded-lg border p-3" style={cardStyle}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm font-medium">Fill from the Roster</span>
-          <button type="button" onClick={runSync} disabled={syncRoster.isPending} className="rounded-full border px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>
+          <button type="button" onClick={runSync} disabled={syncRoster.isPending} className="rounded-full border px-3 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)' }}>
             {syncRoster.isPending ? 'Syncing…' : '⟳ Sync from Roster'}
           </button>
         </div>
@@ -490,7 +490,7 @@ function TeamsTab({ orgId, editing }: { orgId: string; editing: boolean }) {
                   </div>
                   <div className="mt-2 flex gap-2">
                     <input className={input} placeholder="Add a role (e.g. Greeter)" value={roleDraft[t.id] ?? ''} onChange={(e) => setRoleDraft((d) => ({ ...d, [t.id]: e.target.value }))} />
-                    <button type="button" disabled={!(roleDraft[t.id] ?? '').trim()} onClick={async () => { await createRole.mutateAsync({ teamId: t.id, name: roleDraft[t.id] }); setRoleDraft((d) => ({ ...d, [t.id]: '' })); }} className="shrink-0 rounded-full border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>+ Role</button>
+                    <button type="button" disabled={!(roleDraft[t.id] ?? '').trim()} onClick={async () => { await createRole.mutateAsync({ teamId: t.id, name: roleDraft[t.id] }); setRoleDraft((d) => ({ ...d, [t.id]: '' })); }} className="shrink-0 rounded-full border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)' }}>+ Role</button>
                   </div>
                 </div>
               </MaybeSortable>
@@ -595,7 +595,7 @@ function SettingsTab({ orgId, userId }: { orgId: string; userId: string }) {
           <button type="button" onClick={send} disabled={notify.isPending} className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
             {notify.isPending ? 'Sending…' : 'Send to scheduled volunteers'}
           </button>
-          <button type="button" onClick={() => saveDefaults.mutate({ title: titleVal, message: messageVal })} className="rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: 'rgba(0,0,0,0.25)' }}>
+          <button type="button" onClick={() => saveDefaults.mutate({ title: titleVal, message: messageVal })} className="rounded-full border px-4 py-2 text-sm font-semibold" style={{ borderColor: 'var(--th-hairline-strong)' }}>
             {saveDefaults.isPending ? 'Saving…' : 'Save as default'}
           </button>
         </div>

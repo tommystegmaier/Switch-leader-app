@@ -201,7 +201,7 @@ function MediaField({
         </button>
       </div>
       {url && !isPdf && (
-        <img src={url} alt="" className="mt-2 max-h-32 rounded-md border" style={{ borderColor: 'rgba(0,0,0,0.12)' }} />
+        <img src={url} alt="" className="mt-2 max-h-32 rounded-md border" style={{ borderColor: 'var(--th-hairline)' }} />
       )}
       {url && isPdf && <span className="mt-1 text-xs text-gray-500">📄 PDF attached</span>}
       {picking && (

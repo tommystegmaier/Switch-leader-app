@@ -59,7 +59,7 @@ function StaleBlockNotice() {
   }, []);
 
   return (
-    <div className="rounded-xl border p-4 text-center text-sm text-gray-600" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+    <div className="rounded-xl border p-4 text-center text-sm text-gray-600" style={{ borderColor: 'var(--th-hairline)' }}>
       <p className="font-medium" style={{ color: 'var(--th-heading)' }}>Updating to the latest version…</p>
       <p className="mt-1 text-gray-500">If this doesn&apos;t refresh on its own, tap below.</p>
       <button
