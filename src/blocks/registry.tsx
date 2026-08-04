@@ -444,6 +444,7 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       description: '',
       submitLabel: 'Submit',
       successMessage: 'Thanks — we got your response!',
+      oncePerUser: false,
       fields: [
         { label: 'Your name', type: 'short', required: true, placeholder: '', options: '' },
         { label: 'Email', type: 'email', required: true, placeholder: '', options: '' },
@@ -455,6 +456,7 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       { key: 'description', label: 'Description (optional)', type: 'textarea' },
       { key: 'submitLabel', label: 'Submit button text', type: 'text' },
       { key: 'successMessage', label: 'Thank-you message', type: 'textarea' },
+      { key: 'oncePerUser', label: 'Limit to one submission per person', type: 'boolean', help: 'Signed-in people can submit once; the form then disappears for them.' },
       { key: 'fields', label: 'Questions', type: 'items',
         itemDefault: { label: 'New question', type: 'short', required: false, placeholder: '', options: '' },
         itemFields: [

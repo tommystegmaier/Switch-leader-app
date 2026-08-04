@@ -166,4 +166,6 @@ export interface FormProps {
   submitLabel: string;
   successMessage: string;
   fields: FormField[];
+  /** When true, each person may submit only once; the form then hides itself. */
+  oncePerUser?: boolean;
 }

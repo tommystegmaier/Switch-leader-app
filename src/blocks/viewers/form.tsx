@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import {
   useDeleteFormSubmission,
   useFormSubmissionCount,
   useFormSubmissions,
+  useHasSubmittedForm,
   useSubmitForm,
   type FormAnswer,
 } from '@/data/formHooks';
@@ -31,18 +33,33 @@ function optionsOf(field: FormField): string[] {
  */
 export function FormView({ props, ctx }: { props: FormProps; ctx: ViewerCtx }) {
   const { data: org } = useOrganization(ctx.orgSlug);
+  const { user } = useAuth();
   const { role } = useMembershipRole(org?.id);
   const isAdmin = role === 'owner' || role === 'admin';
+  const once = Boolean(props.oncePerUser);
+  const localKey = `th-form-done-${ctx.blockId ?? ''}`;
 
   const fields = props.fields ?? [];
   const [values, setValues] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(false); // non-once success (allows another)
+  const [localDone, setLocalDone] = useState(() => {
+    try { return once && localStorage.getItem(localKey) === '1'; } catch { return false; }
+  });
   const [showResponses, setShowResponses] = useState(false);
   const submit = useSubmitForm();
   const { data: count = 0 } = useFormSubmissionCount(org?.id, ctx.blockId, isAdmin);
+  // For signed-in people on a once-per-user form, check the server so the form
+  // stays hidden even on another device / after clearing local storage.
+  const { data: serverSubmitted = false } = useHasSubmittedForm(org?.id, ctx.blockId, once && Boolean(user));
+  const alreadySubmitted = once && (localDone || serverSubmitted);
 
   const set = (i: number, v: string) => setValues((prev) => ({ ...prev, [i]: v }));
+
+  function markOnceDone() {
+    setLocalDone(true);
+    try { localStorage.setItem(localKey, '1'); } catch { /* ignore */ }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,20 +85,27 @@ export function FormView({ props, ctx }: { props: FormProps; ctx: ViewerCtx }) {
     }));
 
     try {
-      await submit.mutateAsync({ orgId: org.id, blockId: ctx.blockId, pageSlug: undefined, title: props.title, data });
-      setDone(true);
-      setValues({});
+      await submit.mutateAsync({ orgId: org.id, blockId: ctx.blockId, pageSlug: undefined, title: props.title, data, once });
+      if (once) markOnceDone();
+      else { setDone(true); setValues({}); }
     } catch (err) {
-      setError(errorMessage(err));
+      const msg = errorMessage(err);
+      // Server rejected a second submission — treat as already-done, not an error.
+      if (/already submitted/i.test(msg)) { markOnceDone(); return; }
+      setError(msg);
     }
   }
 
   return (
     <div className="rounded-xl border p-5" style={hairline}>
       <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{props.title}</h3>
-      {props.description && <p className="mt-1 text-sm text-gray-500">{props.description}</p>}
+      {props.description && !alreadySubmitted && <p className="mt-1 text-sm text-gray-500">{props.description}</p>}
 
-      {done ? (
+      {alreadySubmitted ? (
+        <div className="mt-4 rounded-lg border p-4 text-center" style={hairline}>
+          <p className="font-medium" style={{ color: 'var(--th-heading)' }}>✓ {props.successMessage || 'You’ve already submitted this form.'}</p>
+        </div>
+      ) : done ? (
         <div className="mt-4 rounded-lg border p-4 text-center" style={hairline}>
           <p className="font-medium" style={{ color: 'var(--th-heading)' }}>{props.successMessage || 'Thanks — your response was submitted!'}</p>
           <button type="button" onClick={() => setDone(false)} className="mt-3 text-sm underline" style={{ color: 'var(--th-text)' }}>

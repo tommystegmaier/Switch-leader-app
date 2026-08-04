@@ -29,6 +29,7 @@ export function useSubmitForm() {
       pageSlug?: string;
       title?: string;
       data: FormAnswer[];
+      once?: boolean;
     }): Promise<void> => {
       const s = getSupabase();
       if (!s) throw new Error('Backend not configured.');
@@ -38,8 +39,24 @@ export function useSubmitForm() {
         p_page: args.pageSlug ?? null,
         p_title: args.title ?? null,
         p_data: args.data,
+        p_once: Boolean(args.once),
       });
       if (error) throw error;
+    },
+  });
+}
+
+/** Whether the signed-in person has already submitted this form (once-per-user). */
+export function useHasSubmittedForm(orgId: string | undefined, blockId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['form-submitted', orgId, blockId],
+    enabled: Boolean(orgId) && Boolean(blockId) && enabled,
+    queryFn: async (): Promise<boolean> => {
+      const s = getSupabase();
+      if (!s) return false;
+      const { data, error } = await s.rpc('has_submitted_form', { p_org: orgId, p_block: blockId });
+      if (error) throw error;
+      return Boolean(data);
     },
   });
 }
