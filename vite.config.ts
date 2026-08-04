@@ -10,7 +10,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 const APP_TITLE = process.env.VITE_APP_TITLE || 'Team Hub';
 
 // Replaces the placeholder title + apple title in index.html so the installed
-// app name is correct on iOS.
+// app name is correct on iOS. (The manifest <link> is hardcoded in index.html
+// pointing at our dynamic /app-manifest endpoint — see that file — so each
+// workspace on this multi-tenant build installs under its own name.)
 const injectAppTitle = {
   name: 'inject-app-title',
   transformIndexHtml(html: string) {
@@ -32,22 +34,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
-      // Installable shell identity. For a single-workspace deployment set
-      // VITE_APP_TITLE so the installed name matches (Android reads the manifest).
-      manifest: {
-        name: APP_TITLE,
-        short_name: APP_TITLE.slice(0, 30),
-        description: 'Your team’s resources, weekly info, links and documents.',
-        theme_color: '#0f1420',
-        background_color: '#0f1420',
-        display: 'standalone',
-        start_url: '/',
-        icons: [
-          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-        ],
-      },
+      // The install manifest is served dynamically per-workspace from the
+      // /app-manifest Pages Function, and index.html links to it directly, so we
+      // disable the plugin's own static manifest (one build serves many
+      // workspaces, so a baked name would be wrong for all but one).
+      manifest: false,
       workbox: {
         // Cache the built app shell for offline use; runtime-cache published
         // content (Supabase reads) so a viewer can reopen the app offline.

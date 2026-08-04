@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f1420" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!--
+      Multi-tenant PWA manifest: one build serves every workspace, so the
+      install name/icon can't be baked in. This points at a Pages Function that
+      resolves the current workspace (from the page's URL/Referer) and returns a
+      manifest with ITS name + icon — so "Add to Home Screen" shows the right
+      app name on iOS/Android. See functions/app-manifest.ts.
+    -->
+    <link rel="manifest" href="/app-manifest" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Team Hub" />
