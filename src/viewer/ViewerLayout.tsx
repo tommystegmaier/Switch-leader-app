@@ -9,6 +9,7 @@ import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks
 import { useLiveAppSettings } from '@/data/liveContent';
 import { useAllPages } from '@/data/pageHooks';
 import { useSchedulePageId } from '@/data/scheduleHooks';
+import { useChatPageSlug, useChatUnreadTotal } from '@/data/chatHooks';
 import type { NavTab } from '@/types';
 import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
@@ -45,6 +46,8 @@ export function ViewerLayout() {
   const { data: allPages } = useAllPages(liveMode ? org?.id : undefined);
   const { data: liveSettings } = useLiveAppSettings(org?.id, liveMode);
   const { data: schedulePageId } = useSchedulePageId(org?.id);
+  const { data: chatPageSlug } = useChatPageSlug(org?.id);
+  const { data: chatUnread = 0 } = useChatUnreadTotal(org?.id);
 
   // Editors preview the draft theme/title; viewers see the published one.
   const settings = liveMode ? (liveSettings ?? publishedSettings) : publishedSettings;
@@ -251,7 +254,7 @@ export function ViewerLayout() {
                       <span className={tabLabelCls}>{tab.label}</span>
                     </a>
                   ) : (
-                    <TabLink to={`/o/${org.slug}/${tab.target}`} icon={tab.icon} label={tab.label} />
+                    <TabLink to={`/o/${org.slug}/${tab.target}`} icon={tab.icon} label={tab.label} badge={chatPageSlug && tab.target === chatPageSlug ? chatUnread : 0} />
                   )}
                 </li>
               ))
@@ -289,8 +292,9 @@ function tabCls(active: boolean): string {
 
 const tabLabelCls = 'line-clamp-2 break-words text-[10px] leading-tight';
 
-/** A bottom-bar tab that links to an in-app page, with the active "bubble". */
-function TabLink({ to, icon, label }: { to: string; icon: string; label: string }) {
+/** A bottom-bar tab that links to an in-app page, with the active "bubble".
+ *  Shows a red unread badge (used by the chat page) when `badge` > 0. */
+function TabLink({ to, icon, label, badge = 0 }: { to: string; icon: string; label: string; badge?: number }) {
   return (
     <NavLink
       to={to}
@@ -298,7 +302,14 @@ function TabLink({ to, icon, label }: { to: string; icon: string; label: string 
       className={({ isActive }) => tabCls(isActive)}
       style={({ isActive }) => ({ color: 'var(--th-text)', backgroundColor: isActive ? 'rgba(127,127,127,0.18)' : 'transparent' })}
     >
-      <NavIcon name={icon} className="h-6 w-6" />
+      <span className="relative">
+        <NavIcon name={icon} className="h-6 w-6" />
+        {badge > 0 && (
+          <span className="absolute -right-2 -top-1.5 inline-flex min-w-[1.05rem] items-center justify-center rounded-full bg-red-500 px-1 text-[0.6rem] font-bold leading-none text-white" style={{ height: '1.05rem' }}>
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )}
+      </span>
       <span className={tabLabelCls}>{label}</span>
     </NavLink>
   );

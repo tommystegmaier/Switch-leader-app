@@ -26,6 +26,7 @@ import { DocumentView } from './viewers/document';
 import { CountdownView, MapView, QrView } from './viewers/utility';
 import { ScheduleView, BirthdaysView } from './viewers/schedule';
 import { RosterView } from './viewers/roster';
+import { ChatView } from './viewers/chat';
 import { InviteView } from './viewers/invite';
 import { TeamAccessBlockView } from './viewers/teamaccess';
 
@@ -416,6 +417,19 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Add a leader' },
     ],
     Viewer: InviteView,
+  }),
+
+  chat: def({
+    type: 'chat',
+    label: 'Group chat',
+    icon: '💬',
+    description: 'Group messaging by Roster group — reactions, photos, and per-group notifications. Viewers see only their groups.',
+    category: 'advanced',
+    defaultProps: { title: 'Chat' },
+    fields: [
+      { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Team Chat' },
+    ],
+    Viewer: ChatView,
   }),
 
   'team-access': def({

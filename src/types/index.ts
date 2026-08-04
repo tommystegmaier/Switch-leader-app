@@ -117,6 +117,7 @@ export type BlockType =
   | 'schedule'
   | 'birthdays'
   | 'roster'
+  | 'chat'
   | 'invite'
   | 'team-access';
 
