@@ -17,8 +17,37 @@
   --th-primary-text: #ffffff;
   --th-accent: #e23b2e;
   --th-heading: #1c2541;
+  --th-surface: #ffffff;
   --th-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
     Helvetica, Arial, sans-serif;
+}
+
+/*
+ * Dark mode. The theme variables (bg/text/heading/surface) are swapped by
+ * applyTheme(); this layer flips the app's many hardcoded white/gray surfaces
+ * so cards, modals, inputs and muted text read correctly on a dark page.
+ */
+.dark {
+  color-scheme: dark;
+}
+.dark .bg-white { background-color: var(--th-surface) !important; }
+.dark .bg-gray-50 { background-color: #171c24 !important; }
+.dark .bg-gray-100 { background-color: #232a34 !important; }
+.dark .text-gray-400 { color: #868e9c !important; }
+.dark .text-gray-500 { color: #98a0ae !important; }
+.dark .text-gray-600 { color: #a7aeba !important; }
+.dark .text-gray-700 { color: #c3c9d2 !important; }
+.dark .text-gray-800,
+.dark .text-gray-900 { color: #e6e8ec !important; }
+.dark .border-gray-200 { border-color: rgba(255, 255, 255, 0.12) !important; }
+.dark .border-gray-300 { border-color: rgba(255, 255, 255, 0.18) !important; }
+.dark .bg-black\/5 { background-color: rgba(255, 255, 255, 0.07) !important; }
+.dark .hover\:bg-black\/5:hover { background-color: rgba(255, 255, 255, 0.07) !important; }
+.dark input:not([type='checkbox']):not([type='radio']),
+.dark textarea,
+.dark select {
+  background-color: var(--th-surface);
+  color: var(--th-text);
 }
 
 html,

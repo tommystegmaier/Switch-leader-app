@@ -15,6 +15,7 @@ import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
 import { useDiscardChanges, usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
 import { applyTheme } from '@/lib/theme';
+import { getDark, setDarkPref } from '@/lib/darkMode';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
 import { SendNotification } from '@/editor/SendNotification';
 import { InstallPrompt } from './InstallPrompt';
@@ -56,6 +57,14 @@ export function ViewerLayout() {
   const { data: publishStatus } = usePublishStatus(org?.id, canEdit);
   const publish = usePublishWorkspace(org?.id ?? '');
   const discard = useDiscardChanges(org?.id ?? '');
+  const [dark, setDark] = useState(getDark());
+
+  function toggleDark() {
+    const next = !dark;
+    setDark(next);
+    setDarkPref(next);
+    if (settings) applyTheme(settings, undefined, next);
+  }
 
   // Leaving edit mode without publishing throws away the unpublished edits.
   async function onToggleEdit() {
@@ -121,6 +130,15 @@ export function ViewerLayout() {
         <div className="mx-auto flex max-w-screen-sm flex-wrap items-center justify-between gap-2 px-4 py-3">
           <span className="min-w-0 truncate text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{appName}</span>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={toggleDark}
+              aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="rounded-full border px-2.5 py-1.5 text-base leading-none"
+              style={{ color: 'var(--th-text)', borderColor: 'color-mix(in srgb, var(--th-text) 25%, transparent)' }}
+            >
+              {dark ? '☀️' : '🌙'}
+            </button>
             {canEdit && (
               <button
                 type="button"
