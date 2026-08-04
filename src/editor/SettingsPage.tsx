@@ -11,6 +11,7 @@ import { CSS } from '@dnd-kit/utilities';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
+import { useEditMode } from './EditModeProvider';
 import { useInvites, useCreateInvite, useRevokeInvite } from '@/data/inviteHooks';
 import { useOrgMembers, useSetMemberRole, useRemoveMember, useUpdateMemberProfile, useMembersWithPush, type OrgMember } from '@/data/memberHooks';
 import { useOrganization } from '@/data/hooks';
@@ -34,14 +35,29 @@ export function SettingsPage() {
   const { data: org } = useOrganization(slug);
   const { data: saved } = useLiveAppSettings(org?.id);
   const { role, canEdit, isLoading } = useMembershipRole(org?.id);
+  const { editing } = useEditMode();
   const save = useSettingsMutations(org?.id ?? '');
 
   const [draft, setDraft] = useState<AppSettings | null>(null);
-  const [savedNote, setSavedNote] = useState(false);
   const [pickLogo, setPickLogo] = useState(false);
   const [pickIcon, setPickIcon] = useState(false);
 
   useEffect(() => { if (saved && !draft) setDraft(saved); }, [saved, draft]);
+
+  // Autosave into the DRAFT as you edit (debounced, only while in edit mode).
+  // "Publish changes" is the one action that makes it live; leaving edit mode
+  // without publishing throws it away. So there's no separate Save button.
+  useEffect(() => {
+    if (!editing || !draft || !saved) return;
+    if (JSON.stringify(draft) === JSON.stringify(saved)) return;
+    const t = setTimeout(() => save.mutate(draft), 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, saved, editing]);
+
+  // Leaving edit mode (which discards unpublished changes) resets the form to
+  // whatever the live settings now are, so it never re-saves discarded edits.
+  useEffect(() => { if (!editing && saved) setDraft(saved); }, [editing, saved]);
 
   // Deep link from the "Icon bar" shortcut scrolls to that section.
   const { hash } = useLocation();
@@ -70,12 +86,6 @@ export function SettingsPage() {
 
   const set = (patch: Partial<AppSettings>) => setDraft({ ...draft, ...patch });
   const setColor = (key: keyof ThemeColors, value: string) => set({ theme: { ...draft.theme, [key]: value } });
-
-  async function onSave() {
-    await save.mutateAsync(draft!);
-    setSavedNote(true);
-    setTimeout(() => setSavedNote(false), 2500);
-  }
 
   const viewerLink = `${window.location.origin}/o/${org.slug}`;
 
@@ -177,11 +187,9 @@ export function SettingsPage() {
       {/* Team & access — who can edit / view (owner & admin only) */}
       {isAdmin && <TeamAccessSection orgId={org.id} currentRole={role} />}
 
-      <div className="sticky bottom-0 mt-6 flex items-center gap-3 border-t bg-white/90 py-3 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <button type="button" onClick={onSave} disabled={save.isPending} className="rounded-full px-6 py-3 font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
-          {save.isPending ? 'Saving…' : 'Save settings'}
-        </button>
-        {savedNote && <span className="text-sm text-green-700">Saved ✓</span>}
+      <div className="sticky bottom-0 mt-6 flex items-center gap-2 border-t bg-white/90 py-3 text-sm text-gray-500 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <span>{save.isPending ? 'Saving draft…' : '✓ Saved to draft'}</span>
+        <span className="text-gray-400">— hit <strong>Publish changes</strong> (top bar) to make it live.</span>
       </div>
 
       {pickLogo && <MediaPicker orgId={org.id} accept="image/*" onSelect={(u) => set({ logoUrl: u })} onClose={() => setPickLogo(false)} />}

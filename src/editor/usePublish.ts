@@ -47,3 +47,20 @@ export function usePublishWorkspace(orgId: string) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['org', orgId] }),
   });
 }
+
+/**
+ * Throw away unpublished edits by restoring the draft from the last published
+ * snapshot. Used when leaving edit mode without publishing.
+ */
+export function useDiscardChanges(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const s = getSupabase();
+      if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('discard_changes', { p_org: orgId });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['org', orgId] }),
+  });
+}

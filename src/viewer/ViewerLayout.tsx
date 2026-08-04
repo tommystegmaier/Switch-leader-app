@@ -13,7 +13,7 @@ import { useChatPageSlug, useChatUnreadTotal } from '@/data/chatHooks';
 import type { NavTab } from '@/types';
 import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
-import { usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
+import { useDiscardChanges, usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
 import { applyTheme } from '@/lib/theme';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
 import { SendNotification } from '@/editor/SendNotification';
@@ -41,7 +41,7 @@ export function ViewerLayout() {
 
   const { user, signOut } = useAuth();
   const { role, canEdit } = useMembershipRole(org?.id);
-  const { editing, toggle, setEditing } = useEditMode();
+  const { editing, setEditing } = useEditMode();
   const liveMode = editing && canEdit;
   const { data: allPages } = useAllPages(liveMode ? org?.id : undefined);
   const { data: liveSettings } = useLiveAppSettings(org?.id, liveMode);
@@ -55,6 +55,20 @@ export function ViewerLayout() {
   // Publish workflow.
   const { data: publishStatus } = usePublishStatus(org?.id, canEdit);
   const publish = usePublishWorkspace(org?.id ?? '');
+  const discard = useDiscardChanges(org?.id ?? '');
+
+  // Leaving edit mode without publishing throws away the unpublished edits.
+  async function onToggleEdit() {
+    if (editing) {
+      if (publishStatus?.dirty) {
+        if (!window.confirm('Exit editing without publishing?\n\nYour unpublished changes will be discarded and the app will go back to the last published version.')) return;
+        try { await discard.mutateAsync(); } catch { /* fall through and still exit */ }
+      }
+      setEditing(false);
+    } else {
+      setEditing(true);
+    }
+  }
 
   useEffect(() => {
     if (settings) applyTheme(settings);
@@ -120,7 +134,7 @@ export function ViewerLayout() {
             {canEdit && (
               <button
                 type="button"
-                onClick={toggle}
+                onClick={onToggleEdit}
                 aria-pressed={editing}
                 className="rounded-full border px-3 py-1.5 text-sm font-semibold"
                 style={editing
