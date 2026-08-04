@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
@@ -9,6 +9,7 @@ import {
   useHasSubmittedForm,
   useSubmitForm,
   type FormAnswer,
+  type FormSubmission,
 } from '@/data/formHooks';
 import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
@@ -113,7 +114,7 @@ export function FormView({ props, ctx }: { props: FormProps; ctx: ViewerCtx }) {
         >
           View responses ({count})
         </button>
-        {showResponses && <ResponsesModal orgId={org.id} blockId={ctx.blockId} title={props.title} onClose={() => setShowResponses(false)} />}
+        {showResponses && <ResponsesView orgId={org.id} blockId={ctx.blockId} title={props.title} fields={fields} onClose={() => setShowResponses(false)} />}
       </div>
     );
   }
@@ -157,7 +158,7 @@ export function FormView({ props, ctx }: { props: FormProps; ctx: ViewerCtx }) {
       )}
 
       {showResponses && org && ctx.blockId && (
-        <ResponsesModal orgId={org.id} blockId={ctx.blockId} title={props.title} onClose={() => setShowResponses(false)} />
+        <ResponsesView orgId={org.id} blockId={ctx.blockId} title={props.title} fields={fields} onClose={() => setShowResponses(false)} />
       )}
     </div>
   );
@@ -209,57 +210,139 @@ function FieldInput({ field, value, onChange }: { field: FormField; value: strin
   );
 }
 
-/** Owner/admin panel listing every response this form has collected. */
-function ResponsesModal({ orgId, blockId, title, onClose }: { orgId: string; blockId: string; title: string; onClose: () => void }) {
+/**
+ * Full-screen owner/admin view of a form's responses. A "Summary" tab tallies
+ * every dropdown/checkbox question into a bar graph; a "Responses" tab lists
+ * each submission in full. Export downloads a real CSV (Blob) with a Copy
+ * fallback for platforms that block downloads (iOS / installed PWAs).
+ */
+function ResponsesView({ orgId, blockId, title, fields, onClose }: { orgId: string; blockId: string; title: string; fields: FormField[]; onClose: () => void }) {
   const { data: subs = [], isLoading } = useFormSubmissions(orgId, blockId, true);
   const del = useDeleteFormSubmission(orgId, blockId);
-  const csvHref = useMemo(() => buildCsv(subs), [subs]);
+  const [tab, setTab] = useState<'summary' | 'responses'>('summary');
+  const [copied, setCopied] = useState(false);
+
+  const chartFields = fields.filter((f) => f.type === 'dropdown' || f.type === 'checkbox');
+
+  function exportCsv() {
+    const blob = new Blob(['﻿' + buildCsv(subs)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(title || 'form').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'form'}-responses.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  async function copyCsv() {
+    try {
+      await navigator.clipboard.writeText(buildCsv(subs));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard blocked — the Export button still works */ }
+  }
+
+  const pillActive = { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' };
+  const pillIdle = { border: '1px solid var(--th-hairline-strong)' } as const;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{title} — responses ({subs.length})</h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-full px-2 text-2xl leading-none text-gray-400 hover:bg-black/5">×</button>
-        </div>
+    <div className="fixed inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true">
+      <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--th-hairline)', paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}>
+        <button type="button" onClick={onClose} aria-label="Close" className="rounded-full px-2 text-2xl leading-none text-gray-500 hover:bg-black/5">×</button>
+        <h3 className="min-w-0 flex-1 truncate text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{title}</h3>
+      </div>
 
-        {subs.length > 0 && (
-          <a href={csvHref} download={`${title || 'form'}-responses.csv`} className="mt-1 text-sm underline" style={{ color: 'var(--th-text)' }}>
-            Download all as spreadsheet (CSV)
-          </a>
+      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2" style={{ borderColor: 'var(--th-hairline)' }}>
+        <button type="button" onClick={() => setTab('summary')} className="rounded-full px-4 py-1.5 text-sm font-semibold" style={tab === 'summary' ? pillActive : pillIdle}>Summary</button>
+        <button type="button" onClick={() => setTab('responses')} className="rounded-full px-4 py-1.5 text-sm font-semibold" style={tab === 'responses' ? pillActive : pillIdle}>Responses ({subs.length})</button>
+        <div className="ml-auto flex gap-2">
+          <button type="button" onClick={() => void copyCsv()} disabled={subs.length === 0} className="rounded-full px-3 py-1.5 text-sm font-medium disabled:opacity-40" style={pillIdle}>{copied ? 'Copied!' : 'Copy'}</button>
+          <button type="button" onClick={exportCsv} disabled={subs.length === 0} className="rounded-full px-3 py-1.5 text-sm font-semibold disabled:opacity-40" style={pillActive}>Export CSV</button>
+        </div>
+      </div>
+
+      <div className="mx-auto w-full max-w-3xl flex-1 overflow-y-auto px-4 py-4" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 2rem)' }}>
+        {isLoading && <p className="text-sm text-gray-500">Loading responses…</p>}
+        {!isLoading && subs.length === 0 && <p className="text-sm text-gray-500">No responses yet.</p>}
+
+        {!isLoading && subs.length > 0 && tab === 'summary' && (
+          <div className="flex flex-col gap-5">
+            <p className="text-sm text-gray-500">{subs.length} response{subs.length === 1 ? '' : 's'} total.</p>
+            {chartFields.length === 0
+              ? <p className="text-sm text-gray-500">No dropdown or checkbox questions to chart. Switch to “Responses” to read every submission.</p>
+              : chartFields.map((f, i) => <ChoiceSummary key={i} field={f} subs={subs} />)}
+          </div>
         )}
 
-        <div className="mt-3 flex-1 overflow-y-auto">
-          {isLoading && <p className="text-sm text-gray-500">Loading responses…</p>}
-          {!isLoading && subs.length === 0 && <p className="text-sm text-gray-500">No responses yet.</p>}
+        {!isLoading && subs.length > 0 && tab === 'responses' && (
           <ul className="flex flex-col gap-3">
             {subs.map((s) => (
               <li key={s.id} className="rounded-lg border p-3" style={{ borderColor: 'var(--th-hairline)' }}>
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-500">
-                    {new Date(s.createdAt).toLocaleString()}{s.submitterEmail ? ` · ${s.submitterEmail}` : ''}
-                  </span>
+                  <span className="text-xs text-gray-500">{new Date(s.createdAt).toLocaleString()}{s.submitterEmail ? ` · ${s.submitterEmail}` : ''}</span>
                   <button type="button" onClick={() => { if (window.confirm('Delete this response?')) del.mutate(s.id); }} className="text-xs text-red-600 underline">Delete</button>
                 </div>
-                <dl className="flex flex-col gap-1">
+                <dl className="flex flex-col gap-2">
                   {s.data.map((a, i) => (
                     <div key={i} className="text-sm">
                       <dt className="font-medium" style={{ color: 'var(--th-heading)' }}>{a.label}</dt>
-                      <dd style={{ color: 'var(--th-text)' }}>{a.value || <span className="text-gray-400">—</span>}</dd>
+                      <dd className="whitespace-pre-wrap break-words" style={{ color: 'var(--th-text)' }}>{a.value || <span className="text-gray-400">—</span>}</dd>
                     </div>
                   ))}
                 </dl>
               </li>
             ))}
           </ul>
-        </div>
+        )}
       </div>
     </div>
   );
 }
 
-/** Build a downloadable CSV data URL from the responses (labels as columns). */
+/** A bar-graph tally of one dropdown/checkbox question's answers. */
+function ChoiceSummary({ field, subs }: { field: FormField; subs: FormSubmission[] }) {
+  const answers = subs.map((s) => (s.data.find((a) => a.label === field.label)?.value ?? '').trim());
+  let rows: { label: string; count: number }[];
+  if (field.type === 'checkbox') {
+    rows = [
+      { label: 'Yes', count: answers.filter((v) => v === 'Yes').length },
+      { label: 'No', count: answers.filter((v) => v !== 'Yes').length },
+    ];
+  } else {
+    const counts = new Map<string, number>();
+    optionsOf(field).forEach((o) => counts.set(o, 0));
+    answers.forEach((v) => { if (v) counts.set(v, (counts.get(v) ?? 0) + 1); });
+    rows = [...counts.entries()].map(([label, count]) => ({ label, count }));
+  }
+  const total = rows.reduce((n, r) => n + r.count, 0) || 1;
+  const max = Math.max(1, ...rows.map((r) => r.count));
+
+  return (
+    <div className="rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
+      <p className="mb-3 font-semibold" style={{ color: 'var(--th-heading)' }}>{field.label}</p>
+      <div className="flex flex-col gap-2.5">
+        {rows.map((r, i) => {
+          const pct = Math.round((r.count / total) * 100);
+          return (
+            <div key={i}>
+              <div className="mb-0.5 flex items-center justify-between text-sm">
+                <span style={{ color: 'var(--th-text)' }}>{r.label}</span>
+                <span className="tabular-nums text-gray-500">{r.count} · {pct}%</span>
+              </div>
+              <div className="h-2.5 w-full overflow-hidden rounded-full" style={{ backgroundColor: 'var(--th-hairline)' }}>
+                <div className="h-full rounded-full" style={{ width: `${Math.round((r.count / max) * 100)}%`, backgroundColor: 'var(--th-primary)', minWidth: r.count ? '0.5rem' : 0 }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Build a CSV string from the responses (question labels as columns). */
 function buildCsv(subs: { data: FormAnswer[]; submitterEmail: string | null; createdAt: string }[]): string {
   const labels: string[] = [];
   subs.forEach((s) => s.data.forEach((a) => { if (!labels.includes(a.label)) labels.push(a.label); }));
@@ -267,8 +350,7 @@ function buildCsv(subs: { data: FormAnswer[]; submitterEmail: string | null; cre
   const header = ['Submitted', 'Email', ...labels].map(esc).join(',');
   const rows = subs.map((s) => {
     const map = new Map(s.data.map((a) => [a.label, a.value]));
-    return [s.createdAt, s.submitterEmail ?? '', ...labels.map((l) => map.get(l) ?? '')].map(esc).join(',');
+    return [new Date(s.createdAt).toLocaleString(), s.submitterEmail ?? '', ...labels.map((l) => map.get(l) ?? '')].map(esc).join(',');
   });
-  const csv = [header, ...rows].join('\r\n');
-  return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
+  return [header, ...rows].join('\r\n');
 }
