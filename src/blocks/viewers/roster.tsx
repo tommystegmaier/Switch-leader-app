@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
+import { getDark } from '@/lib/darkMode';
 import { errorMessage } from '@/lib/errors';
 import { uploadMedia } from '@/lib/media';
 import {
@@ -197,13 +198,20 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
   const count = directPeople.length + subPeople;
   const open = !collapsed[group.id];
   const isTop = level === 0;
+  const dark = getDark();
   // Top group: the app theme's Headings color as a solid bar, with the Button-
   // text color on top. Subgroup: a softened (lightened) version of that color.
-  const headerBg = isTop ? 'var(--th-heading)' : 'color-mix(in srgb, var(--th-heading) 16%, white)';
-  const headerFg = isTop ? 'var(--th-primary-text)' : 'var(--th-heading)';
+  // In dark mode the Headings color is near-white, so a raised slate bar (with
+  // light text) stands in for it — otherwise it'd be white-on-white.
+  const headerBg = isTop
+    ? (dark ? '#343c49' : 'var(--th-heading)')
+    : (dark ? '#20262e' : 'color-mix(in srgb, var(--th-heading) 16%, white)');
+  const headerFg = isTop
+    ? (dark ? '#f2f4f7' : 'var(--th-primary-text)')
+    : (dark ? '#c7cdd6' : 'var(--th-heading)');
 
   return (
-    <div className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(isTop ? { borderColor: 'rgba(0,0,0,0.18)' } : {}) }}>
+    <div className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(isTop ? { borderColor: dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.18)' } : {}) }}>
       <div className="flex items-center gap-2 px-3 py-2.5" style={{ backgroundColor: headerBg }}>
         <button type="button" onClick={() => toggle(group.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
           <span className="shrink-0" aria-hidden style={{ color: headerFg, opacity: 0.85 }}>{open ? '▾' : '▸'}</span>
@@ -217,7 +225,9 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
             className="ml-auto shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold"
             style={isTop
               ? { backgroundColor: 'rgba(255,255,255,0.22)', color: headerFg }
-              : { backgroundColor: 'rgba(255,255,255,0.65)', color: '#6b7280', border: '1px solid rgba(0,0,0,0.12)' }}
+              : dark
+                ? { backgroundColor: 'rgba(255,255,255,0.12)', color: '#c7cdd6', border: '1px solid rgba(255,255,255,0.14)' }
+                : { backgroundColor: 'rgba(255,255,255,0.65)', color: '#6b7280', border: '1px solid rgba(0,0,0,0.12)' }}
           >
             {count}
           </span>
@@ -235,7 +245,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
           {showManage && <AddPerson orgId={orgId} groupId={group.id} />}
 
           {subs.length > 0 && (
-            <div className="mt-1 flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: 'rgba(0,0,0,0.1)' }}>
+            <div className="mt-1 flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }}>
               {subs.map((sub, si) => (
                 <GroupBlock
                   key={sub.id}

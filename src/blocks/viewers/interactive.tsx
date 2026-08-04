@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { colorIsDark, DARK_INK, DARK_SURFACE } from '@/lib/colors';
+import { getDark } from '@/lib/darkMode';
 import { resolveAction, type ViewerCtx } from '../actions';
 import type {
   ButtonProps,
@@ -16,12 +18,25 @@ import { safeUrl } from '../sanitize';
 export function ButtonView({ props, ctx }: { props: ButtonProps; ctx: ViewerCtx }) {
   const resolved = resolveAction(props.action, ctx, { openInNewTab: props.openInNewTab });
   const filled = props.style !== 'outline';
-  const bg = props.bgColor || 'var(--th-primary)';
-  const fg = props.textColor || 'var(--th-primary-text)';
+  const dark = getDark();
+
+  // Filled: a baked near-black background/text would vanish on the dark page, so
+  // lift it. Theme-colored buttons ride --th-primary, which is lifted globally.
+  let bg = props.bgColor || 'var(--th-primary)';
+  let fg = props.textColor || 'var(--th-primary-text)';
+  if (dark) {
+    if (props.bgColor && colorIsDark(props.bgColor)) bg = DARK_SURFACE;
+    if (props.textColor && colorIsDark(props.textColor)) fg = DARK_INK;
+  }
+  // Outline: the brand color is the border + label; when it's dark it disappears
+  // on the dark page, so switch to readable light ink (bright brands stay).
+  const outline = dark && (!props.bgColor || colorIsDark(props.bgColor))
+    ? 'var(--th-text)'
+    : props.bgColor || 'var(--th-primary)';
 
   const style = filled
     ? { backgroundColor: bg, color: fg }
-    : { border: `2px solid ${bg}`, color: bg };
+    : { border: `2px solid ${outline}`, color: outline };
 
   const className = `inline-flex items-center justify-center gap-2 rounded-full px-6 py-4 text-base font-semibold transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
     props.fullWidth ? 'w-full' : ''
@@ -87,15 +102,21 @@ export function LinkView({ props }: { props: LinkProps }) {
     iconEl = <img src={favicon} alt="" className="h-6 w-6 rounded object-contain" loading="lazy" />;
   }
 
-  const bg = props.bgColor?.trim();
-  const fg = props.textColor?.trim() || 'var(--th-text)';
+  const dark = getDark();
+  let bg = props.bgColor?.trim();
+  let fg = props.textColor?.trim() || 'var(--th-text)';
+  if (dark) {
+    if (bg && colorIsDark(bg)) bg = DARK_SURFACE;
+    if (props.textColor && colorIsDark(props.textColor)) fg = DARK_INK;
+  }
+  const hairline = dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)';
   return (
     <a
       href={url ?? '#'}
       target={props.openInNewTab ? '_blank' : undefined}
       rel={props.openInNewTab ? 'noopener noreferrer' : undefined}
       className="flex items-center gap-3 rounded-lg border px-4 py-3 transition-opacity hover:opacity-90"
-      style={{ backgroundColor: bg || 'transparent', borderColor: bg ? 'transparent' : 'rgba(0,0,0,0.12)' }}
+      style={{ backgroundColor: bg || 'transparent', borderColor: bg ? 'transparent' : hairline }}
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center">{iconEl}</span>
       <span className="min-w-0">
@@ -153,7 +174,7 @@ export function ListView({ props, ctx }: { props: ListProps; ctx: ViewerCtx }) {
           {props.title}
         </h3>
       )}
-      <ul className="divide-y rounded-xl border" style={{ borderColor: 'rgba(0,0,0,0.12)' }}>
+      <ul className="divide-y rounded-xl border" style={{ borderColor: getDark() ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)' }}>
         {props.items.map((item, i) => {
           const resolved = resolveAction(item.action, ctx);
           const row = (
