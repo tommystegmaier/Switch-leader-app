@@ -102,13 +102,17 @@ export function FormView({ props, ctx }: { props: FormProps; ctx: ViewerCtx }) {
   if (alreadySubmitted) {
     if (!isAdmin || !org || !ctx.blockId) return <></>;
     return (
-      <div className="rounded-xl border p-3 text-sm" style={hairline}>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-gray-500">“{props.title}” is hidden after submitting (visible to admins only).</span>
-          <button type="button" onClick={() => setShowResponses(true)} className="shrink-0 font-semibold underline" style={{ color: 'var(--th-text)' }}>
-            View responses ({count})
-          </button>
-        </div>
+      <div className="rounded-xl border p-5" style={hairline}>
+        <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{props.title}</h3>
+        <p className="mt-1 text-sm text-gray-500">Hidden from people who’ve already submitted. Only you (owners &amp; admins) see this.</p>
+        <button
+          type="button"
+          onClick={() => setShowResponses(true)}
+          className="mt-3 rounded-full px-6 py-3 font-semibold"
+          style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+        >
+          View responses ({count})
+        </button>
         {showResponses && <ResponsesModal orgId={org.id} blockId={ctx.blockId} title={props.title} onClose={() => setShowResponses(false)} />}
       </div>
     );
