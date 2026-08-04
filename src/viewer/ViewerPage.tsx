@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { BlockView, blockFlexStyle, isVisibleTo } from '@/blocks/BlockView';
 import type { ViewerCtx } from '@/blocks/actions';
@@ -26,6 +27,7 @@ export function ViewerPage() {
 
   const { data: org } = useOrganization(slug);
   const { data: publishedPages, isLoading: pagesLoading } = usePublishedPages(org?.id);
+  const { loading: authLoading } = useAuth();
   const { role, canEdit, isLoading: roleLoading } = useMembershipRole(org?.id);
   const { editing } = useEditMode();
   const editingPages = editing && canEdit;
@@ -40,10 +42,14 @@ export function ViewerPage() {
   const blocks = editingPages ? liveBlocks.data : publishedBlocks.data;
   const blocksLoading = editingPages ? liveBlocks.isLoading : publishedBlocks.isLoading;
 
-  // Wait for the signed-in user's role before deciding visibility — otherwise
-  // an admin briefly looks like a viewer and gets sent to the first PUBLIC page
-  // instead of the true first page (which may be managers-only).
-  if (org && roleLoading) return <p className="text-sm text-gray-500">Loading…</p>;
+  // Wait for auth to settle AND the role to load before rendering — otherwise
+  // the page first renders as an anonymous viewer, then flips to "Loading…"
+  // the instant the session restores and the role query turns on, then flips
+  // back once the role resolves (a jarring home → Loading → home flicker). We
+  // also need the true role before deciding which first page to land on (an
+  // admin's may be a managers-only page). Anonymous viewers of a public app
+  // settle with authLoading=false and no role query, so they don't wait.
+  if (org && (authLoading || roleLoading)) return <p className="text-sm text-gray-500">Loading…</p>;
 
   // The first page this person is actually allowed to see (editors/managers see
   // all, so they land on the true first page).

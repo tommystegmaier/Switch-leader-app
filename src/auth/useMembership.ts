@@ -16,10 +16,11 @@ const EDITOR_ROLES: Role[] = ['owner', 'admin', 'editor'];
  */
 export function useMembershipRole(orgId: string | undefined) {
   const { user } = useAuth();
+  const enabled = Boolean(orgId) && Boolean(user);
 
   const query = useQuery({
     queryKey: ['membership', orgId, user?.id ?? 'anon'],
-    enabled: Boolean(orgId) && Boolean(user),
+    enabled,
     queryFn: async (): Promise<Role | null> => {
       const supabase = getSupabase();
       if (!supabase || !orgId || !user) return null;
@@ -39,6 +40,9 @@ export function useMembershipRole(orgId: string | undefined) {
     role,
     /** owner/admin/editor — may enter Edit Mode and write content. */
     canEdit: role !== null && EDITOR_ROLES.includes(role),
-    isLoading: query.isLoading,
+    // True from the instant the query is enabled until it settles — so callers
+    // don't render as an anonymous viewer for a frame before the role loads.
+    // (Disabled = anonymous viewer, which resolves immediately to not-loading.)
+    isLoading: enabled && query.isPending,
   };
 }
