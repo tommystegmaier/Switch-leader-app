@@ -167,8 +167,8 @@ function PersonModal({ person, onClose }: { person: RosterPerson; onClose: () =>
         <p className="mt-4 text-xl font-bold" style={{ color: 'var(--th-heading)' }}>{person.name}</p>
         {person.role && <div className="mt-1 flex justify-center"><RoleTag role={person.role} /></div>}
         {person.phone && (
-          <a href={`tel:${person.phone}`} className="mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
-            📞 {person.phone}
+          <a href={`sms:${person.phone}`} className="mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+            💬 {person.phone}
           </a>
         )}
       </div>
@@ -286,7 +286,7 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds, onOpen }: {
         <p className="truncate font-medium">{person.name}{mine && <span className="text-gray-400"> (you)</span>}</p>
         {person.role && <div className="mt-1"><RoleTag role={person.role} /></div>}
         {person.phone && (
-          <div className="mt-1 text-xs text-gray-500">{manage ? <a href={`tel:${person.phone}`} className="underline">{person.phone}</a> : person.phone}</div>
+          <div className="mt-1 text-xs text-gray-500">{manage ? <a href={`sms:${person.phone}`} className="underline">{person.phone}</a> : person.phone}</div>
         )}
       </div>
     </>
