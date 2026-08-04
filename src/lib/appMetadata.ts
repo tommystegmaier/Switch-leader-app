@@ -28,38 +28,15 @@ export function applyWorkspaceMetadata(org: Organization, settings: AppSettings 
     setLink('apple-touch-icon', icon);
   }
 
-  // Per-workspace manifest (Android/Chrome installs).
-  const manifest = {
-    name,
-    // Don't truncate mid-word (e.g. "Switch Leade"); let the OS shorten if needed.
-    short_name: name.slice(0, 30),
-    start_url: `/o/${org.slug}`,
-    scope: `/o/${org.slug}`,
-    display: 'standalone',
-    background_color: bgColor,
-    theme_color: themeColor,
-    icons: icon
-      ? [
-          { src: icon, sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: icon, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-        ]
-      : [
-          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
-        ],
-  };
-  try {
-    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
-    const url = URL.createObjectURL(blob);
-    const link = ensureLink('manifest');
-    // Revoke any previous blob URL we created to avoid leaks.
-    const prev = link.getAttribute('data-blob');
-    if (prev) URL.revokeObjectURL(prev);
-    link.href = url;
-    link.setAttribute('data-blob', url);
-  } catch {
-    /* manifest swap is best-effort */
-  }
+  // Per-workspace manifest (drives the home-screen name/icon on iOS + Android).
+  // We point at a REAL same-origin endpoint (/app-manifest) rather than a
+  // blob:/data: URL, because iOS ignores those and falls back to the build-time
+  // name. The workspace's details ride along in the query string.
+  const params = new URLSearchParams({ slug: org.slug, name });
+  if (icon) params.set('icon', icon);
+  if (themeColor) params.set('theme', themeColor);
+  if (bgColor) params.set('bg', bgColor);
+  ensureLink('manifest').href = `/app-manifest?${params.toString()}`;
 }
 
 /** The platform hub's name — shown at the root, outside any workspace. */
@@ -74,6 +51,8 @@ export function applyHubMetadata() {
   if (typeof document === 'undefined') return;
   document.title = HUB_TITLE;
   setMeta('apple-mobile-web-app-title', HUB_TITLE);
+  // Keep the installable name in sync too (see applyWorkspaceMetadata).
+  ensureLink('manifest').href = `/app-manifest?${new URLSearchParams({ name: HUB_TITLE }).toString()}`;
 }
 
 function setMeta(name: string, content: string) {
