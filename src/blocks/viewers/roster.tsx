@@ -78,6 +78,8 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   // Managers can flip into an editing mode; default on when the app is in Edit mode.
   const [manage, setManage] = useState(Boolean(ctx.editing));
   useEffect(() => { if (ctx.editing) setManage(true); }, [ctx.editing]);
+  // Tapping a person (in the normal view) opens a large card of their info.
+  const [viewing, setViewing] = useState<RosterPerson | null>(null);
 
   // Remember which groups are collapsed on this device.
   const collapseKey = `roster-collapsed-${org?.id ?? ''}`;
@@ -141,18 +143,41 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
             siblingIds={topGroups.map((x) => x.id)}
             index={gi}
             total={topGroups.length}
+            onOpen={setViewing}
           />
         ))}
       </div>
 
       {showManage && <AddGroup orgId={org.id} />}
       {showManage && isAdmin && <RoleListEditor orgId={org.id} />}
+
+      {viewing && <PersonModal person={viewing} onClose={() => setViewing(null)} />}
+    </div>
+  );
+}
+
+/** A large, easy-to-read card of one person's photo and info. */
+function PersonModal({ person, onClose }: { person: RosterPerson; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-xs rounded-2xl bg-white p-6 text-center shadow-xl">
+        <button type="button" onClick={onClose} aria-label="Close" className="absolute right-3 top-3 rounded-full px-2 text-2xl leading-none text-gray-400 hover:bg-black/5">×</button>
+        <div className="flex justify-center"><Avatar person={person} size={144} /></div>
+        <p className="mt-4 text-xl font-bold" style={{ color: 'var(--th-heading)' }}>{person.name}</p>
+        {person.role && <div className="mt-1 flex justify-center"><RoleTag role={person.role} /></div>}
+        {person.phone && (
+          <a href={`tel:${person.phone}`} className="mt-4 inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium" style={{ borderColor: 'rgba(0,0,0,0.2)' }}>
+            📞 {person.phone}
+          </a>
+        )}
+      </div>
     </div>
   );
 }
 
 // --- one group: header, its people, and (top level only) its subgroups -----
-function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle, showManage, siblingIds, index, total }: {
+function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle, showManage, siblingIds, index, total, onOpen }: {
   orgId: string;
   group: RosterGroup;
   level: 0 | 1;
@@ -164,6 +189,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
   siblingIds: string[];
   index: number;
   total: number;
+  onOpen: (p: RosterPerson) => void;
 }) {
   const directPeople = coachFirst(people.filter((p) => p.groupId === group.id));
   const subs = level === 0 ? allGroups.filter((g) => g.parentId === group.id) : [];
@@ -204,7 +230,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
       {open && (
         <div className="flex flex-col gap-2 px-3 pb-3">
           {directPeople.map((p, pi) => (
-            <PersonRow key={p.id} orgId={orgId} person={p} manage={showManage} index={pi} total={directPeople.length} peopleIds={directPeople.map((x) => x.id)} />
+            <PersonRow key={p.id} orgId={orgId} person={p} manage={showManage} index={pi} total={directPeople.length} peopleIds={directPeople.map((x) => x.id)} onOpen={onOpen} />
           ))}
           {showManage && <AddPerson orgId={orgId} groupId={group.id} />}
 
@@ -224,6 +250,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
                   siblingIds={subs.map((x) => x.id)}
                   index={si}
                   total={subs.length}
+                  onOpen={onOpen}
                 />
               ))}
             </div>
@@ -240,7 +267,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
 }
 
 // --- read-only + manage person row ----------------------------------------
-function PersonRow({ orgId, person, manage, index, total, peopleIds }: { orgId: string; person: RosterPerson; manage: boolean; index: number; total: number; peopleIds: string[] }) {
+function PersonRow({ orgId, person, manage, index, total, peopleIds, onOpen }: { orgId: string; person: RosterPerson; manage: boolean; index: number; total: number; peopleIds: string[]; onOpen: (p: RosterPerson) => void }) {
   const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const del = useDeleteRosterPerson(orgId);
@@ -251,18 +278,27 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds }: { orgId: 
     return <PersonForm orgId={orgId} person={person} onDone={() => setEditing(false)} />;
   }
 
-  return (
-    <div className="flex items-center gap-3 rounded-lg border p-2" style={cardStyle}>
+  // In the normal view, tapping the person opens a large, readable card.
+  const Info = (
+    <>
       <Avatar person={person} />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 text-left">
         <p className="truncate font-medium">{person.name}{mine && <span className="text-gray-400"> (you)</span>}</p>
         {person.role && <div className="mt-1"><RoleTag role={person.role} /></div>}
         {person.phone && (
-          <div className="mt-1 text-xs">
-            <a href={`tel:${person.phone}`} className="text-gray-500 underline">{person.phone}</a>
-          </div>
+          <div className="mt-1 text-xs text-gray-500">{manage ? <a href={`tel:${person.phone}`} className="underline">{person.phone}</a> : person.phone}</div>
         )}
       </div>
+    </>
+  );
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border p-2" style={cardStyle}>
+      {manage ? (
+        <div className="flex min-w-0 flex-1 items-center gap-3">{Info}</div>
+      ) : (
+        <button type="button" onClick={() => onOpen(person)} className="flex min-w-0 flex-1 items-center gap-3" aria-label={`View ${person.name}`}>{Info}</button>
+      )}
       {manage ? (
         <div className="flex shrink-0 items-center gap-1">
           <span className="flex flex-col leading-none">
