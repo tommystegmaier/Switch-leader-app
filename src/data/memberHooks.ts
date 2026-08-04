@@ -37,6 +37,24 @@ export function useOrgMembers(orgId: string | undefined, enabled: boolean) {
   });
 }
 
+/** Set of member user_ids who have push notifications on. Polls so a person's
+ *  tag flips to green shortly after they enable notifications. Manager-only. */
+export function useMembersWithPush(orgId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['org', orgId, 'members-push'],
+    enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
+    refetchInterval: 20_000,
+    queryFn: async (): Promise<string[]> => {
+      const s = getSupabase();
+      if (!s || !orgId) return [];
+      const { data, error } = await s.rpc('members_with_push', { p_org: orgId });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => r.user_id).filter(Boolean);
+    },
+  });
+}
+
 export function useSetMemberRole(orgId: string) {
   const qc = useQueryClient();
   return useMutation({

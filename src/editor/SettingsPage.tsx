@@ -12,7 +12,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useInvites, useCreateInvite, useRevokeInvite } from '@/data/inviteHooks';
-import { useOrgMembers, useSetMemberRole, useRemoveMember, useUpdateMemberProfile, type OrgMember } from '@/data/memberHooks';
+import { useOrgMembers, useSetMemberRole, useRemoveMember, useUpdateMemberProfile, useMembersWithPush, type OrgMember } from '@/data/memberHooks';
 import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import { useLiveAppSettings } from '@/data/liveContent';
@@ -291,10 +291,12 @@ const ROLE_LABEL: Record<string, string> = {
  * email and lands with the role you chose — so several people can edit the
  * same app from different accounts.
  */
-function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole: Role | null }) {
+export function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole: Role | null }) {
   const { user } = useAuth();
   const { data: invites } = useInvites(orgId, true);
   const { data: members } = useOrgMembers(orgId, true);
+  const { data: pushOn } = useMembersWithPush(orgId, true);
+  const pushSet = new Set(pushOn ?? []);
   const createInvite = useCreateInvite(orgId);
   const revokeInvite = useRevokeInvite(orgId);
   const setRole = useSetMemberRole(orgId);
@@ -348,11 +350,17 @@ function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole:
             return (
               <li key={m.userId} className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0 flex-1 truncate">
-                    <span className="font-medium">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">
                       {m.name || m.email}{isSelf && <span className="font-normal text-gray-400"> (you)</span>}
                     </span>
                     {m.name && <span className="block truncate text-xs text-gray-500">{m.email}</span>}
+                    <span
+                      className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${pushSet.has(m.userId) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}
+                      title="Whether this person has turned on push notifications (updates automatically)"
+                    >
+                      {pushSet.has(m.userId) ? '🔔 Notifications on' : '🔕 Notifications off'}
+                    </span>
                   </span>
                   <div className="flex items-center gap-2">
                     <select

@@ -27,6 +27,7 @@ import { CountdownView, MapView, QrView } from './viewers/utility';
 import { ScheduleView, BirthdaysView } from './viewers/schedule';
 import { RosterView } from './viewers/roster';
 import { InviteView } from './viewers/invite';
+import { TeamAccessBlockView } from './viewers/teamaccess';
 
 /**
  * THE BLOCK REGISTRY — the single source of truth for the creative palette.
@@ -415,6 +416,19 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
       { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Add a leader' },
     ],
     Viewer: InviteView,
+  }),
+
+  'team-access': def({
+    type: 'team-access',
+    label: 'Team & access',
+    icon: '🧑‍🤝‍🧑',
+    description: 'People, roles, invites, and who has notifications on. Owners & admins only.',
+    category: 'advanced',
+    defaultProps: { title: 'Team & access' },
+    fields: [
+      { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Our team' },
+    ],
+    Viewer: TeamAccessBlockView,
   }),
 };
 

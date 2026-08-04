@@ -117,7 +117,8 @@ export type BlockType =
   | 'schedule'
   | 'birthdays'
   | 'roster'
-  | 'invite';
+  | 'invite'
+  | 'team-access';
 
 /**
  * A single content block. `props` is an open record whose exact shape depends
