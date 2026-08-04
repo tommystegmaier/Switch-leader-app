@@ -97,7 +97,7 @@ function RichContent({ html, ctx, className }: { html: string; ctx: ViewerCtx; c
     <div
       ref={ref}
       onClick={interactive ? onClick : undefined}
-      className={`${className ?? ''} ${interactive ? '[&_[data-type=taskItem]]:cursor-pointer' : ''}`}
+      className={`th-rich ${className ?? ''} ${interactive ? '[&_[data-type=taskItem]]:cursor-pointer' : ''}`}
       dangerouslySetInnerHTML={{ __html: sanitizeHtml(shown) }}
     />
   );

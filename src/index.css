@@ -50,6 +50,24 @@
   color: var(--th-text);
 }
 
+/*
+ * Creator rich-text (paragraphs/accordions) often has a text color baked into
+ * the saved HTML as inline styles — picked to look right on a light page, so it
+ * turns unreadable (dark-on-dark) in dark mode. Force rich-text — and any
+ * inline-colored span inside it — to the readable theme text color. Highlighted
+ * text keeps a dark ink so it stays legible over its bright highlight.
+ */
+.dark .th-rich {
+  color: var(--th-text);
+}
+.dark .th-rich [style*='color'] {
+  color: var(--th-text) !important;
+}
+.dark .th-rich mark,
+.dark .th-rich mark [style*='color'] {
+  color: #1a1a1a !important;
+}
+
 html,
 body,
 #root {
