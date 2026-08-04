@@ -67,6 +67,21 @@
 .dark .th-rich mark [style*='color'] {
   color: #1a1a1a !important;
 }
+/* Divider lines inside rich text (horizontal rules, quote bars) are drawn in
+ * black; lighten them so they don't vanish on the dark page. */
+.dark .th-rich hr {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+.dark .th-rich blockquote {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+/* Row separators in tappable lists (divide-y) and any bare <hr>. */
+.dark .divide-y > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.dark hr {
+  border-color: rgba(255, 255, 255, 0.18);
+}
 
 html,
 body,

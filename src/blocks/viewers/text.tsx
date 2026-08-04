@@ -3,6 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
+import { colorIsDark } from '@/lib/colors';
+import { getDark } from '@/lib/darkMode';
 import { getSupabase } from '@/lib/supabase';
 import type { ViewerCtx } from '../actions';
 import { sanitizeHtml } from '../sanitize';
@@ -104,10 +106,15 @@ function RichContent({ html, ctx, className }: { html: string; ctx: ViewerCtx; c
 }
 
 export function DividerView({ props }: { props: DividerProps }) {
+  // Divider lines default to a near-black color, which disappears on the dark
+  // page — swap a dark line for a subtle light one in dark mode. A creator's
+  // bright/light custom color is kept as-is.
+  const dark = getDark();
+  const color = dark && colorIsDark(props.color) ? 'rgba(255,255,255,0.22)' : props.color || 'var(--th-text)';
   return (
     <hr
       style={{
-        borderColor: props.color || 'var(--th-text)',
+        borderColor: color,
         borderTopWidth: props.thickness,
         marginTop: props.margin,
         marginBottom: props.margin,
