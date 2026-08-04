@@ -70,6 +70,20 @@ export function useRenameWorkspace() {
   });
 }
 
+/** Permanently delete a workspace and everything in it (owner only). */
+export function useDeleteWorkspace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (orgId: string): Promise<void> => {
+      const s = getSupabase();
+      if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('delete_workspace', { p_org: orgId });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-workspaces'] }),
+  });
+}
+
 /** Duplicate a workspace's structure into a new one (only the owner carries over). */
 export function useDuplicateWorkspace() {
   const qc = useQueryClient();

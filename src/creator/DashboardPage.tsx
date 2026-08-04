@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { applyHubMetadata } from '@/lib/appMetadata';
 import { errorMessage } from '@/lib/errors';
-import { slugify, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, type WorkspaceMembership } from '@/data/workspaceHooks';
+import { slugify, useDeleteWorkspace, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, type WorkspaceMembership } from '@/data/workspaceHooks';
 
 /**
  * "My Workspaces" — the creator home. Lists every app the signed-in user
@@ -83,8 +83,10 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
   const navigate = useNavigate();
   const duplicate = useDuplicateWorkspace();
   const rename = useRenameWorkspace();
+  const del = useDeleteWorkspace();
   const canManage = role === 'owner' || role === 'admin';
   const canDuplicate = canManage;
+  const isOwner = role === 'owner';
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(org.name);
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -93,6 +95,19 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
   const [slug, setSlug] = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function runDelete() {
+    setDeleteError(null);
+    try {
+      await del.mutateAsync(org.id);
+      // The list refetches on success; the card disappears on its own.
+    } catch (e) {
+      setDeleteError(errorMessage(e));
+    }
+  }
 
   async function saveRename() {
     setRenameError(null);
@@ -151,6 +166,37 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
                 Duplicate
               </button>
             )}
+            {isOwner && (
+              <button type="button" onClick={() => { setDeleteOpen((v) => !v); setConfirmText(''); setDeleteError(null); }} className="rounded-full border px-3 py-1 text-xs font-semibold text-red-600" style={{ borderColor: 'rgba(220,38,38,0.4)' }}>
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {deleteOpen && !renaming && (
+        <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
+          <p className="text-sm font-semibold text-red-600">Delete this app permanently?</p>
+          <p className="text-xs text-gray-500">
+            This removes <strong>{org.name}</strong> and everything in it — pages, roster, schedule, chat, forms &amp; responses, and every member&apos;s access. <strong>This cannot be undone.</strong>
+          </p>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Type the app name to confirm</span>
+            <input className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'var(--th-hairline-strong)' }} placeholder={org.name} value={confirmText} onChange={(e) => setConfirmText(e.target.value)} />
+          </label>
+          {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void runDelete()}
+              disabled={del.isPending || confirmText.trim() !== org.name.trim()}
+              className="rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+              style={{ backgroundColor: '#dc2626' }}
+            >
+              {del.isPending ? 'Deleting…' : 'Delete forever'}
+            </button>
+            <button type="button" onClick={() => setDeleteOpen(false)} className="rounded-full px-4 py-2 text-sm">Cancel</button>
           </div>
         </div>
       )}
