@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { colorIsDark, DARK_INK, DARK_SURFACE } from '@/lib/colors';
-import { getDark } from '@/lib/darkMode';
+import { useDark } from '@/lib/darkMode';
 import { resolveAction, type ViewerCtx } from '../actions';
 import type {
   ButtonProps,
@@ -18,7 +18,7 @@ import { safeUrl } from '../sanitize';
 export function ButtonView({ props, ctx }: { props: ButtonProps; ctx: ViewerCtx }) {
   const resolved = resolveAction(props.action, ctx, { openInNewTab: props.openInNewTab });
   const filled = props.style !== 'outline';
-  const dark = getDark();
+  const dark = useDark();
 
   // Filled: a baked near-black background/text would vanish on the dark page, so
   // lift it. Theme-colored buttons ride --th-primary, which is lifted globally.
@@ -102,7 +102,7 @@ export function LinkView({ props }: { props: LinkProps }) {
     iconEl = <img src={favicon} alt="" className="h-6 w-6 rounded object-contain" loading="lazy" />;
   }
 
-  const dark = getDark();
+  const dark = useDark();
   let bg = props.bgColor?.trim();
   let fg = props.textColor?.trim() || 'var(--th-text)';
   if (dark) {

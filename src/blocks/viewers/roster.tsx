@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
-import { getDark } from '@/lib/darkMode';
+import { useDark } from '@/lib/darkMode';
 import { errorMessage } from '@/lib/errors';
 import { uploadMedia } from '@/lib/media';
 import {
@@ -198,7 +198,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
   const count = directPeople.length + subPeople;
   const open = !collapsed[group.id];
   const isTop = level === 0;
-  const dark = getDark();
+  const dark = useDark();
   // Top group: the app theme's Headings color as a solid bar, with the Button-
   // text color on top. Subgroup: a softened (lightened) version of that color.
   // In dark mode the Headings color is near-white, so a raised slate bar (with
