@@ -157,6 +157,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLInputElement>(null);
 
   const msgs = useMemo(() => messages ?? [], [messages]);
 
@@ -212,7 +213,25 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
     setUploading(true); setError(null);
     try {
       const m = await uploadMedia(orgId, file);
-      await send.mutateAsync({ groupId, userId, authorName, imageUrl: m.url });
+      await send.mutateAsync({ groupId, userId, authorName, imageUrl: m.url, mediaKind: 'photo' });
+    } catch (err) { setError(errorMessage(err)); }
+    finally { setUploading(false); input.value = ''; }
+  }
+
+  async function onPickVideo(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target;
+    const file = input.files?.[0];
+    if (!file) return;
+    setAttachOpen(false);
+    if (file.size > 50 * 1024 * 1024) {
+      setError('That video is too large (max 50 MB). Try a shorter clip.');
+      input.value = '';
+      return;
+    }
+    setUploading(true); setError(null);
+    try {
+      const m = await uploadMedia(orgId, file);
+      await send.mutateAsync({ groupId, userId, authorName, videoUrl: m.url, mediaKind: 'video' });
     } catch (err) { setError(errorMessage(err)); }
     finally { setUploading(false); input.value = ''; }
   }
@@ -230,7 +249,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
 
   async function sendGif(url: string) {
     setError(null);
-    try { await send.mutateAsync({ groupId, userId, authorName, imageUrl: url }); setGifOpen(false); }
+    try { await send.mutateAsync({ groupId, userId, authorName, imageUrl: url, mediaKind: 'gif' }); setGifOpen(false); }
     catch (e) { setError(errorMessage(e)); }
   }
 
@@ -263,6 +282,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
             <div className="absolute bottom-full left-2 z-50 mb-2 w-56 overflow-hidden rounded-2xl border shadow-xl" style={{ backgroundColor: 'var(--th-surface)', borderColor: 'var(--th-hairline)' }}>
               <AttachRow icon={<CameraIcon />} label="Camera" onClick={() => { setAttachOpen(false); cameraRef.current?.click(); }} />
               <AttachRow icon={<PhotosIcon />} label="Photos" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />
+              <AttachRow icon={<VideoIcon />} label="Video" onClick={() => { setAttachOpen(false); videoRef.current?.click(); }} />
               <AttachRow icon={<PollsIcon />} label="Polls" onClick={() => { setAttachOpen(false); setPollOpen(true); }} />
               <AttachRow icon={<GifIcon />} label="GIF" onClick={() => { setAttachOpen(false); setGifOpen(true); }} last />
             </div>
@@ -282,6 +302,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
           </button>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickPhoto} />
+          <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={onPickVideo} />
           <input
             className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm focus:outline-none focus-visible:ring-2"
             style={{ borderColor: 'var(--th-hairline-strong)' }}
@@ -338,6 +359,11 @@ const PhotosIcon = () => <IconCircle bg="conic-gradient(from 210deg, #f94144, #f
 const PollsIcon = () => (
   <IconCircle bg="#f59e0b">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><rect x="4" y="6" width="12" height="3" rx="1.5" /><rect x="4" y="11" width="16" height="3" rx="1.5" /><rect x="4" y="16" width="9" height="3" rx="1.5" /></svg>
+  </IconCircle>
+);
+const VideoIcon = () => (
+  <IconCircle bg="#ef4444">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><path d="M4 6h11a1 1 0 0 1 1 1v3.2l4-2.4v8.4l-4-2.4V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z" /></svg>
   </IconCircle>
 );
 const GifIcon = () => (
@@ -515,6 +541,7 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
               : { backgroundColor: 'var(--th-hairline)', color: 'var(--th-text)' }}
           >
             {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
+            {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
             {m.body}
           </div>
         </button>
