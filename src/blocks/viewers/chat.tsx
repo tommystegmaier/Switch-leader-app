@@ -138,6 +138,7 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
 }
 
 interface PollTally { counts: Record<number, number>; total: number; mine: number | null }
+interface PendingMedia { file: File; url: string; kind: 'photo' | 'video' }
 
 function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; onSeen: () => void }) {
   const { data: messages } = useChatMessages(orgId, groupId);
@@ -154,10 +155,10 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   const [pollOpen, setPollOpen] = useState(false);
   const [gifOpen, setGifOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
+  const [pending, setPending] = useState<PendingMedia[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLInputElement>(null);
 
   const msgs = useMemo(() => messages ?? [], [messages]);
 
@@ -196,44 +197,69 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
     return map;
   }, [reactions, userId]);
 
-  async function onSend() {
-    if (!text.trim()) return;
-    setError(null);
-    const body = text;
-    setText('');
-    try { await send.mutateAsync({ groupId, userId, authorName, body }); }
-    catch (e) { setError(errorMessage(e)); setText(body); }
-  }
-
-  async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+  // Picking media does NOT upload — it just stages it as a preview (like the
+  // phone). Nothing is sent until the person taps Send, so they can remove an
+  // item or add a caption first. Multiple files are allowed.
+  function onPickMedia(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.target;
-    const file = input.files?.[0];
-    if (!file) return;
+    const files = Array.from(input.files ?? []);
+    input.value = '';
     setAttachOpen(false);
-    setUploading(true); setError(null);
-    try {
-      const m = await uploadMedia(orgId, file);
-      await send.mutateAsync({ groupId, userId, authorName, imageUrl: m.url, mediaKind: 'photo' });
-    } catch (err) { setError(errorMessage(err)); }
-    finally { setUploading(false); input.value = ''; }
-  }
-
-  async function onPickVideo(e: React.ChangeEvent<HTMLInputElement>) {
-    const input = e.target;
-    const file = input.files?.[0];
-    if (!file) return;
-    setAttachOpen(false);
-    if (file.size > 50 * 1024 * 1024) {
-      setError('That video is too large (max 50 MB). Try a shorter clip.');
-      input.value = '';
-      return;
+    if (files.length === 0) return;
+    const additions: PendingMedia[] = [];
+    let tooBig = false;
+    for (const file of files) {
+      const isVideo = file.type.startsWith('video');
+      if (isVideo && file.size > 50 * 1024 * 1024) { tooBig = true; continue; }
+      additions.push({ file, url: URL.createObjectURL(file), kind: isVideo ? 'video' : 'photo' });
     }
-    setUploading(true); setError(null);
+    setError(tooBig ? 'A video was skipped — videos must be under 50 MB.' : null);
+    if (additions.length) setPending((prev) => [...prev, ...additions]);
+  }
+
+  function removePending(i: number) {
+    setPending((prev) => {
+      const item = prev[i];
+      if (item) URL.revokeObjectURL(item.url);
+      return prev.filter((_, idx) => idx !== i);
+    });
+  }
+
+  // Send the staged media (uploading now) plus any text. The text rides along
+  // as the caption on the first item; extra media follow as their own bubbles.
+  async function onSend() {
+    const body = text.trim();
+    if (!body && pending.length === 0) return;
+    setError(null);
+    const items = pending;
+    const savedText = text;
+    setText('');
+    setPending([]);
+    setUploading(items.length > 0);
     try {
-      const m = await uploadMedia(orgId, file);
-      await send.mutateAsync({ groupId, userId, authorName, videoUrl: m.url, mediaKind: 'video' });
-    } catch (err) { setError(errorMessage(err)); }
-    finally { setUploading(false); input.value = ''; }
+      if (items.length === 0) {
+        await send.mutateAsync({ groupId, userId, authorName, body });
+      } else {
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          const m = await uploadMedia(orgId, it.file);
+          await send.mutateAsync({
+            groupId, userId, authorName,
+            body: i === 0 && body ? body : undefined,
+            imageUrl: it.kind === 'video' ? undefined : m.url,
+            videoUrl: it.kind === 'video' ? m.url : undefined,
+            mediaKind: it.kind,
+          });
+        }
+        items.forEach((it) => URL.revokeObjectURL(it.url));
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+      setText(savedText);
+      setPending(items); // keep previews so they can retry
+    } finally {
+      setUploading(false);
+    }
   }
 
   function react(messageId: string, emoji: string, mine: boolean) {
@@ -282,27 +308,42 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
             <div className="absolute bottom-full left-2 z-50 mb-2 w-56 overflow-hidden rounded-2xl border shadow-xl" style={{ backgroundColor: 'var(--th-surface)', borderColor: 'var(--th-hairline)' }}>
               <AttachRow icon={<CameraIcon />} label="Camera" onClick={() => { setAttachOpen(false); cameraRef.current?.click(); }} />
               <AttachRow icon={<PhotosIcon />} label="Photos" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />
-              <AttachRow icon={<VideoIcon />} label="Video" onClick={() => { setAttachOpen(false); videoRef.current?.click(); }} />
               <AttachRow icon={<PollsIcon />} label="Polls" onClick={() => { setAttachOpen(false); setPollOpen(true); }} />
               <AttachRow icon={<GifIcon />} label="GIF" onClick={() => { setAttachOpen(false); setGifOpen(true); }} last />
             </div>
           </>
         )}
 
+        {/* Staged attachments — shown as removable previews; nothing uploads
+            until Send. */}
+        {pending.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto px-3 pt-2">
+            {pending.map((p, i) => (
+              <div key={i} className="relative shrink-0">
+                {p.kind === 'video'
+                  ? <video src={p.url} muted playsInline className="h-16 w-16 rounded-lg object-cover" />
+                  : <img src={p.url} alt="" className="h-16 w-16 rounded-lg object-cover" />}
+                {p.kind === 'video' && <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center text-lg text-white drop-shadow">▶</span>}
+                <button type="button" onClick={() => removePending(i)} aria-label="Remove" className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs leading-none text-white">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-center gap-2 px-3 py-2">
           <button
             type="button"
             onClick={() => setAttachOpen((v) => !v)}
-            disabled={uploading}
             aria-label="Add attachment"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-2xl leading-none disabled:opacity-50"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-2xl leading-none"
             style={{ backgroundColor: 'var(--th-hairline)', color: 'var(--th-text)' }}
           >
-            {uploading ? '⏳' : '+'}
+            +
           </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickPhoto} />
-          <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={onPickVideo} />
+          {/* Camera opens the device camera (switch photo/video there); Photos
+              opens the library (pick photos or videos, multiple). */}
+          <input ref={cameraRef} type="file" accept="image/*,video/*" capture="environment" className="hidden" onChange={onPickMedia} />
+          <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={onPickMedia} />
           <input
             className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm focus:outline-none focus-visible:ring-2"
             style={{ borderColor: 'var(--th-hairline-strong)' }}
@@ -311,16 +352,16 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
           />
-          {text.trim() && (
+          {(text.trim() || pending.length > 0) && (
             <button
               type="button"
               onClick={() => void onSend()}
-              disabled={send.isPending}
+              disabled={uploading || send.isPending}
               aria-label="Send"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none disabled:opacity-50"
               style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
             >
-              ↑
+              {uploading ? '⏳' : '↑'}
             </button>
           )}
         </div>
@@ -351,19 +392,29 @@ function IconCircle({ bg, children }: { bg: string; children?: ReactNode }) {
   return <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: bg }} aria-hidden>{children}</span>;
 }
 const CameraIcon = () => (
-  <IconCircle bg="#6b7280">
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z" /><circle cx="12" cy="13" r="3.2" /></svg>
+  <IconCircle bg="#8e8e93">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden>
+      <circle cx="12" cy="12" r="6.4" fill="none" stroke="#fff" strokeWidth={2} />
+      <circle cx="12" cy="12" r="2.6" fill="#fff" />
+    </svg>
   </IconCircle>
 );
-const PhotosIcon = () => <IconCircle bg="conic-gradient(from 210deg, #f94144, #f9c74f, #90be6d, #43aa8b, #577590, #f94144)" />;
+const PHOTO_COLORS = ['#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#007aff', '#af52de'];
+const PhotosIcon = () => (
+  <IconCircle bg="#ffffff">
+    <svg viewBox="0 0 36 36" width="30" height="30" aria-hidden>
+      <g transform="translate(18 18)">
+        {PHOTO_COLORS.map((c, i) => (
+          <ellipse key={i} cx="0" cy="-5" rx="4.4" ry="8.2" fill={c} opacity="0.82" transform={`rotate(${i * 60})`} />
+        ))}
+        <circle r="3" fill="#fff" />
+      </g>
+    </svg>
+  </IconCircle>
+);
 const PollsIcon = () => (
   <IconCircle bg="#f59e0b">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><rect x="4" y="6" width="12" height="3" rx="1.5" /><rect x="4" y="11" width="16" height="3" rx="1.5" /><rect x="4" y="16" width="9" height="3" rx="1.5" /></svg>
-  </IconCircle>
-);
-const VideoIcon = () => (
-  <IconCircle bg="#ef4444">
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff"><path d="M4 6h11a1 1 0 0 1 1 1v3.2l4-2.4v8.4l-4-2.4V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z" /></svg>
   </IconCircle>
 );
 const GifIcon = () => (
