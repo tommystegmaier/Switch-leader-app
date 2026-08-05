@@ -159,6 +159,45 @@ export function useSaveBirthdayConfig(orgId: string) {
   });
 }
 
+/** Whether the current user has opted IN to birthday alerts for themselves. */
+export function useBirthdayOptIn(orgId: string | undefined) {
+  return useQuery({
+    queryKey: KEY(orgId, 'birthday-optin'),
+    enabled: Boolean(orgId) && isSupabaseConfigured,
+    queryFn: async (): Promise<boolean> => {
+      const s = getSupabase(); if (!s || !orgId) return false;
+      // RLS returns only the caller's own row, so any row = opted in.
+      const { data, error } = await s.from('birthday_subscribers').select('user_id').eq('org_id', orgId).limit(1);
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    },
+  });
+}
+
+/** Turn birthday alerts on/off for just the current user. Turning them on also
+ *  makes sure notifications are actually enabled on this device. */
+export function useSetBirthdayOptIn(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (on: boolean) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { data: sess } = await s.auth.getSession();
+      const uid = sess.session?.user.id;
+      if (!uid) throw new Error('Please sign in again.');
+      if (on) {
+        const { ensurePushSubscribed } = await import('@/lib/push');
+        await ensurePushSubscribed(orgId);
+        const { error } = await s.from('birthday_subscribers').upsert({ org_id: orgId, user_id: uid });
+        if (error) throw error;
+      } else {
+        const { error } = await s.from('birthday_subscribers').delete().eq('org_id', orgId).eq('user_id', uid);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => invalidate(qc, orgId, 'birthday-optin'),
+  });
+}
+
 export interface NotifyDefaults { title: string; message: string }
 
 export function useNotifyDefaults(orgId: string | undefined, enabled = true) {

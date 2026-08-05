@@ -14,7 +14,7 @@ import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import {
   useAddSkip, useAddToRoster, useCreateRole, useCreateTeam, useDeleteRole, useDeleteTeam,
-  useBirthdayConfig, useSaveBirthdayConfig,
+  useBirthdayConfig, useBirthdayOptIn, useSaveBirthdayConfig, useSetBirthdayOptIn,
   useMySchedule, useNotifyDefaults, useNotifyRoster, useOrgBirthdays, useRemoveFromRoster,
   useRemoveSkip, useReorderRoles, useReorderTeams, useRespondOccurrence, useRoster,
   useRosterStatus, useSaveNotifyDefaults, useScheduleMembers, useScheduleMute,
@@ -642,6 +642,7 @@ function fmtMonthDay(md: string): string {
 export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: ViewerCtx }) {
   const { data: org } = useOrganization(ctx.orgSlug);
   const { canEdit } = useMembershipRole(org?.id);
+  const { user } = useAuth();
   const { data: birthdays } = useOrgBirthdays(org?.id, Boolean(org) && canEdit);
   const title = props.title || 'Birthdays';
   const weeks = Math.max(1, Math.min(8, Number(props.upcomingWeeks) || 2));
@@ -650,12 +651,23 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
     return (
       <div className={card} style={cardStyle}>
         <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
-        <p className="mt-1 text-sm text-gray-500">Managers only. Shows upcoming birthdays from what people entered when they created their account.</p>
+        <p className="mt-1 text-sm text-gray-500">The birthday list is managers-only. Anyone can turn on their own daily birthday reminder here.</p>
       </div>
     );
   }
-  // Only owner/admin/editor see this at all.
-  if (!org || !canEdit) return <></>;
+  if (!org) return <></>;
+
+  // Everyone with an account can opt into birthday reminders — but only managers
+  // see the actual list of people's birthdays. A signed-out viewer sees nothing.
+  if (!canEdit) {
+    if (!user) return <></>;
+    return (
+      <div className={card} style={cardStyle}>
+        <p className="font-semibold uppercase tracking-wide" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
+        <BirthdayNotifyToggle orgId={org.id} />
+      </div>
+    );
+  }
 
   const withDays = [...(birthdays ?? [])]
     .map((b) => ({ ...b, md: monthDay(b.birthday), days: daysUntil(monthDay(b.birthday)) }))
@@ -693,7 +705,39 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
         <p className="mt-2 text-sm text-gray-500">Birthdays appear here once people add theirs at sign-up.</p>
       )}
 
+      <BirthdayNotifyToggle orgId={org.id} />
       <BirthdayAlertSettings orgId={org.id} />
+    </div>
+  );
+}
+
+/** Anyone: opt in/out of receiving the daily birthday reminder yourself. */
+function BirthdayNotifyToggle({ orgId }: { orgId: string }) {
+  const { data: on } = useBirthdayOptIn(orgId);
+  const setOptIn = useSetBirthdayOptIn(orgId);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <div className="mt-4 rounded-lg border p-3" style={cardStyle}>
+      <label className="flex items-center justify-between gap-3 text-sm">
+        <span>
+          <span className="block font-medium">🎂 Notify me about birthdays</span>
+          <span className="block text-xs text-gray-500">Get today&apos;s birthdays on your phone. Only you control this.</span>
+        </span>
+        <input
+          type="checkbox"
+          className="h-5 w-5"
+          checked={Boolean(on)}
+          disabled={busy}
+          onChange={async (e) => {
+            setBusy(true); setErr(null);
+            try { await setOptIn.mutateAsync(e.target.checked); }
+            catch (ex) { setErr(errorMessage(ex)); }
+            finally { setBusy(false); }
+          }}
+        />
+      </label>
+      {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
     </div>
   );
 }
@@ -712,7 +756,8 @@ function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | nul
   );
 }
 
-/** Managers-only: turn on a daily birthday push at a chosen time. */
+/** Managers-only: enable the daily birthday feature and pick the send time.
+ *  Who actually receives it is each person's own choice (the toggle above). */
 function BirthdayAlertSettings({ orgId }: { orgId: string }) {
   const { data: cfg } = useBirthdayConfig(orgId, true);
   const save = useSaveBirthdayConfig(orgId);
@@ -733,8 +778,8 @@ function BirthdayAlertSettings({ orgId }: { orgId: string }) {
     <div className="mt-4 rounded-lg border p-3" style={cardStyle}>
       <label className="flex items-center justify-between gap-3 text-sm">
         <span>
-          <span className="block font-medium">🔔 Daily birthday alert</span>
-          <span className="block text-xs text-gray-500">Push managers a reminder of today&apos;s birthdays.</span>
+          <span className="block font-medium">🔔 Daily birthday alerts (feature)</span>
+          <span className="block text-xs text-gray-500">Turns the feature on and sets the time. Each person chooses to receive it above.</span>
         </span>
         <input type="checkbox" className="h-5 w-5" checked={enabledVal} onChange={(e) => { setEnabled(e.target.checked); persist({ enabled: e.target.checked, notifyTime: timeVal }); }} />
       </label>

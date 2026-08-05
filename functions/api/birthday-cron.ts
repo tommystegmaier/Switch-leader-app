@@ -75,9 +75,10 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     await admin.from('birthday_config').update({ last_sent_on: date }).eq('org_id', cfg.org_id);
     if (todays.length === 0) continue;
 
-    const { data: managers } = await admin
-      .from('memberships').select('user_id').eq('org_id', cfg.org_id).in('role', ['owner', 'admin', 'editor']);
-    const ids = [...new Set((managers ?? []).map((m: { user_id: string }) => m.user_id))];
+    // Recipients: only people who opted IN to birthday alerts for themselves.
+    const { data: subscribers } = await admin
+      .from('birthday_subscribers').select('user_id').eq('org_id', cfg.org_id);
+    const ids = [...new Set((subscribers ?? []).map((m: { user_id: string }) => m.user_id))];
     if (ids.length === 0) continue;
 
     const { data: subs } = await admin
