@@ -74,6 +74,7 @@ function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: s
   const { data: mutes } = useChatMutes(orgId);
   const setMute = useSetChatMute(orgId);
   const [active, setActive] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState(false);
   const markRead = useMarkChatRead(orgId);
   const mutedSet = new Set(mutes ?? []);
 
@@ -107,6 +108,19 @@ function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: s
     <div className={`${card} flex flex-col`} style={{ ...cardStyle, height: 'min(70vh, 640px)' }}>
       <div className="flex items-center gap-2 border-b px-4 py-3" style={cardStyle}>
         <p className="min-w-0 flex-1 truncate font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {headerName}</p>
+        {canModerate && (
+          <button
+            type="button"
+            onClick={() => setDeleteMode((v) => !v)}
+            className="shrink-0 rounded-full px-2 py-1 text-lg"
+            style={deleteMode ? { backgroundColor: 'color-mix(in srgb, #dc2626 18%, transparent)' } : { opacity: 0.6 }}
+            title={deleteMode ? 'Delete mode ON — tap to hide the delete buttons' : 'Delete mode OFF — tap to show delete buttons on messages'}
+            aria-pressed={deleteMode}
+            aria-label="Toggle delete mode"
+          >
+            🗑️
+          </button>
+        )}
         {active && (
           <button
             type="button"
@@ -141,7 +155,7 @@ function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: s
         })}
       </div>
 
-      {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} canModerate={canModerate} onSeen={() => markRead.mutate(active)} />}
+      {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} canModerate={canModerate} deleteMode={deleteMode} onSeen={() => markRead.mutate(active)} />}
     </div>
   );
 }
@@ -149,7 +163,7 @@ function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: s
 interface PollTally { counts: Record<number, number>; total: number; mine: number | null }
 interface PendingMedia { file: File; url: string; kind: 'photo' | 'audio' }
 
-function ChannelPane({ orgId, groupId, userId, authorName, canModerate, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; canModerate: boolean; onSeen: () => void }) {
+function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMode, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; canModerate: boolean; deleteMode: boolean; onSeen: () => void }) {
   const { data: messages } = useChatMessages(orgId, groupId);
   const { data: reactions } = useChatReactions(orgId, groupId);
   const { data: pollVotes } = useChatPollVotes(orgId, groupId);
@@ -308,7 +322,10 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, onSeen }
             key={m.id}
             m={m}
             mine={m.userId === userId}
-            canDelete={m.userId === userId || canModerate}
+            // Managers: the × shows on every message only when delete mode is
+            // on (a clean, deliberate moderation mode). Everyone else: the × is
+            // always available on their own messages.
+            canDelete={canModerate ? deleteMode : m.userId === userId}
             reactions={byMessage.get(m.id)}
             poll={m.poll ? pollByMessage.get(m.id) : undefined}
             onVote={(opt) => vote.mutate({ groupId, messageId: m.id, option: opt })}
