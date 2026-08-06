@@ -88,6 +88,9 @@ export function useSendChatMessage(orgId: string) {
             method: 'POST',
             headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ orgId, groupId, messageId: msgId, url }),
+            // Let the request finish even if the app is backgrounded right after
+            // sending — otherwise iOS can cancel it and no one gets the push.
+            keepalive: true,
           });
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

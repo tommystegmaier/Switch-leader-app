@@ -16,6 +16,7 @@ import { PageManager } from '@/editor/PageManager';
 import { useDiscardChanges, usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
 import { applyTheme } from '@/lib/theme';
 import { setAppBadge } from '@/lib/badge';
+import { ensurePushSubscribed } from '@/lib/push';
 import { getDark, setDarkPref } from '@/lib/darkMode';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
 import { SendNotification } from '@/editor/SendNotification';
@@ -97,6 +98,16 @@ export function ViewerLayout() {
   useEffect(() => {
     setAppBadge(chatUnread);
   }, [chatUnread]);
+
+  // Repair this device's push subscription on every open so it carries the
+  // current user_id. Chat pushes target subscriptions BY user (only the group's
+  // members get a group message), so a subscription saved before we tracked the
+  // user — its user_id null — would be silently skipped and that person would
+  // get no banner while the app is closed. Re-registering here (idempotent,
+  // best-effort, no prompt when already granted) keeps every device deliverable.
+  useEffect(() => {
+    if (user && org?.id) void ensurePushSubscribed(org.id);
+  }, [user, org?.id]);
 
   if (orgLoading) return <CenteredMessage>Loading…</CenteredMessage>;
 
