@@ -4,8 +4,8 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import {
-  useChatChannels, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useMarkChatRead,
-  useSendChatMessage, useSetChatMute, useToggleReaction, useVoteChatPoll,
+  useChatChannels, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useDeleteChatMessage,
+  useMarkChatRead, useSendChatMessage, useSetChatMute, useToggleReaction, useVoteChatPoll,
   type ChatMessage,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
@@ -153,8 +153,10 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   const send = useSendChatMessage(orgId);
   const toggle = useToggleReaction(orgId);
   const vote = useVoteChatPoll(orgId);
+  const del = useDeleteChatMessage(orgId);
 
   const [text, setText] = useState('');
+  const [actionMsg, setActionMsg] = useState<ChatMessage | null>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +168,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const msgs = useMemo(() => messages ?? [], [messages]);
 
@@ -244,6 +247,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
     const items = pending;
     const savedText = text;
     setText('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
     setPending([]);
     setUploading(items.length > 0);
     try {
@@ -307,6 +311,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
             open={reactingId === m.id}
             onToggleBar={() => setReactingId((id) => (id === m.id ? null : m.id))}
             onReact={(emoji, wasMine) => react(m.id, emoji, wasMine)}
+            onLongPress={() => { setReactingId(null); setActionMsg(m); }}
           />
         ))}
       </div>
@@ -357,13 +362,18 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
               only — video sending has been retired. */}
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickMedia} />
           <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onPickMedia} />
-          <input
-            className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm focus:outline-none focus-visible:ring-2"
-            style={{ borderColor: 'var(--th-hairline-strong)' }}
+          <textarea
+            ref={inputRef}
+            rows={1}
+            className="min-w-0 flex-1 resize-none rounded-2xl border px-4 py-2 text-sm leading-snug focus:outline-none focus-visible:ring-2"
+            style={{ borderColor: 'var(--th-hairline-strong)', maxHeight: '9rem' }}
             placeholder="Message"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void onSend(); } }}
+            onInput={(e) => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 144)}px`; }}
+            // Enter adds a new line (so lists/paragraphs keep their formatting);
+            // tap the Send button — or Cmd/Ctrl+Enter — to send.
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void onSend(); } }}
           />
           {(text.trim() || pending.length > 0) && (
             <button
@@ -383,6 +393,33 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
       {pollOpen && <PollComposer busy={send.isPending} onCancel={() => setPollOpen(false)} onPost={postPoll} />}
       {gifOpen && <GifPicker onCancel={() => setGifOpen(false)} onPick={sendGif} />}
       {audioOpen && <AudioRecorder onCancel={() => setAudioOpen(false)} onDone={stageAudio} />}
+      {actionMsg && (
+        <MessageActions
+          message={actionMsg}
+          canDelete={actionMsg.userId === userId}
+          deleting={del.isPending}
+          onCopy={async () => {
+            const body = actionMsg.body ?? '';
+            try {
+              await navigator.clipboard.writeText(body);
+            } catch {
+              // Fallback for browsers without the async clipboard API.
+              const ta = document.createElement('textarea');
+              ta.value = body; ta.style.position = 'fixed'; ta.style.opacity = '0';
+              document.body.appendChild(ta); ta.select();
+              try { document.execCommand('copy'); } catch { /* ignore */ }
+              document.body.removeChild(ta);
+            }
+            setActionMsg(null);
+          }}
+          onDelete={async () => {
+            try { await del.mutateAsync({ groupId, messageId: actionMsg.id }); }
+            catch (e) { setError(errorMessage(e)); }
+            setActionMsg(null);
+          }}
+          onCancel={() => setActionMsg(null)}
+        />
+      )}
     </>
   );
 }
@@ -675,7 +712,40 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
   );
 }
 
-function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onReact }: {
+/** Long-press / right-click action sheet for a message (Copy, Delete). */
+function MessageActions({ message, canDelete, deleting, onCopy, onDelete, onCancel }: {
+  message: ChatMessage;
+  canDelete: boolean;
+  deleting: boolean;
+  onCopy: () => void;
+  onDelete: () => void;
+  onCancel: () => void;
+}) {
+  const hasText = Boolean(message.body && message.body.trim());
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-sm px-2" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}>
+        <div className="overflow-hidden rounded-2xl" style={{ backgroundColor: 'var(--th-surface)' }}>
+          {hasText && (
+            <button type="button" onClick={onCopy} className={`block w-full px-4 py-3.5 text-center text-base ${canDelete ? 'border-b' : ''}`} style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>Copy text</button>
+          )}
+          {canDelete && (
+            <button type="button" onClick={onDelete} disabled={deleting} className="block w-full px-4 py-3.5 text-center text-base font-semibold text-red-600 disabled:opacity-50">
+              {deleting ? 'Deleting…' : 'Delete message'}
+            </button>
+          )}
+          {!hasText && !canDelete && (
+            <div className="px-4 py-3.5 text-center text-sm text-gray-500">Nothing to copy or delete here.</div>
+          )}
+        </div>
+        <button type="button" onClick={onCancel} className="mt-2 block w-full rounded-2xl px-4 py-3.5 text-center text-base font-semibold" style={{ backgroundColor: 'var(--th-surface)', color: 'var(--th-text)' }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onReact, onLongPress }: {
   m: ChatMessage;
   mine: boolean;
   reactions: Map<string, { count: number; mine: boolean }> | undefined;
@@ -684,7 +754,19 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
   open: boolean;
   onToggleBar: () => void;
   onReact: (emoji: string, wasMine: boolean) => void;
+  onLongPress: () => void;
 }) {
+  // Long-press (or right-click) opens the Copy / Delete sheet; a quick tap still
+  // toggles the reaction bar. We track whether a long-press fired so the tap
+  // that follows the release doesn't also open the reaction bar.
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+  const startPress = () => {
+    longPressed.current = false;
+    pressTimer.current = setTimeout(() => { longPressed.current = true; onLongPress(); }, 450);
+  };
+  const cancelPress = () => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } };
+  const handleTap = () => { if (longPressed.current) { longPressed.current = false; return; } onToggleBar(); };
   // A poll renders as a tappable, live-tallied card instead of a chat bubble.
   if (m.poll) {
     const opts = m.poll.options;
@@ -724,7 +806,12 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
       <div className="relative max-w-[85%]">
         <button
           type="button"
-          onClick={onToggleBar}
+          onClick={handleTap}
+          onPointerDown={startPress}
+          onPointerUp={cancelPress}
+          onPointerLeave={cancelPress}
+          onPointerCancel={cancelPress}
+          onContextMenu={(e) => { e.preventDefault(); cancelPress(); longPressed.current = true; onLongPress(); }}
           className="block text-left"
           style={{ cursor: 'pointer' }}
         >

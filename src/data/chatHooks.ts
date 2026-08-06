@@ -101,6 +101,22 @@ export function useSendChatMessage(orgId: string) {
   });
 }
 
+/** Delete a message. RLS lets you delete your own (managers can delete any). */
+export function useDeleteChatMessage(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ messageId }: { groupId: string; messageId: string }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.from('chat_messages').delete().eq('id', messageId);
+      if (error) throw error;
+    },
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: KEY(orgId, 'messages', v.groupId) });
+      qc.invalidateQueries({ queryKey: KEY(orgId, 'channels') });
+    },
+  });
+}
+
 export function useToggleReaction(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
