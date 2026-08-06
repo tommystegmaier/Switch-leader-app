@@ -64,27 +64,37 @@ export async function registerPushDevice(orgId: string): Promise<void> {
   }
   const supabase = getSupabase();
   if (!supabase) throw new Error('Backend not configured.');
-  // Read the user id from the LOCAL session (no network round-trip). getUser()
-  // validates against the server and can return null on a flaky connection —
-  // which would save the subscription with a null user_id and make the chat
-  // push (which targets by user) silently skip this device.
   const { data: sess } = await supabase.auth.getSession();
-  const uid = sess.session?.user?.id ?? null;
-  // UPSERT on the endpoint. A device keeps the SAME push endpoint across
-  // re-subscribes, so a plain insert collides with the existing row
-  // (push_subscriptions_endpoint_key) and the row keeps its old, null user_id —
-  // exactly why chat pushes (which target by user) missed it. ON CONFLICT DO
-  // UPDATE rewrites that row in place with the current user_id. The UPDATE
-  // policy this needs was added in migration 0009.
+  const token = sess.session?.access_token;
+
+  if (token) {
+    // Signed in: save the subscription via the server, which writes it with the
+    // service role (bypassing row-level security) and stamps the user_id from
+    // the verified token. This is the reliable path — the client writing the
+    // row directly kept hitting RLS failures (duplicate-endpoint, missing
+    // update policy, org-lookup checks). The server has none of those problems.
+    const res = await fetch('/api/register-push', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ orgId, subscription: json }),
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(`Couldn’t save your notification subscription: ${detail.error || res.status}`);
+    }
+    return;
+  }
+
+  // Signed out (anonymous public viewer): no token to verify server-side, so
+  // write directly with user_id null (broadcast-only; chat pushes need a user).
   const { error } = await supabase.from('push_subscriptions').upsert({
     org_id: orgId,
     endpoint: json.endpoint,
     p256dh: json.keys.p256dh,
     auth: json.keys.auth,
-    user_id: uid,
+    user_id: null,
   }, { onConflict: 'endpoint' });
   if (error) {
-    // Surface a readable message (Supabase errors are plain objects, not Error).
     const detail = error.message || (error as { hint?: string }).hint || 'could not save subscription';
     if (/relation .*push_subscriptions.* does not exist|could not find the table/i.test(detail)) {
       throw new Error('Notifications aren’t set up yet (missing database table). Ask the admin to run migration 0007.');
