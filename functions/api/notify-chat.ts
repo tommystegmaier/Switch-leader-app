@@ -56,20 +56,23 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   const { data: grp } = await admin.from('roster_groups').select('name, auto_role').eq('id', groupId).maybeSingle();
   const groupName = (grp?.name as string) || 'Group chat';
 
-  // Recipients = the channel's MEMBERS only (this matches who gets the red
-  // unread dot in-app; see my_chat_groups): for an auto group (e.g. Coaches),
-  // everyone who holds that role; for a normal group, its assigned people.
-  // Managers who aren't assigned can still open the channel, but — like every
-  // messaging app — they're only notified for chats they're actually in. Minus
-  // the sender and anyone who muted the channel.
+  // Recipients (matches who gets the red unread dot in-app; see my_chat_groups):
+  //  • managers (owner/admin/editor) are notified for EVERY channel, and
+  //  • everyone else for the group they're a member of — an auto group (e.g.
+  //    Coaches) means everyone with that role; a normal group its assigned people.
+  // Minus the sender and anyone who muted this specific channel (their off switch).
+  const { data: managers } = await admin
+    .from('memberships').select('user_id').eq('org_id', orgId).in('role', ['owner', 'admin', 'editor']);
   const peopleQuery = grp?.auto_role
     ? admin.from('roster_people').select('user_id').eq('org_id', orgId).eq('role', grp.auto_role).not('user_id', 'is', null)
     : admin.from('roster_people').select('user_id').eq('group_id', groupId).not('user_id', 'is', null);
   const { data: people } = await peopleQuery;
   const { data: muted } = await admin.from('chat_mutes').select('user_id').eq('group_id', groupId);
   const mutedSet = new Set((muted ?? []).map((m: { user_id: string }) => m.user_id));
-  const recipientIds = [...new Set((people ?? []).map((p: { user_id: string }) => p.user_id))]
-    .filter((id) => id && id !== senderId && !mutedSet.has(id));
+  const recipientIds = [...new Set([
+    ...(managers ?? []).map((m: { user_id: string }) => m.user_id),
+    ...(people ?? []).map((p: { user_id: string }) => p.user_id),
+  ])].filter((id) => id && id !== senderId && !mutedSet.has(id));
   if (recipientIds.length === 0) return json({ sent: 0, total: 0 });
 
   // Each recipient's current total unread → the number to badge on their app
