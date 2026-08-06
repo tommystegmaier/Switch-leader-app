@@ -56,37 +56,42 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   const { data: grp } = await admin.from('roster_groups').select('name, auto_role').eq('id', groupId).maybeSingle();
   const groupName = (grp?.name as string) || 'Group chat';
 
-  // Recipients must MATCH who sees the channel in-app (see my_chat_groups):
-  //  • managers (owner/admin/editor) see EVERY channel, and
-  //  • everyone else sees the group they're assigned to — or, for an auto group
-  //    like Coaches, everyone with that role.
-  // Notify all of them, minus the sender and anyone who muted this channel, so
-  // whoever gets the red unread dot also gets the banner. (Managers who find a
-  // channel noisy can mute it with the bell.)
-  const { data: managers } = await admin
-    .from('memberships').select('user_id').eq('org_id', orgId).in('role', ['owner', 'admin', 'editor']);
+  // Recipients = the channel's MEMBERS only (this matches who gets the red
+  // unread dot in-app; see my_chat_groups): for an auto group (e.g. Coaches),
+  // everyone who holds that role; for a normal group, its assigned people.
+  // Managers who aren't assigned can still open the channel, but — like every
+  // messaging app — they're only notified for chats they're actually in. Minus
+  // the sender and anyone who muted the channel.
   const peopleQuery = grp?.auto_role
     ? admin.from('roster_people').select('user_id').eq('org_id', orgId).eq('role', grp.auto_role).not('user_id', 'is', null)
     : admin.from('roster_people').select('user_id').eq('group_id', groupId).not('user_id', 'is', null);
   const { data: people } = await peopleQuery;
   const { data: muted } = await admin.from('chat_mutes').select('user_id').eq('group_id', groupId);
   const mutedSet = new Set((muted ?? []).map((m: { user_id: string }) => m.user_id));
-  const recipientIds = [...new Set([
-    ...(managers ?? []).map((m: { user_id: string }) => m.user_id),
-    ...(people ?? []).map((p: { user_id: string }) => p.user_id),
-  ])].filter((id) => id && id !== senderId && !mutedSet.has(id));
+  const recipientIds = [...new Set((people ?? []).map((p: { user_id: string }) => p.user_id))]
+    .filter((id) => id && id !== senderId && !mutedSet.has(id));
   if (recipientIds.length === 0) return json({ sent: 0, total: 0 });
+
+  // Each recipient's current total unread → the number to badge on their app
+  // icon (so the closed-app icon shows the count, not just a dot).
+  const badges = new Map<string, number>();
+  await Promise.all(recipientIds.map(async (uid) => {
+    try {
+      const { data: n } = await admin.rpc('chat_unread_total_for', { p_org: orgId, p_user: uid });
+      if (typeof n === 'number') badges.set(uid, n);
+    } catch { /* no badge for this one */ }
+  }));
 
   const { data: subs } = await admin
     .from('push_subscriptions')
-    .select('endpoint, p256dh, auth')
+    .select('endpoint, p256dh, auth, user_id')
     .eq('org_id', orgId)
     .in('user_id', recipientIds);
 
   const snippet = (msg.body as string | null)?.trim()
     || (msg.video_url ? '🎥 Video' : msg.image_url ? '📷 Photo' : 'New message');
   const author = (msg.author_name as string | null) || 'Someone';
-  const data = {
+  const baseData = {
     title: groupName,
     body: `${author}: ${snippet.length > 140 ? snippet.slice(0, 140) + '…' : snippet}`,
     url: url || '/',
@@ -100,8 +105,10 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
 
   let sent = 0;
   await Promise.all(
-    (subs || []).map(async (s: { endpoint: string; p256dh: string; auth: string }) => {
+    (subs || []).map(async (s: { endpoint: string; p256dh: string; auth: string; user_id: string }) => {
       const subscription = { endpoint: s.endpoint, expirationTime: null, keys: { p256dh: s.p256dh, auth: s.auth } };
+      const badge = badges.get(s.user_id);
+      const data = typeof badge === 'number' ? { ...baseData, badge } : baseData;
       try {
         const req = await buildPushPayload({ data, options: { ttl: 3600 } }, subscription, vapid);
         const res = await fetch(s.endpoint, { method: req.method, headers: req.headers, body: req.body });
