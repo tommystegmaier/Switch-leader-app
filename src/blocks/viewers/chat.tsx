@@ -19,11 +19,23 @@ const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 const card = 'rounded-xl border';
 const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
 
-// Max video upload size. Comfortably fits a ~5-minute iPhone clip recorded in
-// the default "High Efficiency" (HEVC) mode. NOTE: this must be matched by the
-// Supabase Storage "Upload file size limit" (and requires a paid Supabase plan
-// — the free plan hard-caps uploads at 50 MB).
+// Video limits. Length is the primary guard (keeps files reasonable); size is
+// a fallback. NOTE: the size must also be matched by the Supabase Storage
+// "Upload file size limit" (the free plan hard-caps uploads at 50 MB).
+const MAX_VIDEO_SECONDS = 210; // 3 minutes 30 seconds
+const MAX_VIDEO_LABEL = '3 min 30 sec';
 const MAX_VIDEO_MB = 500;
+
+/** Read a video file's duration (seconds). Resolves 0 if it can't be read. */
+function readVideoDuration(url: string): Promise<number> {
+  return new Promise((resolve) => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => resolve(Number.isFinite(v.duration) ? v.duration : 0);
+    v.onerror = () => resolve(0);
+    v.src = url;
+  });
+}
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
@@ -206,20 +218,30 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   // Picking media does NOT upload — it just stages it as a preview (like the
   // phone). Nothing is sent until the person taps Send, so they can remove an
   // item or add a caption first. Multiple files are allowed.
-  function onPickMedia(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPickMedia(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.target;
     const files = Array.from(input.files ?? []);
     input.value = '';
     setAttachOpen(false);
     if (files.length === 0) return;
     const additions: PendingMedia[] = [];
+    let tooLong = false;
     let tooBig = false;
     for (const file of files) {
       const isVideo = file.type.startsWith('video');
-      if (isVideo && file.size > MAX_VIDEO_MB * 1024 * 1024) { tooBig = true; continue; }
-      additions.push({ file, url: URL.createObjectURL(file), kind: isVideo ? 'video' : 'photo' });
+      const url = URL.createObjectURL(file);
+      if (isVideo) {
+        if (file.size > MAX_VIDEO_MB * 1024 * 1024) { tooBig = true; URL.revokeObjectURL(url); continue; }
+        const dur = await readVideoDuration(url);
+        if (dur > MAX_VIDEO_SECONDS + 0.5) { tooLong = true; URL.revokeObjectURL(url); continue; }
+      }
+      additions.push({ file, url, kind: isVideo ? 'video' : 'photo' });
     }
-    setError(tooBig ? `A video was skipped — videos must be under ${MAX_VIDEO_MB} MB.` : null);
+    setError(
+      tooLong ? `A video was skipped — videos must be ${MAX_VIDEO_LABEL} or shorter.`
+      : tooBig ? `A video was skipped — videos must be under ${MAX_VIDEO_MB} MB.`
+      : null,
+    );
     if (additions.length) setPending((prev) => [...prev, ...additions]);
   }
 
