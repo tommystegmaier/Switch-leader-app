@@ -70,20 +70,19 @@ export async function registerPushDevice(orgId: string): Promise<void> {
   // push (which targets by user) silently skip this device.
   const { data: sess } = await supabase.auth.getSession();
   const uid = sess.session?.user?.id ?? null;
-  // Delete any existing row for this endpoint, then insert a fresh one.
-  // We intentionally do NOT upsert: an upsert becomes INSERT ... ON CONFLICT
-  // DO UPDATE, and the table has no UPDATE policy (by design — see 0007), so
-  // the update branch would fail with an RLS violation whenever the device
-  // re-subscribes with an endpoint it already registered. Delete-then-insert
-  // only needs the delete + insert policies, which every viewer has.
-  await supabase.from('push_subscriptions').delete().eq('endpoint', json.endpoint);
-  const { error } = await supabase.from('push_subscriptions').insert({
+  // UPSERT on the endpoint. A device keeps the SAME push endpoint across
+  // re-subscribes, so a plain insert collides with the existing row
+  // (push_subscriptions_endpoint_key) and the row keeps its old, null user_id —
+  // exactly why chat pushes (which target by user) missed it. ON CONFLICT DO
+  // UPDATE rewrites that row in place with the current user_id. The UPDATE
+  // policy this needs was added in migration 0009.
+  const { error } = await supabase.from('push_subscriptions').upsert({
     org_id: orgId,
     endpoint: json.endpoint,
     p256dh: json.keys.p256dh,
     auth: json.keys.auth,
     user_id: uid,
-  });
+  }, { onConflict: 'endpoint' });
   if (error) {
     // Surface a readable message (Supabase errors are plain objects, not Error).
     const detail = error.message || (error as { hint?: string }).hint || 'could not save subscription';
