@@ -55,15 +55,15 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-8" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.75rem)' }}>
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>{isMemberOnly ? 'My apps' : 'My workspaces'}</h1>
-        <div className="flex shrink-0 items-center gap-3 text-sm">
-          {isPlatformAdmin && <Link to="/platform" className="font-semibold underline" style={{ color: 'var(--th-primary)' }}>⚡ Command center</Link>}
-          {canCreate && hasApps && <Link to="/new" className="text-gray-500 underline">Create an app</Link>}
-          <button type="button" onClick={() => void signOut()} className="text-gray-500 underline">Sign out</button>
-        </div>
+      <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>{isMemberOnly ? 'My apps' : 'My workspaces'}</h1>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        {isPlatformAdmin && (
+          <Link to="/platform" className="rounded-full px-3 py-1 font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>⚡ Command center</Link>
+        )}
+        {canCreate && hasApps && <Link to="/new" className="underline" style={{ color: 'var(--th-text)' }}>Create an app</Link>}
+        <button type="button" onClick={() => void signOut()} className="underline" style={{ color: 'var(--th-text)' }}>Sign out</button>
       </div>
-      <p className="mb-6 text-sm text-gray-500">Signed in as {user?.email}</p>
+      <p className="mb-6 mt-3 text-sm" style={{ color: 'var(--th-text)', opacity: 0.6 }}>Signed in as {user?.email}</p>
 
       {hasApps ? (
         <ul className="mb-6 flex flex-col gap-3">

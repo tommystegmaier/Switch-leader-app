@@ -56,6 +56,47 @@ export function usePlatformApps(enabled = true) {
   });
 }
 
+export interface PlatformAdmin { user_id: string; email: string | null }
+
+/** Current platform admins. */
+export function usePlatformAdmins(enabled = true) {
+  return useQuery({
+    queryKey: ['platform', 'admins'],
+    enabled: enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<PlatformAdmin[]> => {
+      const s = getSupabase(); if (!s) return [];
+      const { data, error } = await s.rpc('platform_list_admins');
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ user_id: r.user_id, email: r.email ?? null }));
+    },
+  });
+}
+
+export function usePlatformAddAdmin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (email: string) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('platform_add_admin', { p_email: email.trim() });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'admins'] }),
+  });
+}
+
+export function usePlatformRemoveAdmin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('platform_remove_admin', { p_user: userId });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'admins'] }),
+  });
+}
+
 export function usePlatformDeleteApp() {
   const qc = useQueryClient();
   return useMutation({

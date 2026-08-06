@@ -4,8 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { errorMessage } from '@/lib/errors';
 import {
-  useIsPlatformAdmin, usePlatformApps, usePlatformDeleteApp, usePlatformJoinApp,
-  usePlatformSetUserDisabled, type PlatformApp,
+  useIsPlatformAdmin, usePlatformAddAdmin, usePlatformAdmins, usePlatformApps, usePlatformDeleteApp,
+  usePlatformJoinApp, usePlatformRemoveAdmin, usePlatformSetUserDisabled, type PlatformApp,
 } from '@/data/platformHooks';
 
 /**
@@ -50,6 +50,61 @@ export function PlatformPage() {
           </ul>
         </>
       )}
+
+      <AdminsSection currentUserId={user.id} />
+    </div>
+  );
+}
+
+/** Manage who else is a platform admin (add by email, remove). */
+function AdminsSection({ currentUserId }: { currentUserId: string }) {
+  const { data: admins, isLoading } = usePlatformAdmins();
+  const add = usePlatformAddAdmin();
+  const remove = usePlatformRemoveAdmin();
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function addAdmin() {
+    setError(null); setNotice(null);
+    const e = email.trim();
+    if (!e) return;
+    try { await add.mutateAsync(e); setEmail(''); setNotice(`${e} is now a platform admin.`); }
+    catch (err) { setError(errorMessage(err)); }
+  }
+
+  return (
+    <div className="mt-8 rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
+      <h2 className="font-bold" style={{ color: 'var(--th-heading)' }}>Platform admins</h2>
+      <p className="mt-1 text-sm text-gray-500">People who can see and manage this command center. Add someone by the email on their account.</p>
+
+      <div className="mt-3 flex flex-col gap-1.5">
+        {isLoading ? <p className="text-sm text-gray-400">Loading…</p> : (admins ?? []).map((a) => (
+          <div key={a.user_id} className="flex items-center justify-between gap-2 text-sm">
+            <span className="min-w-0 truncate">⚡ {a.email ?? 'unknown'}{a.user_id === currentUserId && <span className="ml-2 text-xs text-gray-400">(you)</span>}</span>
+            {a.user_id !== currentUserId && (
+              <button type="button" onClick={() => { setError(null); remove.mutate(a.user_id, { onError: (e) => setError(errorMessage(e)) }); }} disabled={remove.isPending} className="shrink-0 rounded-full border px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(220,38,38,0.4)' }}>Remove</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          type="email"
+          className="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
+          style={{ borderColor: 'var(--th-hairline-strong)' }}
+          placeholder="person@email.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void addAdmin(); }}
+        />
+        <button type="button" onClick={() => void addAdmin()} disabled={add.isPending || !email.trim()} className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+          {add.isPending ? 'Adding…' : 'Add admin'}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {notice && <p className="mt-2 text-xs text-green-700">{notice}</p>}
     </div>
   );
 }
