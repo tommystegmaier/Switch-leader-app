@@ -17,7 +17,22 @@ self.addEventListener('push', (event) => {
     badge: '/pwa-192.png',
     data: { url: payload.url || '/' },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      // Put a badge on the Home Screen app icon too. Use the count from the
+      // payload if provided, otherwise a generic badge (a dot). The app itself
+      // sets the exact number when it's opened.
+      (async () => {
+        try {
+          if (self.navigator && typeof self.navigator.setAppBadge === 'function') {
+            if (typeof payload.badge === 'number') await self.navigator.setAppBadge(payload.badge);
+            else await self.navigator.setAppBadge();
+          }
+        } catch (_e) { /* badge unsupported — ignore */ }
+      })(),
+    ]),
+  );
 });
 
 self.addEventListener('notificationclick', (event) => {

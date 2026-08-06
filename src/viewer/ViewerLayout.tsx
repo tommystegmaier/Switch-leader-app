@@ -15,6 +15,7 @@ import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
 import { useDiscardChanges, usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
 import { applyTheme } from '@/lib/theme';
+import { setAppBadge } from '@/lib/badge';
 import { getDark, setDarkPref } from '@/lib/darkMode';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
 import { SendNotification } from '@/editor/SendNotification';
@@ -91,6 +92,11 @@ export function ViewerLayout() {
   useEffect(() => {
     if (!canEdit && editing) setEditing(false);
   }, [canEdit, editing, setEditing]);
+
+  // Mirror the unread chat count onto the Home Screen app icon (PWA badge).
+  useEffect(() => {
+    setAppBadge(chatUnread);
+  }, [chatUnread]);
 
   if (orgLoading) return <CenteredMessage>Loading…</CenteredMessage>;
 
