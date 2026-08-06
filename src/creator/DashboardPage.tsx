@@ -3,7 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { applyHubMetadata } from '@/lib/appMetadata';
+import { setAppBadge } from '@/lib/badge';
 import { errorMessage } from '@/lib/errors';
+import { useWorkspaceUnread } from '@/data/chatHooks';
 import { slugify, useDeleteWorkspace, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, type WorkspaceMembership } from '@/data/workspaceHooks';
 
 /**
@@ -32,6 +34,12 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
   const hasApps = list.length > 0;
   const multiple = list.length > 1;
 
+  // Unread chat totals per app → the red badge on each card. Also mirror the
+  // grand total onto the Home Screen app icon while sitting on the hub, so the
+  // icon badge stays right even before you open a specific app.
+  const { byOrg, total } = useWorkspaceUnread(list.map((w) => w.org.id));
+  useEffect(() => { setAppBadge(total); }, [total]);
+
   // While we redirect a single-app user, don't flash the hub.
   if (isLoading || skipToSingle) {
     return <div className="mx-auto max-w-2xl px-4 pb-8 text-sm text-gray-500" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.75rem)' }}>Opening your app…</div>;
@@ -50,7 +58,7 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
 
       {hasApps ? (
         <ul className="mb-6 flex flex-col gap-3">
-          {list.map((w) => <WorkspaceCard key={w.org.id} w={w} />)}
+          {list.map((w) => <WorkspaceCard key={w.org.id} w={w} unread={byOrg[w.org.id] ?? 0} />)}
         </ul>
       ) : (
         <>
@@ -78,7 +86,7 @@ function WorkspaceLogo({ name, iconUrl }: { name: string; iconUrl: string | null
   );
 }
 
-function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
+function WorkspaceCard({ w, unread = 0 }: { w: WorkspaceMembership; unread?: number }) {
   const { org, role, iconUrl } = w;
   const navigate = useNavigate();
   const duplicate = useDuplicateWorkspace();
@@ -150,7 +158,14 @@ function WorkspaceCard({ w }: { w: WorkspaceMembership }) {
       ) : (
         <div className="flex flex-col gap-3">
           <Link to={`/o/${org.slug}`} className="flex min-w-0 items-center gap-3">
-            <WorkspaceLogo name={org.name} iconUrl={iconUrl} />
+            <span className="relative shrink-0">
+              <WorkspaceLogo name={org.name} iconUrl={iconUrl} />
+              {unread > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 inline-flex min-w-[1.15rem] items-center justify-center rounded-full bg-red-500 px-1 text-[0.65rem] font-bold leading-none text-white ring-2 ring-white" style={{ height: '1.15rem' }} aria-label={`${unread} unread messages`}>
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
+            </span>
             <span className="min-w-0 flex-1">
               <span className="block font-semibold leading-snug">{org.name}</span>
               <span className="block truncate text-sm text-gray-500">/o/{org.slug}</span>

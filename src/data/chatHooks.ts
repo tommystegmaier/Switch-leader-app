@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 
@@ -210,6 +210,32 @@ export function useChatUnreadTotal(orgId: string | undefined, enabled = true) {
       return (data as number) ?? 0;
     },
   });
+}
+
+/**
+ * Unread totals for several workspaces at once — powers the red badges on the
+ * "My workspaces" hub (and the app-icon badge when you're on the hub). Shares
+ * the same query cache key as useChatUnreadTotal, so a count fetched here and
+ * one fetched inside a workspace stay in sync.
+ */
+export function useWorkspaceUnread(orgIds: string[]) {
+  const results = useQueries({
+    queries: orgIds.map((orgId) => ({
+      queryKey: KEY(orgId, 'unread'),
+      enabled: Boolean(orgId) && isSupabaseConfigured,
+      refetchInterval: 20_000,
+      queryFn: async (): Promise<number> => {
+        const s = getSupabase(); if (!s) return 0;
+        const { data, error } = await s.rpc('my_chat_unread_total', { p_org: orgId });
+        if (error) throw error;
+        return (data as number) ?? 0;
+      },
+    })),
+  });
+  const byOrg: Record<string, number> = {};
+  orgIds.forEach((id, i) => { byOrg[id] = results[i]?.data ?? 0; });
+  const total = Object.values(byOrg).reduce((a, b) => a + b, 0);
+  return { byOrg, total };
 }
 
 /** The slug of a page that contains a chat block (for the bottom-bar badge). */
