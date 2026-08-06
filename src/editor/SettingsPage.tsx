@@ -315,7 +315,16 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<string | null>(null);
+  const [noteFilter, setNoteFilter] = useState<'all' | 'on' | 'off'>('all');
   const isOwner = currentRole === 'owner';
+
+  // Sort by first name (A–Z), then apply the notifications filter.
+  const sortedMembers = [...(members ?? [])].sort((a, b) =>
+    (a.name?.trim() || a.email).toLowerCase().localeCompare((b.name?.trim() || b.email).toLowerCase()),
+  );
+  const shownMembers = sortedMembers.filter((m) =>
+    noteFilter === 'all' ? true : noteFilter === 'on' ? pushSet.has(m.userId) : !pushSet.has(m.userId),
+  );
 
   const joinLinkFor = (code: string) => `${window.location.origin}/join?code=${code}`;
 
@@ -351,9 +360,24 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
 
       {/* Current people */}
       <div className="rounded-lg border border-gray-200 p-3">
-        <span className="text-sm font-medium">People with access</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium">People with access</span>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            {([['all', 'All'], ['on', '🔔 On'], ['off', '🔕 Off']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setNoteFilter(key)}
+                className="rounded-full px-3 py-1 font-medium"
+                style={noteFilter === key ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid var(--th-hairline-strong)' }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <ul className="mt-2 flex flex-col gap-2 text-sm">
-          {(members ?? []).map((m) => {
+          {shownMembers.map((m) => {
             const isSelf = m.userId === user?.id;
             return (
               <li key={m.userId} className="flex flex-col gap-2">
@@ -406,7 +430,9 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
               </li>
             );
           })}
-          {(members ?? []).length === 0 && <li className="text-xs text-gray-500">Just you so far.</li>}
+          {shownMembers.length === 0 && (
+            <li className="text-xs text-gray-500">{(members ?? []).length === 0 ? 'Just you so far.' : 'No one matches this filter.'}</li>
+          )}
         </ul>
       </div>
 
