@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { getSupabase } from '@/lib/supabase';
-import { enablePush, pushConfigured, pushPermission, pushSupported } from '@/lib/push';
+import { enablePush, pushConfigured, pushPermission, pushSupported, registerPushDevice } from '@/lib/push';
 
 /**
  * Viewer-facing "Turn on notifications" control. Requests permission and
@@ -62,6 +62,12 @@ function TestNotification({ orgId }: { orgId: string }) {
     setBusy(true);
     setMsg(null);
     try {
+      // Register THIS device now, inside the tap (a real user gesture iOS
+      // trusts). This creates/repairs the subscription row linked to the
+      // signed-in user — the exact link the chat push needs and that the
+      // background self-heal was failing to create. Best-effort: if it throws,
+      // the test below will still report "not registered."
+      try { await registerPushDevice(orgId); } catch { /* fall through to test */ }
       const s = getSupabase();
       const { data: sess } = (await s?.auth.getSession()) ?? { data: { session: null } };
       const token = sess.session?.access_token;

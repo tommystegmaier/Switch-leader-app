@@ -40,19 +40,18 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 }
 
 /**
- * Ask permission, subscribe this device, and save the subscription for `orgId`.
- * Throws a friendly Error on any failure so callers can show the message.
+ * Subscribe this device and save the subscription for `orgId`, linked to the
+ * signed-in user. Assumes permission is ALREADY granted — it does not prompt,
+ * so it's safe to call outside a user gesture. Throws a friendly Error on any
+ * failure. This is the one place that actually writes push_subscriptions, so
+ * the row always carries the current user_id (the chat push targets by user).
  */
-export async function enablePush(orgId: string): Promise<void> {
+export async function registerPushDevice(orgId: string): Promise<void> {
   if (!pushSupported()) {
     throw new Error("This device or browser doesn't support notifications. On iPhone, add the app to your Home Screen first.");
   }
   if (!pushConfigured()) {
     throw new Error('Notifications are not set up for this app yet.');
-  }
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') {
-    throw new Error('Notifications were not allowed. You can enable them in your browser/site settings.');
   }
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.subscribe({
@@ -91,6 +90,24 @@ export async function enablePush(orgId: string): Promise<void> {
 }
 
 /**
+ * Ask permission (needs a user gesture on iOS), then subscribe + save.
+ * Throws a friendly Error on any failure so callers can show the message.
+ */
+export async function enablePush(orgId: string): Promise<void> {
+  if (!pushSupported()) {
+    throw new Error("This device or browser doesn't support notifications. On iPhone, add the app to your Home Screen first.");
+  }
+  if (!pushConfigured()) {
+    throw new Error('Notifications are not set up for this app yet.');
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    throw new Error('Notifications were not allowed. You can enable them in your browser/site settings.');
+  }
+  await registerPushDevice(orgId);
+}
+
+/**
  * If permission is already granted but this device has no active subscription
  * saved, subscribe now. Keeps the owner's "notifications on" tag accurate and
  * covers a device that granted permission on a past visit. Best-effort.
@@ -99,12 +116,13 @@ export async function ensurePushSubscribed(orgId: string): Promise<void> {
   if (!pushSupported() || !pushConfigured()) return;
   if (Notification.permission !== 'granted') return;
   try {
-    // Always (re)register when permission is granted. This re-writes the stored
-    // row with the CURRENT user_id — repairing older subscriptions saved with a
-    // null user_id, which would otherwise silently miss per-group chat pushes
-    // (broadcast reaches them, but chat targets by user_id). enablePush is a
-    // delete-then-insert, so this is idempotent.
-    await enablePush(orgId);
+    // Re-register when permission is granted, re-writing the stored row with the
+    // CURRENT user_id — repairing older subscriptions saved with a null user_id,
+    // which would otherwise silently miss per-group chat pushes (broadcast
+    // reaches them, but chat targets by user_id). Uses registerPushDevice (no
+    // permission prompt) so it's safe to call on load; delete-then-insert makes
+    // it idempotent.
+    await registerPushDevice(orgId);
   } catch { /* best-effort */ }
 }
 
