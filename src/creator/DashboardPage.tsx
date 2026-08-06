@@ -32,7 +32,13 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
 
   const list = workspaces ?? [];
   const hasApps = list.length > 0;
-  const multiple = list.length > 1;
+  // App-creation is only for owners (people building their own apps) and brand
+  // new accounts with nothing yet. Someone who was INVITED into apps but owns
+  // none is a member — we never nudge or let them accidentally spin up their
+  // own app; they just see and open the apps they belong to.
+  const ownsAny = list.some((w) => w.role === 'owner');
+  const isMemberOnly = hasApps && !ownsAny;
+  const canCreate = !isMemberOnly;
 
   // Unread chat totals per app → the red badge on each card. Also mirror the
   // grand total onto the Home Screen app icon while sitting on the hub, so the
@@ -48,9 +54,9 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
   return (
     <div className="mx-auto max-w-2xl px-4 pb-8" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.75rem)' }}>
       <div className="mb-6 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>My workspaces</h1>
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>{isMemberOnly ? 'My apps' : 'My workspaces'}</h1>
         <div className="flex shrink-0 items-center gap-3 text-sm">
-          {multiple && <Link to="/new" className="text-gray-500 underline">Create an app</Link>}
+          {canCreate && hasApps && <Link to="/new" className="text-gray-500 underline">Create an app</Link>}
           <button type="button" onClick={() => void signOut()} className="text-gray-500 underline">Sign out</button>
         </div>
       </div>
