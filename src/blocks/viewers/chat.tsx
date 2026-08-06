@@ -812,8 +812,10 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
           onPointerLeave={cancelPress}
           onPointerCancel={cancelPress}
           onContextMenu={(e) => { e.preventDefault(); cancelPress(); longPressed.current = true; onLongPress(); }}
-          className="block text-left"
-          style={{ cursor: 'pointer' }}
+          className="block select-none text-left"
+          // Suppress iOS's own long-press text-selection / callout so it doesn't
+          // fight our Copy/Delete sheet — long-press shows only our menu.
+          style={{ cursor: 'pointer', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
         >
           <div
             className="whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm"
