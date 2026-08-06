@@ -11,8 +11,8 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export interface ChatChannel { groupId: string; name: string; parentId: string | null; parentName: string | null; sort: number; unread: number }
 export interface ChatPoll { options: string[] }
-export type ChatMediaKind = 'photo' | 'gif' | 'video';
-export interface ChatMessage { id: string; groupId: string; userId: string; authorName: string | null; body: string | null; imageUrl: string | null; videoUrl: string | null; mediaKind: ChatMediaKind | null; poll: ChatPoll | null; createdAt: string }
+export type ChatMediaKind = 'photo' | 'gif' | 'video' | 'audio';
+export interface ChatMessage { id: string; groupId: string; userId: string; authorName: string | null; body: string | null; imageUrl: string | null; videoUrl: string | null; audioUrl: string | null; mediaKind: ChatMediaKind | null; poll: ChatPoll | null; createdAt: string }
 export interface ChatReaction { messageId: string; userId: string; emoji: string }
 export interface ChatPollVote { messageId: string; userId: string; optionIndex: number }
 
@@ -42,11 +42,11 @@ export function useChatMessages(orgId: string | undefined, groupId: string | und
     queryFn: async (): Promise<ChatMessage[]> => {
       const s = getSupabase(); if (!s || !groupId) return [];
       const { data, error } = await s.from('chat_messages')
-        .select('id, group_id, user_id, author_name, body, image_url, video_url, media_kind, poll, created_at')
+        .select('id, group_id, user_id, author_name, body, image_url, video_url, audio_url, media_kind, poll, created_at')
         .eq('group_id', groupId).order('created_at').limit(500);
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, groupId: r.group_id, userId: r.user_id, authorName: r.author_name ?? null, body: r.body ?? null, imageUrl: r.image_url ?? null, videoUrl: r.video_url ?? null, mediaKind: (r.media_kind ?? null) as ChatMediaKind | null, poll: r.poll && Array.isArray(r.poll.options) ? { options: r.poll.options as string[] } : null, createdAt: r.created_at }));
+      return (data ?? []).map((r: any) => ({ id: r.id, groupId: r.group_id, userId: r.user_id, authorName: r.author_name ?? null, body: r.body ?? null, imageUrl: r.image_url ?? null, videoUrl: r.video_url ?? null, audioUrl: r.audio_url ?? null, mediaKind: (r.media_kind ?? null) as ChatMediaKind | null, poll: r.poll && Array.isArray(r.poll.options) ? { options: r.poll.options as string[] } : null, createdAt: r.created_at }));
     },
   });
 }
@@ -70,10 +70,10 @@ export function useChatReactions(orgId: string | undefined, groupId: string | un
 export function useSendChatMessage(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ groupId, userId, authorName, body, imageUrl, videoUrl, mediaKind, poll }: { groupId: string; userId: string; authorName: string | null; body?: string; imageUrl?: string | null; videoUrl?: string | null; mediaKind?: ChatMediaKind | null; poll?: ChatPoll | null }): Promise<string | null> => {
+    mutationFn: async ({ groupId, userId, authorName, body, imageUrl, videoUrl, audioUrl, mediaKind, poll }: { groupId: string; userId: string; authorName: string | null; body?: string; imageUrl?: string | null; videoUrl?: string | null; audioUrl?: string | null; mediaKind?: ChatMediaKind | null; poll?: ChatPoll | null }): Promise<string | null> => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
       const { data, error } = await s.from('chat_messages')
-        .insert({ org_id: orgId, group_id: groupId, user_id: userId, author_name: authorName, body: body?.trim() || null, image_url: imageUrl || null, video_url: videoUrl || null, media_kind: mediaKind ?? null, poll: poll ?? null })
+        .insert({ org_id: orgId, group_id: groupId, user_id: userId, author_name: authorName, body: body?.trim() || null, image_url: imageUrl || null, video_url: videoUrl || null, audio_url: audioUrl || null, media_kind: mediaKind ?? null, poll: poll ?? null })
         .select('id').single();
       if (error) throw error;
       // Best-effort per-group push (don't block the UI on it).

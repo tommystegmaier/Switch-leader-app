@@ -46,7 +46,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   // The message must exist, be in this org/group, and belong to the caller.
   const { data: msg } = await admin
     .from('chat_messages')
-    .select('org_id, group_id, user_id, author_name, body, image_url, video_url')
+    .select('org_id, group_id, user_id, author_name, body, image_url, video_url, audio_url')
     .eq('id', messageId)
     .maybeSingle();
   if (!msg || msg.org_id !== orgId || msg.group_id !== groupId || msg.user_id !== senderId) {
@@ -92,7 +92,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     .in('user_id', recipientIds);
 
   const snippet = (msg.body as string | null)?.trim()
-    || (msg.video_url ? '🎥 Video' : msg.image_url ? '📷 Photo' : 'New message');
+    || (msg.audio_url ? '🎙️ Voice message' : msg.video_url ? '🎥 Video' : msg.image_url ? '📷 Photo' : 'New message');
   const author = (msg.author_name as string | null) || 'Someone';
   const baseData = {
     title: groupName,

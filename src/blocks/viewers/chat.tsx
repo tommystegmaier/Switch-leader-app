@@ -9,7 +9,7 @@ import {
   type ChatMessage,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
-import { uploadMedia } from '@/lib/media';
+import { compressImage, uploadMedia } from '@/lib/media';
 import type { ViewerCtx } from '../actions';
 
 interface ChatProps { title?: string }
@@ -19,22 +19,10 @@ const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 const card = 'rounded-xl border';
 const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
 
-// Video limits. Length is the primary guard (keeps files reasonable); size is
-// a fallback. NOTE: the size must also be matched by the Supabase Storage
-// "Upload file size limit" (the free plan hard-caps uploads at 50 MB).
-const MAX_VIDEO_SECONDS = 210; // 3 minutes 30 seconds
-const MAX_VIDEO_LABEL = '3 min 30 sec';
-const MAX_VIDEO_MB = 500;
-
-/** Read a video file's duration (seconds). Resolves 0 if it can't be read. */
-function readVideoDuration(url: string): Promise<number> {
-  return new Promise((resolve) => {
-    const v = document.createElement('video');
-    v.preload = 'metadata';
-    v.onloadedmetadata = () => resolve(Number.isFinite(v.duration) ? v.duration : 0);
-    v.onerror = () => resolve(0);
-    v.src = url;
-  });
+/** mm:ss for a number of seconds. */
+function fmtDuration(secs: number): string {
+  const s = Math.max(0, Math.floor(secs));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 function fmtTime(iso: string): string {
@@ -156,7 +144,7 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
 }
 
 interface PollTally { counts: Record<number, number>; total: number; mine: number | null }
-interface PendingMedia { file: File; url: string; kind: 'photo' | 'video' }
+interface PendingMedia { file: File; url: string; kind: 'photo' | 'audio' }
 
 function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; onSeen: () => void }) {
   const { data: messages } = useChatMessages(orgId, groupId);
@@ -172,6 +160,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   const [error, setError] = useState<string | null>(null);
   const [pollOpen, setPollOpen] = useState(false);
   const [gifOpen, setGifOpen] = useState(false);
+  const [audioOpen, setAudioOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [pending, setPending] = useState<PendingMedia[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -215,34 +204,27 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
     return map;
   }, [reactions, userId]);
 
-  // Picking media does NOT upload — it just stages it as a preview (like the
+  // Picking photos does NOT upload — it just stages them as previews (like the
   // phone). Nothing is sent until the person taps Send, so they can remove an
-  // item or add a caption first. Multiple files are allowed.
-  async function onPickMedia(e: React.ChangeEvent<HTMLInputElement>) {
+  // item or add a caption first. Multiple photos are allowed; only images are
+  // accepted (video sending has been retired).
+  function onPickMedia(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.target;
     const files = Array.from(input.files ?? []);
     input.value = '';
     setAttachOpen(false);
     if (files.length === 0) return;
-    const additions: PendingMedia[] = [];
-    let tooLong = false;
-    let tooBig = false;
-    for (const file of files) {
-      const isVideo = file.type.startsWith('video');
-      const url = URL.createObjectURL(file);
-      if (isVideo) {
-        if (file.size > MAX_VIDEO_MB * 1024 * 1024) { tooBig = true; URL.revokeObjectURL(url); continue; }
-        const dur = await readVideoDuration(url);
-        if (dur > MAX_VIDEO_SECONDS + 0.5) { tooLong = true; URL.revokeObjectURL(url); continue; }
-      }
-      additions.push({ file, url, kind: isVideo ? 'video' : 'photo' });
-    }
-    setError(
-      tooLong ? `A video was skipped — videos must be ${MAX_VIDEO_LABEL} or shorter.`
-      : tooBig ? `A video was skipped — videos must be under ${MAX_VIDEO_MB} MB.`
-      : null,
-    );
+    const additions: PendingMedia[] = files
+      .filter((f) => f.type.startsWith('image/'))
+      .map((file) => ({ file, url: URL.createObjectURL(file), kind: 'photo' as const }));
     if (additions.length) setPending((prev) => [...prev, ...additions]);
+  }
+
+  // A finished voice recording gets staged just like a photo, so it goes out
+  // with the next Send (with an optional caption).
+  function stageAudio(file: File) {
+    setAudioOpen(false);
+    setPending((prev) => [...prev, { file, url: URL.createObjectURL(file), kind: 'audio' }]);
   }
 
   function removePending(i: number) {
@@ -270,12 +252,15 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
       } else {
         for (let i = 0; i < items.length; i++) {
           const it = items[i];
-          const m = await uploadMedia(orgId, it.file);
+          // Shrink photos before upload so they don't eat storage; audio is
+          // already small and uploads as-is.
+          const file = it.kind === 'photo' ? await compressImage(it.file) : it.file;
+          const m = await uploadMedia(orgId, file);
           await send.mutateAsync({
             groupId, userId, authorName,
             body: i === 0 && body ? body : undefined,
-            imageUrl: it.kind === 'video' ? undefined : m.url,
-            videoUrl: it.kind === 'video' ? m.url : undefined,
+            imageUrl: it.kind === 'photo' ? m.url : undefined,
+            audioUrl: it.kind === 'audio' ? m.url : undefined,
             mediaKind: it.kind,
           });
         }
@@ -336,6 +321,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
             <div className="absolute bottom-full left-2 z-50 mb-2 w-56 overflow-hidden rounded-2xl border shadow-xl" style={{ backgroundColor: 'var(--th-surface)', borderColor: 'var(--th-hairline)' }}>
               <AttachRow icon={<CameraIcon />} label="Camera" onClick={() => { setAttachOpen(false); cameraRef.current?.click(); }} />
               <AttachRow icon={<PhotosIcon />} label="Photos" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />
+              <AttachRow icon={<AudioIcon />} label="Audio" onClick={() => { setAttachOpen(false); setAudioOpen(true); }} />
               <AttachRow icon={<PollsIcon />} label="Polls" onClick={() => { setAttachOpen(false); setPollOpen(true); }} />
               <AttachRow icon={<GifIcon />} label="GIF" onClick={() => { setAttachOpen(false); setGifOpen(true); }} last />
             </div>
@@ -348,10 +334,9 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
           <div className="flex gap-2 overflow-x-auto px-3 pt-2">
             {pending.map((p, i) => (
               <div key={i} className="relative shrink-0">
-                {p.kind === 'video'
-                  ? <video src={p.url} muted playsInline className="h-16 w-16 rounded-lg object-cover" />
+                {p.kind === 'audio'
+                  ? <span className="flex h-16 w-16 items-center justify-center rounded-lg text-2xl" style={{ backgroundColor: 'var(--th-hairline)' }} aria-label="Voice recording">🎙️</span>
                   : <img src={p.url} alt="" className="h-16 w-16 rounded-lg object-cover" />}
-                {p.kind === 'video' && <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center justify-center text-lg text-white drop-shadow">▶</span>}
                 <button type="button" onClick={() => removePending(i)} aria-label="Remove" className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs leading-none text-white">×</button>
               </div>
             ))}
@@ -368,10 +353,10 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
           >
             +
           </button>
-          {/* Camera opens the device camera (switch photo/video there); Photos
-              opens the library (pick photos or videos, multiple). */}
-          <input ref={cameraRef} type="file" accept="image/*,video/*" capture="environment" className="hidden" onChange={onPickMedia} />
-          <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={onPickMedia} />
+          {/* Camera takes a photo; Photos opens the library (multiple). Photos
+              only — video sending has been retired. */}
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickMedia} />
+          <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onPickMedia} />
           <input
             className="min-w-0 flex-1 rounded-full border px-4 py-2 text-sm focus:outline-none focus-visible:ring-2"
             style={{ borderColor: 'var(--th-hairline-strong)' }}
@@ -397,6 +382,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
 
       {pollOpen && <PollComposer busy={send.isPending} onCancel={() => setPollOpen(false)} onPost={postPoll} />}
       {gifOpen && <GifPicker onCancel={() => setGifOpen(false)} onPick={sendGif} />}
+      {audioOpen && <AudioRecorder onCancel={() => setAudioOpen(false)} onDone={stageAudio} />}
     </>
   );
 }
@@ -437,6 +423,15 @@ const PhotosIcon = () => (
         ))}
         <circle r="3" fill="#fff" />
       </g>
+    </svg>
+  </IconCircle>
+);
+const AudioIcon = () => (
+  <IconCircle bg="#34c759">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="#fff" aria-hidden>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M6 11a6 6 0 0 0 12 0" fill="none" stroke="#fff" strokeWidth={2} />
+      <rect x="11" y="17" width="2" height="3" />
     </svg>
   </IconCircle>
 );
@@ -560,6 +555,126 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
   );
 }
 
+const MAX_AUDIO_SECONDS = 300; // 5-minute soft cap — audio is tiny, this is just a guard
+
+/** Record a voice message, preview it, then stage it to send. Bottom sheet. */
+function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (file: File) => void }) {
+  const [phase, setPhase] = useState<'idle' | 'recording' | 'ready' | 'error'>('idle');
+  const [seconds, setSeconds] = useState(0);
+  const [errMsg, setErrMsg] = useState('');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fileRef = useRef<File | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function stopTimer() { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } }
+  function stopStream() { streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+
+  // Clean up the stream, timer, and preview URL on unmount.
+  useEffect(() => () => { stopTimer(); stopStream(); if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  function pickMime(): string {
+    const opts = ['audio/webm', 'audio/mp4', 'audio/ogg'];
+    for (const t of opts) { if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t)) return t; }
+    return '';
+  }
+
+  async function start() {
+    setErrMsg('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mimeType = pickMime();
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      chunksRef.current = [];
+      rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+      rec.onstop = () => {
+        const type = rec.mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type });
+        const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+        fileRef.current = new File([blob], `voice-${Date.now()}.${ext}`, { type });
+        setPreviewUrl(URL.createObjectURL(blob));
+        setPhase('ready');
+        stopStream();
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setSeconds(0);
+      setPhase('recording');
+      timerRef.current = setInterval(() => {
+        setSeconds((s) => {
+          const next = s + 1;
+          if (next >= MAX_AUDIO_SECONDS) stop();
+          return next;
+        });
+      }, 1000);
+    } catch {
+      setErrMsg('Microphone access was blocked. Allow the microphone in your settings to record a voice message.');
+      setPhase('error');
+    }
+  }
+
+  function stop() {
+    stopTimer();
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+  }
+
+  function reset() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    fileRef.current = null;
+    setSeconds(0);
+    setPhase('idle');
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)' }}>
+        <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>🎙️ Voice message</h3>
+
+        {phase === 'error' && <p className="mt-3 text-sm text-red-600">{errMsg}</p>}
+
+        {phase === 'idle' && (
+          <p className="mt-2 text-sm text-gray-500">Tap record and speak. You can listen back before sending.</p>
+        )}
+
+        {phase === 'recording' && (
+          <div className="mt-4 flex items-center justify-center gap-2 text-2xl font-semibold tabular-nums" style={{ color: 'var(--th-heading)' }}>
+            <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-red-500" aria-hidden />
+            {fmtDuration(seconds)}
+          </div>
+        )}
+
+        {phase === 'ready' && previewUrl && (
+          <div className="mt-4">
+            <audio src={previewUrl} controls className="w-full" />
+            <p className="mt-1 text-center text-xs text-gray-400">{fmtDuration(seconds)}</p>
+          </div>
+        )}
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {(phase === 'idle' || phase === 'error') && (
+            <button type="button" onClick={start} className="rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>● Record</button>
+          )}
+          {phase === 'recording' && (
+            <button type="button" onClick={stop} className="rounded-full bg-red-500 px-5 py-2.5 text-sm font-semibold text-white">■ Stop</button>
+          )}
+          {phase === 'ready' && (
+            <>
+              <button type="button" onClick={() => fileRef.current && onDone(fileRef.current)} className="rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Add</button>
+              <button type="button" onClick={reset} className="rounded-full border px-5 py-2.5 text-sm" style={{ borderColor: 'var(--th-hairline-strong)' }}>Re-record</button>
+            </>
+          )}
+          <button type="button" onClick={onCancel} className="rounded-full px-5 py-2.5 text-sm">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onReact }: {
   m: ChatMessage;
   mine: boolean;
@@ -621,6 +736,7 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
           >
             {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
             {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
+            {m.audioUrl && <audio src={m.audioUrl} controls onClick={(e) => e.stopPropagation()} className="mb-1 w-56 max-w-full" />}
             {m.body}
           </div>
         </button>
