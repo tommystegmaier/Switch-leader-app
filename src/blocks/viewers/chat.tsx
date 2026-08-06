@@ -30,6 +30,43 @@ function fmtTime(iso: string): string {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// Turn URLs inside a message into clickable links (opens in a new tab). Keeps
+// the plain text between links intact. Underlined + inherits the bubble's text
+// color so it stays readable on both the sent (colored) and received bubbles.
+const URL_RE = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+function linkify(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  URL_RE.lastIndex = 0;
+  while ((m = URL_RE.exec(text)) !== null) {
+    const raw = m[0];
+    if (m.index > last) out.push(text.slice(last, m.index));
+    // Don't swallow trailing punctuation (e.g. "see foo.com." or "(bar.com)").
+    const trail = raw.match(/[.,!?;:)\]]+$/)?.[0] ?? '';
+    const link = trail ? raw.slice(0, -trail.length) : raw;
+    const href = link.startsWith('http') ? link : `https://${link}`;
+    out.push(
+      <a
+        key={key++}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline"
+        style={{ wordBreak: 'break-word' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {link}
+      </a>,
+    );
+    if (trail) out.push(trail);
+    last = m.index + raw.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
 export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
   const { data: org } = useOrganization(ctx.orgSlug);
   const { user } = useAuth();
@@ -818,7 +855,7 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
           {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
           {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
           {m.audioUrl && <audio src={m.audioUrl} controls onClick={(e) => e.stopPropagation()} className="mb-1 w-56 max-w-full" />}
-          {m.body}
+          {m.body && linkify(m.body)}
         </div>
 
         {open && (
