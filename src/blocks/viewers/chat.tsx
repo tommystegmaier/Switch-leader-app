@@ -33,8 +33,12 @@ function fmtTime(iso: string): string {
 export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
   const { data: org } = useOrganization(ctx.orgSlug);
   const { user } = useAuth();
-  const { isLoading: roleLoading } = useMembershipRole(org?.id);
+  const { role, isLoading: roleLoading } = useMembershipRole(org?.id);
   const title = props.title || 'Chat';
+  // Owners/admins can delete ANY message (moderation); everyone can delete
+  // their own. RLS also allows editors, but the moderator × is shown to
+  // owners/admins.
+  const canModerate = role === 'owner' || role === 'admin';
 
   if (ctx.editing) {
     return (
@@ -57,7 +61,7 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
     );
   }
 
-  return <ChatInner orgId={org.id} title={title} userId={user.id} authorName={displayName(user)} />;
+  return <ChatInner orgId={org.id} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} />;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,7 +70,7 @@ function displayName(user: any): string {
   return (m.full_name || m.name || user?.email || 'Someone') as string;
 }
 
-function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title: string; userId: string; authorName: string }) {
+function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: string; title: string; userId: string; authorName: string; canModerate: boolean }) {
   const { data: channels } = useChatChannels(orgId);
   const { data: mutes } = useChatMutes(orgId);
   const setMute = useSetChatMute(orgId);
@@ -138,7 +142,7 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
         })}
       </div>
 
-      {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} onSeen={() => markRead.mutate(active)} />}
+      {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} canModerate={canModerate} onSeen={() => markRead.mutate(active)} />}
     </div>
   );
 }
@@ -146,7 +150,7 @@ function ChatInner({ orgId, title, userId, authorName }: { orgId: string; title:
 interface PollTally { counts: Record<number, number>; total: number; mine: number | null }
 interface PendingMedia { file: File; url: string; kind: 'photo' | 'audio' }
 
-function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; onSeen: () => void }) {
+function ChannelPane({ orgId, groupId, userId, authorName, canModerate, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; canModerate: boolean; onSeen: () => void }) {
   const { data: messages } = useChatMessages(orgId, groupId);
   const { data: reactions } = useChatReactions(orgId, groupId);
   const { data: pollVotes } = useChatPollVotes(orgId, groupId);
@@ -305,6 +309,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
             key={m.id}
             m={m}
             mine={m.userId === userId}
+            canDelete={m.userId === userId || canModerate}
             reactions={byMessage.get(m.id)}
             poll={m.poll ? pollByMessage.get(m.id) : undefined}
             onVote={(opt) => vote.mutate({ groupId, messageId: m.id, option: opt })}
@@ -715,14 +720,15 @@ function ConfirmDelete({ deleting, onConfirm, onCancel }: { deleting: boolean; o
   );
 }
 
-/** A small × in the top corner of your own messages → confirm → delete. */
-function DeleteDot({ onClick }: { onClick: () => void }) {
+/** A small × in the top outer corner of a message → confirm → delete. Sits on
+ *  the left for your own (right-aligned) bubbles, the right for others'. */
+function DeleteDot({ side, onClick }: { side: 'left' | 'right'; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       aria-label="Delete message"
-      className="absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full text-[0.7rem] font-bold leading-none text-white shadow"
+      className={`absolute -top-2 ${side === 'left' ? '-left-2' : '-right-2'} z-10 flex h-5 w-5 items-center justify-center rounded-full text-[0.7rem] font-bold leading-none text-white shadow`}
       style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
     >
       ×
@@ -730,9 +736,10 @@ function DeleteDot({ onClick }: { onClick: () => void }) {
   );
 }
 
-function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete }: {
+function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete }: {
   m: ChatMessage;
   mine: boolean;
+  canDelete: boolean;
   reactions: Map<string, { count: number; mine: boolean }> | undefined;
   poll: PollTally | undefined;
   onVote: (option: number) => void;
@@ -749,7 +756,7 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
       <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
         {!mine && m.authorName && <span className="mb-0.5 px-1 text-xs text-gray-500">{m.authorName}</span>}
         <div className="relative w-full max-w-[85%] rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--th-hairline-strong)', backgroundColor: 'var(--th-surface)' }}>
-          {mine && <DeleteDot onClick={onRequestDelete} />}
+          {canDelete && <DeleteDot side={mine ? 'left' : 'right'} onClick={onRequestDelete} />}
           <p className="text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>📊 {m.body}</p>
           <div className="mt-2 flex flex-col gap-1.5">
             {opts.map((o, i) => {
@@ -779,7 +786,7 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
     <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
       {!mine && m.authorName && <span className="mb-0.5 px-1 text-xs text-gray-500">{m.authorName}</span>}
       <div className="relative max-w-[85%]">
-        {mine && <DeleteDot onClick={onRequestDelete} />}
+        {canDelete && <DeleteDot side={mine ? 'left' : 'right'} onClick={onRequestDelete} />}
         {/* Text is natively selectable — long-press (or drag) to select and copy
             any part. A quick tap still opens the emoji-reaction bar. */}
         <div
