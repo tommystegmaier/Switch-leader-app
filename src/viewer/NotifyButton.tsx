@@ -64,10 +64,16 @@ function TestNotification({ orgId }: { orgId: string }) {
     try {
       // Register THIS device now, inside the tap (a real user gesture iOS
       // trusts). This creates/repairs the subscription row linked to the
-      // signed-in user — the exact link the chat push needs and that the
-      // background self-heal was failing to create. Best-effort: if it throws,
-      // the test below will still report "not registered."
-      try { await registerPushDevice(orgId); } catch { /* fall through to test */ }
+      // signed-in user — the exact link the chat push needs. Surface any error
+      // so a failing registration is visible instead of silently looking
+      // like "not registered."
+      try {
+        await registerPushDevice(orgId);
+      } catch (e) {
+        setMsg(`Couldn't register this device: ${e instanceof Error ? e.message : String(e)}`);
+        setBusy(false);
+        return;
+      }
       const s = getSupabase();
       const { data: sess } = (await s?.auth.getSession()) ?? { data: { session: null } };
       const token = sess.session?.access_token;

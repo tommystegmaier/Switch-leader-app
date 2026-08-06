@@ -64,7 +64,12 @@ export async function registerPushDevice(orgId: string): Promise<void> {
   }
   const supabase = getSupabase();
   if (!supabase) throw new Error('Backend not configured.');
-  const { data: userRes } = await supabase.auth.getUser();
+  // Read the user id from the LOCAL session (no network round-trip). getUser()
+  // validates against the server and can return null on a flaky connection —
+  // which would save the subscription with a null user_id and make the chat
+  // push (which targets by user) silently skip this device.
+  const { data: sess } = await supabase.auth.getSession();
+  const uid = sess.session?.user?.id ?? null;
   // Delete any existing row for this endpoint, then insert a fresh one.
   // We intentionally do NOT upsert: an upsert becomes INSERT ... ON CONFLICT
   // DO UPDATE, and the table has no UPDATE policy (by design — see 0007), so
@@ -77,7 +82,7 @@ export async function registerPushDevice(orgId: string): Promise<void> {
     endpoint: json.endpoint,
     p256dh: json.keys.p256dh,
     auth: json.keys.auth,
-    user_id: userRes?.user?.id ?? null,
+    user_id: uid,
   });
   if (error) {
     // Surface a readable message (Supabase errors are plain objects, not Error).
