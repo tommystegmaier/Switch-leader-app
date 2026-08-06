@@ -3,15 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useInviteInfo, useRedeemInvite } from '@/data/inviteHooks';
 import { errorMessage } from '@/lib/errors';
-import type { Role } from '@/types';
 import { useAuth } from './AuthProvider';
-
-const ROLE_WORD: Record<Role, string> = {
-  owner: 'an Owner',
-  admin: 'an Admin',
-  editor: 'an Editor',
-  viewer: 'a Viewer',
-};
 
 /**
  * Accept-an-invitation page. Unlike a plain login, this shows what the invite
@@ -97,21 +89,28 @@ export function JoinPage() {
     );
   }
 
-  const roleWord = info ? ROLE_WORD[info.role] : 'a member';
-  const workspace = info?.orgName ?? 'a workspace';
+  const workspace = info?.appName ?? 'this app';
+  const logo = info?.iconUrl || info?.logoUrl || null;
+  // Brand the page with the app's colors (fall back to theme defaults).
+  const brandPrimary = info?.primaryColor || 'var(--th-primary)';
+  const brandPrimaryText = info?.primaryText || 'var(--th-primary-text)';
+  const brandHeading = info?.headingColor || 'var(--th-heading)';
 
   return (
     <Shell>
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>You&apos;re invited</h1>
-      {infoLoading ? (
-        <p className="mt-2 text-sm text-gray-500">Checking your invitation…</p>
-      ) : info && !info.valid ? (
-        <p className="mt-2 text-sm text-red-600">This invitation has expired. Ask for a new link.</p>
-      ) : (
-        <p className="mt-2 text-sm text-gray-600">
-          You&apos;ve been invited to join <span className="font-semibold">{workspace}</span> as <span className="font-semibold">{roleWord}</span>.
-        </p>
-      )}
+      <div className="mb-6 text-center">
+        {logo && <img src={logo} alt="" className="mx-auto mb-4 h-20 w-20 rounded-2xl object-cover shadow-sm" />}
+        <h1 className="text-2xl font-bold" style={{ color: brandHeading }}>You&apos;re invited</h1>
+        {infoLoading ? (
+          <p className="mt-2 text-sm text-gray-500">Checking your invitation…</p>
+        ) : info && !info.valid ? (
+          <p className="mt-2 text-sm text-red-600">This invitation has expired. Ask for a new link.</p>
+        ) : (
+          <p className="mt-2 text-sm text-gray-600">
+            You&apos;ve been invited to join <span className="font-semibold" style={{ color: brandHeading }}>{workspace}</span>!
+          </p>
+        )}
+      </div>
 
       {!configured && (
         <p className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-800">Sign-in isn&apos;t configured yet.</p>
@@ -127,7 +126,7 @@ export function JoinPage() {
             onClick={async () => { setBusy(true); setError(null); try { await doRedeem(); } catch (er) { setError(errorMessage(er)); setBusy(false); } }}
             disabled={busy}
             className="mt-3 w-full rounded-full px-6 py-3 font-semibold disabled:opacity-50"
-            style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+            style={{ backgroundColor: brandPrimary, color: brandPrimaryText }}
           >
             {busy ? 'Joining…' : `Accept & join ${workspace}`}
           </button>
@@ -175,7 +174,7 @@ export function JoinPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           {notice && <p className="text-sm text-green-700">{notice}</p>}
 
-          <button type="submit" disabled={busy || !configured} className="mt-1 w-full rounded-full px-6 py-3 font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+          <button type="submit" disabled={busy || !configured} className="mt-1 w-full rounded-full px-6 py-3 font-semibold disabled:opacity-50" style={{ backgroundColor: brandPrimary, color: brandPrimaryText }}>
             {busy ? 'Please wait…' : mode === 'signup' ? 'Create account & join' : 'Sign in & join'}
           </button>
 

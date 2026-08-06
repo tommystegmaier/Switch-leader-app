@@ -48,6 +48,12 @@ export function useCreateInvite(orgId: string) {
 export interface InviteInfo {
   orgSlug: string;
   orgName: string;
+  appName: string;
+  iconUrl: string | null;
+  logoUrl: string | null;
+  primaryColor: string;
+  primaryText: string;
+  headingColor: string;
   role: Role;
   email: string | null;
   valid: boolean;
@@ -65,7 +71,19 @@ export function useInviteInfo(code: string | undefined) {
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) return null;
-      return { orgSlug: row.org_slug, orgName: row.org_name, role: row.role, email: row.email ?? null, valid: row.valid };
+      return {
+        orgSlug: row.org_slug,
+        orgName: row.org_name,
+        appName: row.app_name || row.org_name,
+        iconUrl: row.icon_url ?? null,
+        logoUrl: row.logo_url ?? null,
+        primaryColor: row.primary_color || '#0f1420',
+        primaryText: row.primary_text || '#ffffff',
+        headingColor: row.heading_color || '#1c2541',
+        role: row.role,
+        email: row.email ?? null,
+        valid: row.valid,
+      };
     },
   });
 }
