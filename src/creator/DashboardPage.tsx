@@ -6,6 +6,7 @@ import { applyHubMetadata } from '@/lib/appMetadata';
 import { setAppBadge } from '@/lib/badge';
 import { errorMessage } from '@/lib/errors';
 import { useWorkspaceUnread } from '@/data/chatHooks';
+import { useIsPlatformAdmin } from '@/data/platformHooks';
 import { slugify, useDeleteWorkspace, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, type WorkspaceMembership } from '@/data/workspaceHooks';
 
 /**
@@ -16,6 +17,7 @@ import { slugify, useDeleteWorkspace, useDuplicateWorkspace, useMyWorkspaces, us
 export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boolean }) {
   const { user, signOut } = useAuth();
   const { data: workspaces, isLoading } = useMyWorkspaces();
+  const { data: isPlatformAdmin } = useIsPlatformAdmin(Boolean(user));
   const navigate = useNavigate();
   useEffect(() => { applyHubMetadata(); }, []);
 
@@ -56,6 +58,7 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>{isMemberOnly ? 'My apps' : 'My workspaces'}</h1>
         <div className="flex shrink-0 items-center gap-3 text-sm">
+          {isPlatformAdmin && <Link to="/platform" className="font-semibold underline" style={{ color: 'var(--th-primary)' }}>⚡ Command center</Link>}
           {canCreate && hasApps && <Link to="/new" className="text-gray-500 underline">Create an app</Link>}
           <button type="button" onClick={() => void signOut()} className="text-gray-500 underline">Sign out</button>
         </div>

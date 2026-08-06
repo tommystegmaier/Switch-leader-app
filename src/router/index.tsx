@@ -5,6 +5,7 @@ import { LoginPage } from '@/auth/LoginPage';
 import { ResetPasswordPage } from '@/auth/ResetPasswordPage';
 import { CreateWorkspacePage } from '@/creator/CreateWorkspacePage';
 import { HomeRoute, WorkspacesRoute } from '@/creator/HomeRoute';
+import { PlatformPage } from '@/creator/PlatformPage';
 import { SettingsPage } from '@/editor/SettingsPage';
 import { ViewerLayout } from '@/viewer/ViewerLayout';
 import { ViewerPage } from '@/viewer/ViewerPage';
@@ -38,6 +39,10 @@ export const router = createBrowserRouter([
   {
     path: '/new',
     element: <CreateWorkspacePage />,
+  },
+  {
+    path: '/platform',
+    element: <PlatformPage />,
   },
   {
     path: '/join',
