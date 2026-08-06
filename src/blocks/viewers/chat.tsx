@@ -35,10 +35,9 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
   const { user } = useAuth();
   const { role, isLoading: roleLoading } = useMembershipRole(org?.id);
   const title = props.title || 'Chat';
-  // Owners/admins can delete ANY message (moderation); everyone can delete
-  // their own. RLS also allows editors, but the moderator × is shown to
-  // owners/admins.
-  const canModerate = role === 'owner' || role === 'admin';
+  // Owners/admins/editors (managers) can delete ANY message (moderation);
+  // everyone else can delete only their own. Matches the RLS delete policy.
+  const canModerate = role === 'owner' || role === 'admin' || role === 'editor';
 
   if (ctx.editing) {
     return (
