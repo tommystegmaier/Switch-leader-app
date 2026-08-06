@@ -53,7 +53,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     return json({ error: 'Message not found.' }, 403);
   }
 
-  const { data: grp } = await admin.from('roster_groups').select('name, auto_role').eq('id', groupId).maybeSingle();
+  const { data: grp } = await admin.from('roster_groups').select('name, auto_role, is_all').eq('id', groupId).maybeSingle();
   const groupName = (grp?.name as string) || 'Group chat';
 
   // Recipients (matches who gets the red unread dot in-app; see my_chat_groups):
@@ -63,9 +63,13 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   // Minus the sender and anyone who muted this specific channel (their off switch).
   const { data: managers } = await admin
     .from('memberships').select('user_id').eq('org_id', orgId).in('role', ['owner', 'admin', 'editor']);
-  const peopleQuery = grp?.auto_role
-    ? admin.from('roster_people').select('user_id').eq('org_id', orgId).eq('role', grp.auto_role).not('user_id', 'is', null)
-    : admin.from('roster_people').select('user_id').eq('group_id', groupId).not('user_id', 'is', null);
+  // All Leaders → everyone on the roster; auto group → everyone with that role;
+  // normal group → its assigned people.
+  const peopleQuery = grp?.is_all
+    ? admin.from('roster_people').select('user_id').eq('org_id', orgId).not('user_id', 'is', null)
+    : grp?.auto_role
+      ? admin.from('roster_people').select('user_id').eq('org_id', orgId).eq('role', grp.auto_role).not('user_id', 'is', null)
+      : admin.from('roster_people').select('user_id').eq('group_id', groupId).not('user_id', 'is', null);
   const { data: people } = await peopleQuery;
   const { data: muted } = await admin.from('chat_mutes').select('user_id').eq('group_id', groupId);
   const mutedSet = new Set((muted ?? []).map((m: { user_id: string }) => m.user_id));

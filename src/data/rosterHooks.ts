@@ -30,8 +30,9 @@ export function useRosterGroups(orgId: string | undefined) {
     enabled: Boolean(orgId) && isSupabaseConfigured,
     queryFn: async (): Promise<RosterGroup[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      // Exclude auto groups (e.g. Coaches) — they're chat-only, not editable here.
-      const { data, error } = await s.from('roster_groups').select('id, name, sort, parent_id').eq('org_id', orgId).is('auto_role', null).order('sort').order('name');
+      // Exclude auto groups (e.g. Coaches) and the "All Leaders" group — they're
+      // chat-only, computed from the roster, not editable here.
+      const { data, error } = await s.from('roster_groups').select('id, name, sort, parent_id').eq('org_id', orgId).is('auto_role', null).not('is_all', 'is', true).order('sort').order('name');
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => ({ id: r.id, name: r.name, sort: r.sort, parentId: r.parent_id ?? null }));
