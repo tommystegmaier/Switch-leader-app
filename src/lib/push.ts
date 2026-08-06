@@ -99,9 +99,12 @@ export async function ensurePushSubscribed(orgId: string): Promise<void> {
   if (!pushSupported() || !pushConfigured()) return;
   if (Notification.permission !== 'granted') return;
   try {
-    const reg = await navigator.serviceWorker.ready;
-    const existing = await reg.pushManager.getSubscription();
-    if (!existing) await enablePush(orgId);
+    // Always (re)register when permission is granted. This re-writes the stored
+    // row with the CURRENT user_id — repairing older subscriptions saved with a
+    // null user_id, which would otherwise silently miss per-group chat pushes
+    // (broadcast reaches them, but chat targets by user_id). enablePush is a
+    // delete-then-insert, so this is idempotent.
+    await enablePush(orgId);
   } catch { /* best-effort */ }
 }
 

@@ -56,17 +56,25 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   const { data: grp } = await admin.from('roster_groups').select('name, auto_role').eq('id', groupId).maybeSingle();
   const groupName = (grp?.name as string) || 'Group chat';
 
-  // Recipients: an auto group (e.g. Coaches) = everyone in the org with that
-  // title; a normal group = its assigned people. Minus the sender and anyone
-  // who muted this channel.
+  // Recipients must MATCH who sees the channel in-app (see my_chat_groups):
+  //  • managers (owner/admin/editor) see EVERY channel, and
+  //  • everyone else sees the group they're assigned to — or, for an auto group
+  //    like Coaches, everyone with that role.
+  // Notify all of them, minus the sender and anyone who muted this channel, so
+  // whoever gets the red unread dot also gets the banner. (Managers who find a
+  // channel noisy can mute it with the bell.)
+  const { data: managers } = await admin
+    .from('memberships').select('user_id').eq('org_id', orgId).in('role', ['owner', 'admin', 'editor']);
   const peopleQuery = grp?.auto_role
     ? admin.from('roster_people').select('user_id').eq('org_id', orgId).eq('role', grp.auto_role).not('user_id', 'is', null)
     : admin.from('roster_people').select('user_id').eq('group_id', groupId).not('user_id', 'is', null);
   const { data: people } = await peopleQuery;
   const { data: muted } = await admin.from('chat_mutes').select('user_id').eq('group_id', groupId);
   const mutedSet = new Set((muted ?? []).map((m: { user_id: string }) => m.user_id));
-  const recipientIds = [...new Set((people ?? []).map((p: { user_id: string }) => p.user_id))]
-    .filter((id) => id && id !== senderId && !mutedSet.has(id));
+  const recipientIds = [...new Set([
+    ...(managers ?? []).map((m: { user_id: string }) => m.user_id),
+    ...(people ?? []).map((p: { user_id: string }) => p.user_id),
+  ])].filter((id) => id && id !== senderId && !mutedSet.has(id));
   if (recipientIds.length === 0) return json({ sent: 0, total: 0 });
 
   const { data: subs } = await admin
