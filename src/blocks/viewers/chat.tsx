@@ -514,7 +514,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
       </div>
       ) : (
         <div className="border-t px-4 py-3 text-center text-sm text-gray-500" style={cardStyle}>
-          🔒 Only leaders can post in this channel — you can still read messages.
+          🔒 This channel is read only.
         </div>
       )}
 
