@@ -9,7 +9,8 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
  * without the extra moving parts of a realtime socket.
  */
 
-export interface ChatChannel { groupId: string; name: string; parentId: string | null; parentName: string | null; sort: number; unread: number }
+export type ChatPostPolicy = 'all' | 'managers' | 'managers_coaches';
+export interface ChatChannel { groupId: string; name: string; parentId: string | null; parentName: string | null; sort: number; unread: number; isAll: boolean; postPolicy: ChatPostPolicy; canPost: boolean }
 export interface ChatPoll { options: string[] }
 export type ChatMediaKind = 'photo' | 'gif' | 'video' | 'audio';
 export interface ChatMessage { id: string; groupId: string; userId: string; authorName: string | null; body: string | null; imageUrl: string | null; videoUrl: string | null; audioUrl: string | null; mediaKind: ChatMediaKind | null; poll: ChatPoll | null; createdAt: string }
@@ -29,7 +30,7 @@ export function useChatChannels(orgId: string | undefined, enabled = true) {
       const { data, error } = await s.rpc('my_chat_groups', { p_org: orgId });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ groupId: r.group_id, name: r.name, parentId: r.parent_id ?? null, parentName: r.parent_name ?? null, sort: r.sort, unread: r.unread ?? 0 }));
+      return (data ?? []).map((r: any) => ({ groupId: r.group_id, name: r.name, parentId: r.parent_id ?? null, parentName: r.parent_name ?? null, sort: r.sort, unread: r.unread ?? 0, isAll: Boolean(r.is_all), postPolicy: (r.post_policy ?? 'all') as ChatPostPolicy, canPost: r.can_post !== false }));
     },
   });
 }
@@ -193,6 +194,19 @@ export function useChatMutes(orgId: string | undefined) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => r.group_id);
     },
+  });
+}
+
+/** Set who may post in a channel (owner/admin only, per RPC). */
+export function useSetChatPostPolicy(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ groupId, policy }: { groupId: string; policy: ChatPostPolicy }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('set_chat_post_policy', { p_group: groupId, p_policy: policy });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'channels') }),
   });
 }
 

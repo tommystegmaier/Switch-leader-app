@@ -5,8 +5,8 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import {
   useChatChannels, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useDeleteChatMessage,
-  useMarkChatRead, useSendChatMessage, useSetChatMute, useToggleReaction, useVoteChatPoll,
-  type ChatMessage,
+  useMarkChatRead, useSendChatMessage, useSetChatMute, useSetChatPostPolicy, useToggleReaction, useVoteChatPoll,
+  type ChatMessage, type ChatPostPolicy,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
 import { compressImage, uploadMedia } from '@/lib/media';
@@ -75,6 +75,8 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
   // Owners/admins/editors (managers) can delete ANY message (moderation);
   // everyone else can delete only their own. Matches the RLS delete policy.
   const canModerate = role === 'owner' || role === 'admin' || role === 'editor';
+  // Only owners/admins can change a channel's posting policy.
+  const canConfigure = role === 'owner' || role === 'admin';
 
   if (ctx.editing) {
     return (
@@ -97,7 +99,7 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
     );
   }
 
-  return <ChatInner orgId={org.id} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} />;
+  return <ChatInner orgId={org.id} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} canConfigure={canConfigure} />;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -106,12 +108,14 @@ function displayName(user: any): string {
   return (m.full_name || m.name || user?.email || 'Someone') as string;
 }
 
-function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: string; title: string; userId: string; authorName: string; canModerate: boolean }) {
+function ChatInner({ orgId, title, userId, authorName, canModerate, canConfigure }: { orgId: string; title: string; userId: string; authorName: string; canModerate: boolean; canConfigure: boolean }) {
   const { data: channels } = useChatChannels(orgId);
   const { data: mutes } = useChatMutes(orgId);
   const setMute = useSetChatMute(orgId);
+  const setPolicy = useSetChatPostPolicy(orgId);
   const [active, setActive] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [policyOpen, setPolicyOpen] = useState(false);
   const markRead = useMarkChatRead(orgId);
   const mutedSet = new Set(mutes ?? []);
 
@@ -145,6 +149,17 @@ function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: s
     <div className={`${card} flex flex-col`} style={{ ...cardStyle, height: 'min(70vh, 640px)' }}>
       <div className="flex items-center gap-2 border-b px-4 py-3" style={cardStyle}>
         <p className="min-w-0 flex-1 truncate font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {headerName}</p>
+        {canConfigure && activeCh?.isAll && (
+          <button
+            type="button"
+            onClick={() => setPolicyOpen(true)}
+            className="shrink-0 rounded-full px-2 py-1 text-lg"
+            title="Who can post in this channel"
+            aria-label="Channel posting settings"
+          >
+            ⚙️
+          </button>
+        )}
         {canModerate && (
           <button
             type="button"
@@ -192,7 +207,56 @@ function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: s
         })}
       </div>
 
-      {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} canModerate={canModerate} deleteMode={deleteMode} onSeen={() => markRead.mutate(active)} />}
+      {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} canModerate={canModerate} deleteMode={deleteMode} canPost={activeCh?.canPost ?? true} onSeen={() => markRead.mutate(active)} />}
+
+      {policyOpen && activeCh && (
+        <PostPolicyChooser
+          current={activeCh.postPolicy}
+          busy={setPolicy.isPending}
+          onChoose={(p) => { setPolicy.mutate({ groupId: activeCh.groupId, policy: p }); setPolicyOpen(false); }}
+          onCancel={() => setPolicyOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Owner/admin picks who may post in a channel (used for All Leaders). */
+function PostPolicyChooser({ current, busy, onChoose, onCancel }: { current: ChatPostPolicy; busy: boolean; onChoose: (p: ChatPostPolicy) => void; onCancel: () => void }) {
+  const options: { value: ChatPostPolicy; label: string; hint: string }[] = [
+    { value: 'all', label: 'Everyone', hint: 'Anyone on the roster can post here.' },
+    { value: 'managers', label: 'Owners, admins & editors only', hint: 'Leaders can post; everyone else can read.' },
+    { value: 'managers_coaches', label: 'Owners, admins, editors & coaches', hint: 'Leaders and coaches can post; everyone else can read.' },
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)' }}>
+        <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>Who can post here?</h3>
+        <p className="mt-1 text-sm text-gray-500">Everyone can still read the channel — this only controls who can send messages.</p>
+        <div className="mt-4 flex flex-col gap-2">
+          {options.map((o) => {
+            const on = o.value === current;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                disabled={busy}
+                onClick={() => onChoose(o.value)}
+                className="rounded-xl border p-3 text-left disabled:opacity-50"
+                style={{ borderColor: on ? 'var(--th-primary)' : 'var(--th-hairline-strong)', boxShadow: on ? '0 0 0 2px var(--th-primary)' : undefined }}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-semibold" style={{ color: 'var(--th-heading)' }}>{o.label}</span>
+                  {on && <span style={{ color: 'var(--th-primary)' }}>✓</span>}
+                </span>
+                <span className="mt-0.5 block text-xs text-gray-500">{o.hint}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" onClick={onCancel} className="mt-4 rounded-full px-5 py-2.5 text-sm">Close</button>
+      </div>
     </div>
   );
 }
@@ -200,7 +264,7 @@ function ChatInner({ orgId, title, userId, authorName, canModerate }: { orgId: s
 interface PollTally { counts: Record<number, number>; total: number; mine: number | null }
 interface PendingMedia { file: File; url: string; kind: 'photo' | 'audio' }
 
-function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMode, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; canModerate: boolean; deleteMode: boolean; onSeen: () => void }) {
+function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMode, canPost, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; canModerate: boolean; deleteMode: boolean; canPost: boolean; onSeen: () => void }) {
   const { data: messages } = useChatMessages(orgId, groupId);
   const { data: reactions } = useChatReactions(orgId, groupId);
   const { data: pollVotes } = useChatPollVotes(orgId, groupId);
@@ -376,6 +440,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
 
       {error && <p className="px-4 text-xs text-red-600">{error}</p>}
 
+      {canPost ? (
       <div className="relative border-t" style={cardStyle}>
         {/* iMessage-style "+" attachment menu */}
         {attachOpen && (
@@ -447,6 +512,11 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
           )}
         </div>
       </div>
+      ) : (
+        <div className="border-t px-4 py-3 text-center text-sm text-gray-500" style={cardStyle}>
+          🔒 Only leaders can post in this channel — you can still read messages.
+        </div>
+      )}
 
       {pollOpen && <PollComposer busy={send.isPending} onCancel={() => setPollOpen(false)} onPost={postPoll} />}
       {gifOpen && <GifPicker onCancel={() => setGifOpen(false)} onPick={sendGif} />}
