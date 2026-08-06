@@ -19,6 +19,12 @@ const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 const card = 'rounded-xl border';
 const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
 
+// Max video upload size. Comfortably fits a ~5-minute iPhone clip recorded in
+// the default "High Efficiency" (HEVC) mode. NOTE: this must be matched by the
+// Supabase Storage "Upload file size limit" (and requires a paid Supabase plan
+// — the free plan hard-caps uploads at 50 MB).
+const MAX_VIDEO_MB = 500;
+
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -210,10 +216,10 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
     let tooBig = false;
     for (const file of files) {
       const isVideo = file.type.startsWith('video');
-      if (isVideo && file.size > 50 * 1024 * 1024) { tooBig = true; continue; }
+      if (isVideo && file.size > MAX_VIDEO_MB * 1024 * 1024) { tooBig = true; continue; }
       additions.push({ file, url: URL.createObjectURL(file), kind: isVideo ? 'video' : 'photo' });
     }
-    setError(tooBig ? 'A video was skipped — videos must be under 50 MB.' : null);
+    setError(tooBig ? `A video was skipped — videos must be under ${MAX_VIDEO_MB} MB.` : null);
     if (additions.length) setPending((prev) => [...prev, ...additions]);
   }
 
