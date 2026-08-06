@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -34,6 +35,7 @@ export function ViewerLayout() {
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pagesOpen, setPagesOpen] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
@@ -98,6 +100,20 @@ export function ViewerLayout() {
   useEffect(() => {
     setAppBadge(chatUnread);
   }, [chatUnread]);
+
+  // When the app comes back to the foreground (reopened from the Home Screen),
+  // refresh the unread count so the icon badge and tab dot are immediately
+  // accurate — don't wait for the next poll.
+  useEffect(() => {
+    if (!org?.id) return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['chat', org.id] });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [org?.id, queryClient]);
 
   // Repair this device's push subscription on every open so it carries the
   // current user_id. Chat pushes target subscriptions BY user (only the group's
