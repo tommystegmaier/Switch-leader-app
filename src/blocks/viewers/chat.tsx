@@ -156,7 +156,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
   const del = useDeleteChatMessage(orgId);
 
   const [text, setText] = useState('');
-  const [actionMsg, setActionMsg] = useState<ChatMessage | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ChatMessage | null>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -311,7 +311,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
             open={reactingId === m.id}
             onToggleBar={() => setReactingId((id) => (id === m.id ? null : m.id))}
             onReact={(emoji, wasMine) => react(m.id, emoji, wasMine)}
-            onLongPress={() => { setReactingId(null); setActionMsg(m); }}
+            onRequestDelete={() => { setReactingId(null); setConfirmDelete(m); }}
           />
         ))}
       </div>
@@ -393,31 +393,15 @@ function ChannelPane({ orgId, groupId, userId, authorName, onSeen }: { orgId: st
       {pollOpen && <PollComposer busy={send.isPending} onCancel={() => setPollOpen(false)} onPost={postPoll} />}
       {gifOpen && <GifPicker onCancel={() => setGifOpen(false)} onPick={sendGif} />}
       {audioOpen && <AudioRecorder onCancel={() => setAudioOpen(false)} onDone={stageAudio} />}
-      {actionMsg && (
-        <MessageActions
-          message={actionMsg}
-          canDelete={actionMsg.userId === userId}
+      {confirmDelete && (
+        <ConfirmDelete
           deleting={del.isPending}
-          onCopy={async () => {
-            const body = actionMsg.body ?? '';
-            try {
-              await navigator.clipboard.writeText(body);
-            } catch {
-              // Fallback for browsers without the async clipboard API.
-              const ta = document.createElement('textarea');
-              ta.value = body; ta.style.position = 'fixed'; ta.style.opacity = '0';
-              document.body.appendChild(ta); ta.select();
-              try { document.execCommand('copy'); } catch { /* ignore */ }
-              document.body.removeChild(ta);
-            }
-            setActionMsg(null);
-          }}
-          onDelete={async () => {
-            try { await del.mutateAsync({ groupId, messageId: actionMsg.id }); }
+          onConfirm={async () => {
+            try { await del.mutateAsync({ groupId, messageId: confirmDelete.id }); }
             catch (e) { setError(errorMessage(e)); }
-            setActionMsg(null);
+            setConfirmDelete(null);
           }}
-          onCancel={() => setActionMsg(null)}
+          onCancel={() => setConfirmDelete(null)}
         />
       )}
     </>
@@ -712,40 +696,41 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
   );
 }
 
-/** Long-press / right-click action sheet for a message (Copy, Delete). */
-function MessageActions({ message, canDelete, deleting, onCopy, onDelete, onCancel }: {
-  message: ChatMessage;
-  canDelete: boolean;
-  deleting: boolean;
-  onCopy: () => void;
-  onDelete: () => void;
-  onCancel: () => void;
-}) {
-  const hasText = Boolean(message.body && message.body.trim());
+/** Confirm before deleting a message (so a stray tap can't wipe one out). */
+function ConfirmDelete({ deleting, onConfirm, onCancel }: { deleting: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
-      <div className="relative z-10 w-full max-w-sm px-2" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}>
-        <div className="overflow-hidden rounded-2xl" style={{ backgroundColor: 'var(--th-surface)' }}>
-          {hasText && (
-            <button type="button" onClick={onCopy} className={`block w-full px-4 py-3.5 text-center text-base ${canDelete ? 'border-b' : ''}`} style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>Copy text</button>
-          )}
-          {canDelete && (
-            <button type="button" onClick={onDelete} disabled={deleting} className="block w-full px-4 py-3.5 text-center text-base font-semibold text-red-600 disabled:opacity-50">
-              {deleting ? 'Deleting…' : 'Delete message'}
-            </button>
-          )}
-          {!hasText && !canDelete && (
-            <div className="px-4 py-3.5 text-center text-sm text-gray-500">Nothing to copy or delete here.</div>
-          )}
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative z-10 w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)' }}>
+        <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>Delete this message?</h3>
+        <p className="mt-1 text-sm text-gray-500">It will be removed for everyone. This can&apos;t be undone.</p>
+        <div className="mt-4 flex gap-2">
+          <button type="button" onClick={onConfirm} disabled={deleting} className="rounded-full px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#dc2626' }}>
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+          <button type="button" onClick={onCancel} className="rounded-full px-5 py-2.5 text-sm">Cancel</button>
         </div>
-        <button type="button" onClick={onCancel} className="mt-2 block w-full rounded-2xl px-4 py-3.5 text-center text-base font-semibold" style={{ backgroundColor: 'var(--th-surface)', color: 'var(--th-text)' }}>Cancel</button>
       </div>
     </div>
   );
 }
 
-function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onReact, onLongPress }: {
+/** A small × in the top corner of your own messages → confirm → delete. */
+function DeleteDot({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      aria-label="Delete message"
+      className="absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full text-[0.7rem] font-bold leading-none text-white shadow"
+      style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+    >
+      ×
+    </button>
+  );
+}
+
+function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete }: {
   m: ChatMessage;
   mine: boolean;
   reactions: Map<string, { count: number; mine: boolean }> | undefined;
@@ -754,19 +739,8 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
   open: boolean;
   onToggleBar: () => void;
   onReact: (emoji: string, wasMine: boolean) => void;
-  onLongPress: () => void;
+  onRequestDelete: () => void;
 }) {
-  // Long-press (or right-click) opens the Copy / Delete sheet; a quick tap still
-  // toggles the reaction bar. We track whether a long-press fired so the tap
-  // that follows the release doesn't also open the reaction bar.
-  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressed = useRef(false);
-  const startPress = () => {
-    longPressed.current = false;
-    pressTimer.current = setTimeout(() => { longPressed.current = true; onLongPress(); }, 450);
-  };
-  const cancelPress = () => { if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; } };
-  const handleTap = () => { if (longPressed.current) { longPressed.current = false; return; } onToggleBar(); };
   // A poll renders as a tappable, live-tallied card instead of a chat bubble.
   if (m.poll) {
     const opts = m.poll.options;
@@ -774,7 +748,8 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
     return (
       <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
         {!mine && m.authorName && <span className="mb-0.5 px-1 text-xs text-gray-500">{m.authorName}</span>}
-        <div className="w-full max-w-[85%] rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--th-hairline-strong)', backgroundColor: 'var(--th-surface)' }}>
+        <div className="relative w-full max-w-[85%] rounded-2xl border px-3 py-2.5" style={{ borderColor: 'var(--th-hairline-strong)', backgroundColor: 'var(--th-surface)' }}>
+          {mine && <DeleteDot onClick={onRequestDelete} />}
           <p className="text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>📊 {m.body}</p>
           <div className="mt-2 flex flex-col gap-1.5">
             {opts.map((o, i) => {
@@ -804,31 +779,24 @@ function MessageRow({ m, mine, reactions, poll, onVote, open, onToggleBar, onRea
     <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
       {!mine && m.authorName && <span className="mb-0.5 px-1 text-xs text-gray-500">{m.authorName}</span>}
       <div className="relative max-w-[85%]">
-        <button
-          type="button"
-          onClick={handleTap}
-          onPointerDown={startPress}
-          onPointerUp={cancelPress}
-          onPointerLeave={cancelPress}
-          onPointerCancel={cancelPress}
-          onContextMenu={(e) => { e.preventDefault(); cancelPress(); longPressed.current = true; onLongPress(); }}
-          className="block select-none text-left"
-          // Suppress iOS's own long-press text-selection / callout so it doesn't
-          // fight our Copy/Delete sheet — long-press shows only our menu.
-          style={{ cursor: 'pointer', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
-        >
-          <div
-            className="whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm"
-            style={mine
+        {mine && <DeleteDot onClick={onRequestDelete} />}
+        {/* Text is natively selectable — long-press (or drag) to select and copy
+            any part. A quick tap still opens the emoji-reaction bar. */}
+        <div
+          onClick={onToggleBar}
+          className="whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm"
+          style={{
+            ...(mine
               ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }
-              : { backgroundColor: 'var(--th-hairline)', color: 'var(--th-text)' }}
-          >
-            {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
-            {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
-            {m.audioUrl && <audio src={m.audioUrl} controls onClick={(e) => e.stopPropagation()} className="mb-1 w-56 max-w-full" />}
-            {m.body}
-          </div>
-        </button>
+              : { backgroundColor: 'var(--th-hairline)', color: 'var(--th-text)' }),
+            WebkitUserSelect: 'text', userSelect: 'text', WebkitTouchCallout: 'default',
+          }}
+        >
+          {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
+          {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
+          {m.audioUrl && <audio src={m.audioUrl} controls onClick={(e) => e.stopPropagation()} className="mb-1 w-56 max-w-full" />}
+          {m.body}
+        </div>
 
         {open && (
           <div className={`absolute z-10 mt-1 flex gap-1 rounded-full border bg-white px-2 py-1 shadow ${mine ? 'right-0' : 'left-0'}`} style={cardStyle}>
