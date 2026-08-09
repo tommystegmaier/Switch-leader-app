@@ -58,12 +58,17 @@ export function PlatformPage() {
 
 /** Manage who else is a platform admin (add by email, remove). */
 function AdminsSection({ currentUserId }: { currentUserId: string }) {
-  const { data: admins, isLoading } = usePlatformAdmins();
+  const { data: admins, isLoading, error: listError } = usePlatformAdmins();
   const add = usePlatformAddAdmin();
   const remove = usePlatformRemoveAdmin();
   const [email, setEmail] = useState('');
+  const [confirmRemove, setConfirmRemove] = useState<{ id: string; email: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // If migration 0053 hasn't been run yet the RPCs don't exist — say so plainly
+  // instead of just showing an empty list.
+  const needsMigration = listError && /function .*platform_list_admins.*does not exist|could not find the function/i.test(errorMessage(listError));
 
   async function addAdmin() {
     setError(null); setNotice(null);
@@ -73,21 +78,52 @@ function AdminsSection({ currentUserId }: { currentUserId: string }) {
     catch (err) { setError(errorMessage(err)); }
   }
 
+  async function removeAdmin() {
+    if (!confirmRemove) return;
+    setError(null); setNotice(null);
+    const label = confirmRemove.email ?? 'That admin';
+    try { await remove.mutateAsync(confirmRemove.id); setNotice(`${label} is no longer a platform admin.`); }
+    catch (err) { setError(errorMessage(err)); }
+    setConfirmRemove(null);
+  }
+
   return (
     <div className="mt-8 rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
       <h2 className="font-bold" style={{ color: 'var(--th-heading)' }}>Platform admins</h2>
       <p className="mt-1 text-sm text-gray-500">People who can see and manage this command center. Add someone by the email on their account.</p>
 
+      {needsMigration && (
+        <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+          Admin management isn&apos;t set up yet — run migration <strong>0053</strong> in Supabase, then reload this page.
+        </p>
+      )}
+
       <div className="mt-3 flex flex-col gap-1.5">
         {isLoading ? <p className="text-sm text-gray-400">Loading…</p> : (admins ?? []).map((a) => (
           <div key={a.user_id} className="flex items-center justify-between gap-2 text-sm">
             <span className="min-w-0 truncate">⚡ {a.email ?? 'unknown'}{a.user_id === currentUserId && <span className="ml-2 text-xs text-gray-400">(you)</span>}</span>
-            {a.user_id !== currentUserId && (
-              <button type="button" onClick={() => { setError(null); remove.mutate(a.user_id, { onError: (e) => setError(errorMessage(e)) }); }} disabled={remove.isPending} className="shrink-0 rounded-full border px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(220,38,38,0.4)' }}>Remove</button>
+            {a.user_id === currentUserId ? (
+              <span className="shrink-0 text-xs text-gray-400">can&apos;t remove yourself</span>
+            ) : (
+              <button type="button" onClick={() => { setError(null); setNotice(null); setConfirmRemove({ id: a.user_id, email: a.email }); }} disabled={remove.isPending} className="shrink-0 rounded-full border px-3 py-1 text-xs font-semibold text-red-600 disabled:opacity-50" style={{ borderColor: 'rgba(220,38,38,0.4)' }}>Remove</button>
             )}
           </div>
         ))}
       </div>
+
+      {confirmRemove && (
+        <div className="mt-3 flex flex-col gap-2 rounded-lg border p-3" style={{ borderColor: 'rgba(220,38,38,0.4)' }}>
+          <p className="text-sm">
+            Remove <strong>{confirmRemove.email ?? 'this admin'}</strong> from the command center? They&apos;ll keep any apps they own, but lose platform-wide access.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void removeAdmin()} disabled={remove.isPending} className="rounded-full px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#dc2626' }}>
+              {remove.isPending ? 'Removing…' : 'Remove admin'}
+            </button>
+            <button type="button" onClick={() => setConfirmRemove(null)} className="rounded-full px-4 py-2 text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
