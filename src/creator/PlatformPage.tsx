@@ -7,6 +7,7 @@ import {
   useIsPlatformAdmin, usePlatformAddAdmin, usePlatformAdmins, usePlatformApps, usePlatformDeleteApp,
   usePlatformJoinApp, usePlatformRemoveAdmin, usePlatformSetUserDisabled, type PlatformApp,
 } from '@/data/platformHooks';
+import { slugify, useDuplicateWorkspace } from '@/data/workspaceHooks';
 
 /**
  * Platform command center — for the owner of the WHOLE platform (the
@@ -159,10 +160,31 @@ function AppRow({ app }: { app: PlatformApp }) {
   const navigate = useNavigate();
   const join = usePlatformJoinApp();
   const del = usePlatformDeleteApp();
+  const duplicate = useDuplicateWorkspace();
   const setDisabled = usePlatformSetUserDisabled();
   const [confirming, setConfirming] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupName, setDupName] = useState('');
+  const [dupSlug, setDupSlug] = useState('');
+  const [dupSlugEdited, setDupSlugEdited] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const effectiveSlug = dupSlugEdited ? dupSlug : slugify(dupName);
+
+  async function runDuplicate() {
+    setError(null);
+    const finalSlug = slugify(effectiveSlug);
+    if (!dupName.trim()) return setError('Give the new app a name.');
+    if (!finalSlug) return setError('Choose a valid link (letters and numbers).');
+    try {
+      const newSlug = await duplicate.mutateAsync({ orgId: app.orgId, name: dupName.trim(), slug: finalSlug });
+      navigate(`/o/${newSlug}`);
+    } catch (e) {
+      const msg = errorMessage(e);
+      setError(/duplicate|unique/i.test(msg) ? 'That link is already taken — try another.' : msg);
+    }
+  }
 
   const created = new Date(app.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
@@ -215,10 +237,36 @@ function AppRow({ app }: { app: PlatformApp }) {
         <button type="button" onClick={openAndManage} disabled={join.isPending} className="rounded-full px-4 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
           {join.isPending ? 'Opening…' : 'Open & manage'}
         </button>
+        <button type="button" onClick={() => { setDupOpen((v) => !v); setDupName(`${app.appName} (copy)`); setDupSlug(''); setDupSlugEdited(false); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
+          Duplicate
+        </button>
         <button type="button" onClick={() => { setConfirming((v) => !v); setConfirmText(''); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold text-red-600" style={{ borderColor: 'rgba(220,38,38,0.4)' }}>
           Delete app
         </button>
       </div>
+
+      {dupOpen && (
+        <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
+          <p className="text-xs text-gray-500">Copies the pages, layout, theme, schedule teams/roles, and chat channels into a brand-new app for another location. No people, messages, or roster carry over — and <strong>you</strong> become its owner, so it shows up in your My apps.</p>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">New app name</span>
+            <input className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'var(--th-hairline-strong)' }} value={dupName} onChange={(e) => setDupName(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Link</span>
+            <div className="flex items-center gap-1 text-sm">
+              <span className="text-gray-400">/o/</span>
+              <input className="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'var(--th-hairline-strong)' }} value={effectiveSlug} onChange={(e) => { setDupSlug(e.target.value); setDupSlugEdited(true); }} />
+            </div>
+          </label>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void runDuplicate()} disabled={duplicate.isPending} className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+              {duplicate.isPending ? 'Duplicating…' : 'Create duplicate'}
+            </button>
+            <button type="button" onClick={() => setDupOpen(false)} className="rounded-full px-4 py-2 text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
