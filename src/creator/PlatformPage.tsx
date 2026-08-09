@@ -92,10 +92,20 @@ function AdminsSection({ currentUserId }: { currentUserId: string }) {
       <h2 className="font-bold" style={{ color: 'var(--th-heading)' }}>Platform admins</h2>
       <p className="mt-1 text-sm text-gray-500">People who can see and manage this command center. Add someone by the email on their account.</p>
 
-      {needsMigration && (
+      {needsMigration ? (
         <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
           Admin management isn&apos;t set up yet — run migration <strong>0053</strong> in Supabase, then reload this page.
         </p>
+      ) : listError ? (
+        // Any other failure (permissions, etc.) — show it rather than rendering
+        // an empty list with no explanation.
+        <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+          Couldn&apos;t load platform admins: {errorMessage(listError)}
+        </p>
+      ) : null}
+
+      {!isLoading && !listError && (admins ?? []).length === 0 && (
+        <p className="mt-3 text-sm text-gray-500">No platform admins found.</p>
       )}
 
       <div className="mt-3 flex flex-col gap-1.5">
