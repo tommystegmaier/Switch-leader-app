@@ -3,8 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { applyHubMetadata } from '@/lib/appMetadata';
-import { slugify, useCreateWorkspace, useCreateWorkspaceFromTemplate } from '@/data/workspaceHooks';
-import { TEMPLATES } from './templates';
+import { slugify, useAppTemplates, useCreateWorkspace, useCreateWorkspaceFromTemplate } from '@/data/workspaceHooks';
 
 /**
  * Self-service "create a new workspace" screen. Any signed-in user can spin up
@@ -16,6 +15,7 @@ export function CreateWorkspacePage() {
   const navigate = useNavigate();
   const create = useCreateWorkspace();
   const createFromTemplate = useCreateWorkspaceFromTemplate();
+  const { data: templates } = useAppTemplates(Boolean(user));
 
   // null = start from a blank app; otherwise a template id.
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -40,11 +40,10 @@ export function CreateWorkspacePage() {
     if (!name.trim()) return setError('Please give your app a name.');
     if (!finalSlug) return setError('Please choose a valid link (letters and numbers).');
     try {
-      const template = templateId ? TEMPLATES.find((t) => t.id === templateId) : null;
-      const org = template
-        ? await createFromTemplate.mutateAsync({ name: name.trim(), slug: finalSlug, settings: template.settings, pages: template.pages })
-        : await create.mutateAsync({ name: name.trim(), slug: finalSlug });
-      navigate(`/o/${org.slug}`);
+      const newSlug = templateId
+        ? await createFromTemplate.mutateAsync({ templateId, name: name.trim(), slug: finalSlug })
+        : (await create.mutateAsync({ name: name.trim(), slug: finalSlug })).slug;
+      navigate(`/o/${newSlug}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(/duplicate|unique/i.test(msg) ? 'That link is already taken — try a different one.' : msg);
@@ -66,17 +65,20 @@ export function CreateWorkspacePage() {
           name="Blank app"
           tagline="Start from scratch and build it with the block editor."
         />
-        {TEMPLATES.map((t) => (
+        {(templates ?? []).map((t) => (
           <TemplateCard
-            key={t.id}
-            selected={templateId === t.id}
-            onSelect={() => setTemplateId(t.id)}
-            icon={t.icon}
+            key={t.templateId}
+            selected={templateId === t.templateId}
+            onSelect={() => setTemplateId(t.templateId)}
+            icon={t.icon || '📱'}
             name={t.name}
-            tagline={t.tagline}
+            tagline={t.tagline || 'Start from this app’s pages, layout, and theme.'}
           />
         ))}
       </div>
+      {(templates ?? []).length > 0 && (
+        <p className="-mt-4 mb-6 text-xs text-gray-500">Templates copy the pages, layout, theme, and channels — never the people, messages, or roster.</p>
+      )}
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <label className="flex flex-col gap-1 text-sm">

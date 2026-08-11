@@ -4,10 +4,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { errorMessage } from '@/lib/errors';
 import {
-  useIsPlatformAdmin, usePlatformAddAdmin, usePlatformAdmins, usePlatformApps, usePlatformDeleteApp,
-  usePlatformJoinApp, usePlatformRemoveAdmin, usePlatformSetUserDisabled, type PlatformApp,
+  useIsPlatformAdmin, usePlatformAddAdmin, usePlatformAddTemplate, usePlatformAdmins, usePlatformApps,
+  usePlatformDeleteApp, usePlatformJoinApp, usePlatformRemoveAdmin, usePlatformRemoveTemplate,
+  usePlatformSetUserDisabled, type PlatformApp,
 } from '@/data/platformHooks';
-import { slugify, useDuplicateWorkspace } from '@/data/workspaceHooks';
+import { slugify, useAppTemplates, useDuplicateWorkspace } from '@/data/workspaceHooks';
 
 /**
  * Platform command center — for the owner of the WHOLE platform (the
@@ -19,6 +20,7 @@ export function PlatformPage() {
   const { user, loading } = useAuth();
   const { data: isAdmin, isLoading: adminLoading } = useIsPlatformAdmin(Boolean(user));
   const { data: apps, isLoading: appsLoading } = usePlatformApps(Boolean(user) && isAdmin === true);
+  const { data: templates } = useAppTemplates(Boolean(user) && isAdmin === true);
 
   if (loading || (user && adminLoading)) {
     return <Centered>Loading…</Centered>;
@@ -31,6 +33,7 @@ export function PlatformPage() {
   }
 
   const list = apps ?? [];
+  const templateOrgIds = new Set((templates ?? []).map((t) => t.orgId));
   return (
     <div className="mx-auto max-w-3xl px-4 pb-10" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.75rem)' }}>
       <div className="mb-1 flex items-center justify-between gap-3">
@@ -47,7 +50,7 @@ export function PlatformPage() {
         <>
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">{list.length} app{list.length === 1 ? '' : 's'}</p>
           <ul className="flex flex-col gap-3">
-            {list.map((a) => <AppRow key={a.orgId} app={a} />)}
+            {list.map((a) => <AppRow key={a.orgId} app={a} isTemplate={templateOrgIds.has(a.orgId)} />)}
           </ul>
         </>
       )}
@@ -156,12 +159,24 @@ function AdminsSection({ currentUserId }: { currentUserId: string }) {
   );
 }
 
-function AppRow({ app }: { app: PlatformApp }) {
+function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) {
   const navigate = useNavigate();
   const join = usePlatformJoinApp();
   const del = usePlatformDeleteApp();
   const duplicate = useDuplicateWorkspace();
+  const addTemplate = usePlatformAddTemplate();
+  const removeTemplate = usePlatformRemoveTemplate();
+  const [tplOpen, setTplOpen] = useState(false);
+  const [tplName, setTplName] = useState('');
+  const [tplTagline, setTplTagline] = useState('');
   const setDisabled = usePlatformSetUserDisabled();
+
+  async function saveTemplate() {
+    setError(null);
+    if (!tplName.trim()) return setError('Give the template a name.');
+    try { await addTemplate.mutateAsync({ orgId: app.orgId, name: tplName.trim(), tagline: tplTagline.trim() || undefined }); setTplOpen(false); }
+    catch (e) { setError(errorMessage(e)); }
+  }
   const [confirming, setConfirming] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [dupOpen, setDupOpen] = useState(false);
@@ -206,7 +221,10 @@ function AppRow({ app }: { app: PlatformApp }) {
     <li className="rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-semibold" style={{ color: 'var(--th-heading)' }}>{app.appName}</p>
+          <p className="truncate font-semibold" style={{ color: 'var(--th-heading)' }}>
+            {app.appName}
+            {isTemplate && <span className="ml-2 rounded-full bg-black/10 px-2 py-0.5 text-xs font-semibold">Template</span>}
+          </p>
           <p className="truncate text-sm text-gray-500">/o/{app.slug} · {app.memberCount} member{app.memberCount === 1 ? '' : 's'} · created {created}</p>
         </div>
       </div>
@@ -240,10 +258,39 @@ function AppRow({ app }: { app: PlatformApp }) {
         <button type="button" onClick={() => { setDupOpen((v) => !v); setDupName(`${app.appName} (copy)`); setDupSlug(''); setDupSlugEdited(false); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
           Duplicate
         </button>
+        {isTemplate ? (
+          <button type="button" onClick={() => { setError(null); removeTemplate.mutate(app.orgId, { onError: (e) => setError(errorMessage(e)) }); }} disabled={removeTemplate.isPending} className="rounded-full border px-4 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
+            {removeTemplate.isPending ? 'Removing…' : 'Remove as template'}
+          </button>
+        ) : (
+          <button type="button" onClick={() => { setTplOpen((v) => !v); setTplName(app.appName); setTplTagline(''); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
+            Use as template
+          </button>
+        )}
         <button type="button" onClick={() => { setConfirming((v) => !v); setConfirmText(''); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold text-red-600" style={{ borderColor: 'rgba(220,38,38,0.4)' }}>
           Delete app
         </button>
       </div>
+
+      {tplOpen && !isTemplate && (
+        <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
+          <p className="text-xs text-gray-500">Makes this app selectable as a starting point when anyone creates a new app. Only its pages, layout, theme, and channels are copied — never the people, roster, messages, or responses.</p>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Template name</span>
+            <input className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'var(--th-hairline-strong)' }} value={tplName} onChange={(e) => setTplName(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Short description <span className="font-normal text-gray-400">(optional)</span></span>
+            <input className="rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'var(--th-hairline-strong)' }} placeholder="e.g. Full youth-ministry setup with roster, schedule & chat" value={tplTagline} onChange={(e) => setTplTagline(e.target.value)} />
+          </label>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => void saveTemplate()} disabled={addTemplate.isPending} className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+              {addTemplate.isPending ? 'Saving…' : 'Save as template'}
+            </button>
+            <button type="button" onClick={() => setTplOpen(false)} className="rounded-full px-4 py-2 text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
 
       {dupOpen && (
         <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>

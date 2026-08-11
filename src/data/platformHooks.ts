@@ -97,6 +97,31 @@ export function usePlatformRemoveAdmin() {
   });
 }
 
+/** Mark an app as a template others can start from (platform admin only). */
+export function usePlatformAddTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orgId, name, tagline }: { orgId: string; name: string; tagline?: string }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('platform_add_template', { p_org: orgId, p_name: name, p_tagline: tagline ?? null, p_icon: null });
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['app-templates'] }); },
+  });
+}
+
+export function usePlatformRemoveTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (orgId: string) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('platform_remove_template', { p_org: orgId });
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['app-templates'] }); },
+  });
+}
+
 export function usePlatformDeleteApp() {
   const qc = useQueryClient();
   return useMutation({

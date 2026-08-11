@@ -100,22 +100,33 @@ export function useDuplicateWorkspace() {
 }
 
 /** Create a workspace pre-built from a template (pages/blocks/theme + owner). */
+/** Templates available to start a new app from (real apps marked as templates). */
+export interface AppTemplateOption { templateId: string; orgId: string; name: string; tagline: string | null; icon: string | null }
+
+export function useAppTemplates(enabled = true) {
+  return useQuery({
+    queryKey: ['app-templates'],
+    enabled: enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<AppTemplateOption[]> => {
+      const s = getSupabase(); if (!s) return [];
+      const { data, error } = await s.rpc('list_app_templates');
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ templateId: r.template_id, orgId: r.org_id, name: r.name, tagline: r.tagline ?? null, icon: r.icon ?? null }));
+    },
+  });
+}
+
+/** Create a new app from a template (structure only — no people carry over). */
 export function useCreateWorkspaceFromTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (args: { name: string; slug: string; settings: unknown; pages: unknown }): Promise<Organization> => {
+    mutationFn: async ({ templateId, name, slug }: { templateId: string; name: string; slug: string }): Promise<string> => {
       const s = getSupabase();
       if (!s) throw new Error('Creating a workspace requires a configured backend.');
-      const { data, error } = await s.rpc('create_workspace_from_template', {
-        p_name: args.name,
-        p_slug: args.slug,
-        p_settings: args.settings,
-        p_pages: args.pages,
-      });
+      const { data, error } = await s.rpc('create_app_from_template', { p_template: templateId, p_name: name, p_slug: slug });
       if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const o = data as any;
-      return { id: o.id, name: o.name, slug: o.slug, createdAt: o.created_at };
+      return data as string; // new slug
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['my-workspaces'] }),
   });
