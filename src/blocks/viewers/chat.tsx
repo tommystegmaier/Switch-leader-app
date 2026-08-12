@@ -9,7 +9,7 @@ import {
   type ChatMessage, type ChatPostPolicy,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
-import { compressImage, startPcmRecorder, uploadMedia, type PcmRecorder } from '@/lib/media';
+import { compressImage, createAudioContext, startPcmRecorder, uploadMedia, type PcmRecorder } from '@/lib/media';
 import type { ViewerCtx } from '../actions';
 
 interface ChatProps { title?: string }
@@ -751,6 +751,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
   const [phase, setPhase] = useState<RecPhase>('intro');
   const [seconds, setSeconds] = useState(0);
   const [diag, setDiag] = useState('');
+  const [notice, setNotice] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const recorderRef = useRef<PcmRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -775,12 +776,17 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
   async function start() {
     if (!navigator.mediaDevices?.getUserMedia) { setPhase('unavailable'); return; }
     setPhase('asking');
+    // Start the audio context NOW, while we still have the user gesture. iOS
+    // won't start one after the permission prompt has been awaited, and a
+    // context that never starts captures nothing.
+    let ctx: AudioContext | undefined;
+    try { ctx = createAudioContext(); } catch { /* fall back inside the recorder */ }
     try {
       // This call is what raises the system permission dialog.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       // Capture raw samples rather than using MediaRecorder — see startPcmRecorder.
-      recorderRef.current = await startPcmRecorder(stream, `voice-${Date.now()}`);
+      recorderRef.current = await startPcmRecorder(stream, `voice-${Date.now()}`, ctx);
       setSeconds(0);
       setPhase('recording');
       timerRef.current = setInterval(() => {
@@ -803,6 +809,15 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
     stopStream();
     setPhase('converting');
     void rec.stop().then((file) => {
+      // A WAV header alone is 44 bytes — anything near that means we captured
+      // no audio, so say so instead of sending an unplayable file.
+      if (file.size < 2000) {
+        setDiag('empty-capture');
+        setPhase('intro');
+        setNotice('That recording came through silent. Please try again.');
+        return;
+      }
+      setNotice('');
       fileRef.current = file;
       setPreviewUrl(URL.createObjectURL(file));
       setPhase('ready');
@@ -843,6 +858,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
           {phase === 'intro' && (
             <>
               <p className="mx-auto mt-1.5 max-w-[17rem] text-sm text-gray-500">Tap the mic to start recording. You can listen back before you send it.</p>
+              {notice && <p className="mx-auto mt-2 max-w-[17rem] rounded-md bg-amber-50 p-2 text-xs text-amber-900">{notice}</p>}
               <MicButton onClick={() => void start()} />
               <p className="mt-3 text-xs text-gray-400">Up to {Math.round(MAX_AUDIO_SECONDS / 60)} minutes</p>
               <button type="button" onClick={onPickFile} className="mx-auto mt-4 block text-sm underline" style={{ color: 'var(--th-text)' }}>

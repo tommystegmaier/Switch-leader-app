@@ -76,11 +76,23 @@ export async function compressImage(file: File, maxDim = 1600, quality = 0.8): P
  */
 export interface PcmRecorder { stop: () => Promise<File> }
 
-export async function startPcmRecorder(stream: MediaStream, baseName = 'voice'): Promise<PcmRecorder> {
+/**
+ * Create + resume an AudioContext. MUST be called synchronously inside the tap
+ * that starts recording: iOS refuses to start a context once the user gesture
+ * has expired (e.g. after awaiting the mic permission prompt), and a suspended
+ * context never fires onaudioprocess — which silently produced empty
+ * recordings.
+ */
+export function createAudioContext(): AudioContext {
   const AC: typeof AudioContext =
     window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   const ctx = new AC();
-  // iOS starts contexts suspended until a gesture has resumed them.
+  void ctx.resume().catch(() => { /* best effort */ });
+  return ctx;
+}
+
+export async function startPcmRecorder(stream: MediaStream, baseName = 'voice', existing?: AudioContext): Promise<PcmRecorder> {
+  const ctx = existing ?? createAudioContext();
   if (ctx.state === 'suspended') { try { await ctx.resume(); } catch { /* keep going */ } }
 
   const source = ctx.createMediaStreamSource(stream);
@@ -158,7 +170,7 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
     view.setInt16(at, s < 0 ? s * 0x8000 : s * 0x7fff, true);
     at += 2;
   }
-  return new Blob([view], { type: 'audio/wav' });
+  return new Blob([buffer], { type: 'audio/wav' });
 }
 
 export async function uploadMedia(orgId: string, file: File): Promise<MediaObject> {
