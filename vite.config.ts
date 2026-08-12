@@ -57,6 +57,19 @@ export default defineConfig({
             },
           },
           {
+            // Audio/video must NOT be served from the service-worker cache.
+            // Safari only plays media when the server answers HTTP Range
+            // requests with 206 Partial Content; a cached full 200 response
+            // makes playback fail outright — which is why a voice message
+            // played fine as a local preview but not once uploaded, while
+            // images (no range requests) were unaffected. Rule order matters:
+            // Workbox uses the first match, so this precedes the media cache.
+            urlPattern: ({ url }) =>
+              url.pathname.includes('/storage/v1/object/public/') &&
+              /\.(wav|m4a|mp3|aac|ogg|oga|webm|mp4|mov)$/i.test(url.pathname),
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: ({ url }) => url.pathname.includes('/storage/v1/object/public/'),
             handler: 'StaleWhileRevalidate',
             options: {
