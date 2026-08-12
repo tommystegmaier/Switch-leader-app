@@ -389,7 +389,15 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
         items.forEach((it) => URL.revokeObjectURL(it.url));
       }
     } catch (e) {
-      setError(errorMessage(e));
+      const msg = errorMessage(e);
+      // Translate the two failures people actually hit into plain language.
+      setError(
+        /row-level security|violates .*policy|not authorized|permission/i.test(msg)
+          ? 'Couldn’t upload that — your account may not have permission to attach files yet. Ask an admin to run the latest update.'
+        : /audio_url|chat_messages_media_check|column .* does not exist/i.test(msg)
+          ? 'Voice messages aren’t enabled on this app yet. Ask an admin to run the latest database update.'
+        : msg,
+      );
       setText(savedText);
       setPending(items); // keep previews so they can retry
     } finally {
