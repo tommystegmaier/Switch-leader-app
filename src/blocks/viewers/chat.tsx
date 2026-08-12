@@ -9,7 +9,7 @@ import {
   type ChatMessage, type ChatPostPolicy,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
-import { compressImage, toWavFile, uploadMedia } from '@/lib/media';
+import { compressImage, startPcmRecorder, uploadMedia, type PcmRecorder } from '@/lib/media';
 import type { ViewerCtx } from '../actions';
 
 interface ChatProps { title?: string }
@@ -484,7 +484,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
             {pending.map((p, i) => (
               <div key={i} className="relative shrink-0">
                 {p.kind === 'audio'
-                  ? <span className="flex h-16 w-16 items-center justify-center rounded-lg text-2xl" style={{ backgroundColor: 'var(--th-hairline)' }} aria-label="Voice recording">🎙️</span>
+                  ? <VoiceChip url={p.url} />
                   : <img src={p.url} alt="" className="h-16 w-16 rounded-lg object-cover" />}
                 <button type="button" onClick={() => removePending(i)} aria-label="Remove" className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs leading-none text-white">×</button>
               </div>
@@ -752,8 +752,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
   const [seconds, setSeconds] = useState(0);
   const [diag, setDiag] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
+  const recorderRef = useRef<PcmRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<File | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -773,14 +772,6 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
     if (!navigator.mediaDevices?.getUserMedia) setPhase('unavailable');
   }, []);
 
-  // Prefer MP4/AAC: it's the only format iPhones can PLAY. Chrome can't record
-  // mp4, so it falls through to webm, which Android/desktop play fine.
-  function pickMime(): string {
-    const opts = ['audio/mp4', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
-    for (const t of opts) { if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t)) return t; }
-    return '';
-  }
-
   async function start() {
     if (!navigator.mediaDevices?.getUserMedia) { setPhase('unavailable'); return; }
     setPhase('asking');
@@ -788,25 +779,8 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
       // This call is what raises the system permission dialog.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mimeType = pickMime();
-      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      chunksRef.current = [];
-      rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
-      rec.onstop = () => {
-        const type = rec.mimeType || 'audio/mp4';
-        const blob = new Blob(chunksRef.current, { type });
-        stopStream();
-        setPhase('converting');
-        // Convert to WAV so the note plays on every device — including the
-        // iPhone that recorded it, which often can't play back its own MP4.
-        void toWavFile(blob, `voice-${Date.now()}`).then((file) => {
-          fileRef.current = file;
-          setPreviewUrl(URL.createObjectURL(file));
-          setPhase('ready');
-        });
-      };
-      rec.start();
-      recorderRef.current = rec;
+      // Capture raw samples rather than using MediaRecorder — see startPcmRecorder.
+      recorderRef.current = await startPcmRecorder(stream, `voice-${Date.now()}`);
       setSeconds(0);
       setPhase('recording');
       timerRef.current = setInterval(() => {
@@ -823,7 +797,16 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
 
   function stop() {
     stopTimer();
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+    const rec = recorderRef.current;
+    recorderRef.current = null;
+    if (!rec) return;
+    stopStream();
+    setPhase('converting');
+    void rec.stop().then((file) => {
+      fileRef.current = file;
+      setPreviewUrl(URL.createObjectURL(file));
+      setPhase('ready');
+    });
   }
 
   function reset() {
@@ -1101,15 +1084,7 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
         >
           {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
           {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
-          {m.audioUrl && (
-            <span className="mb-1 block" onClick={(e) => e.stopPropagation()}>
-              <audio src={m.audioUrl} controls preload="metadata" className="w-56 max-w-full" />
-              {/* Fallback: if the browser can't play this file inline (e.g. an
-                  older note recorded in a format this device doesn't support),
-                  there's still a way to open/hear it. */}
-              <a href={m.audioUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 block text-[0.65rem] underline opacity-70">Open voice message</a>
-            </span>
-          )}
+          {m.audioUrl && <VoicePlayer url={m.audioUrl} mine={mine} />}
           {m.body && linkify(m.body)}
         </div>
 
@@ -1140,5 +1115,109 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
 
       <span className="mt-0.5 px-1 text-[0.65rem] text-gray-400">{fmtTime(m.createdAt)}</span>
     </div>
+  );
+}
+
+/** Small voice tile shown in the composer while a recording is staged. */
+function VoiceChip({ url }: { url: string }) {
+  const [secs, setSecs] = useState(0);
+  useEffect(() => {
+    const a = new Audio(url);
+    const onMeta = () => { if (Number.isFinite(a.duration)) setSecs(a.duration); };
+    a.addEventListener('loadedmetadata', onMeta);
+    return () => a.removeEventListener('loadedmetadata', onMeta);
+  }, [url]);
+  return (
+    <span className="flex h-16 w-16 flex-col items-center justify-center rounded-lg" style={{ backgroundColor: 'var(--th-hairline)' }}>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style={{ color: 'var(--th-text)' }} aria-hidden>
+        <rect x="9" y="2" width="6" height="12" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <path d="M12 18v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <span className="mt-0.5 text-[0.6rem] tabular-nums" style={{ color: 'var(--th-text)' }}>{secs ? fmtDuration(secs) : 'Voice'}</span>
+    </span>
+  );
+}
+
+/**
+ * iMessage-style voice message: play/pause, a waveform-ish progress track and
+ * the remaining time. Uses our own controls rather than the browser's default
+ * player, which renders as a black bar on iOS and looks nothing like a chat.
+ */
+function VoicePlayer({ url, mine }: { url: string; mine: boolean }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [dur, setDur] = useState(0);
+  const [pos, setPos] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const a = new Audio(url);
+    a.preload = 'metadata';
+    audioRef.current = a;
+    const onMeta = () => { if (Number.isFinite(a.duration)) setDur(a.duration); };
+    const onTime = () => setPos(a.currentTime);
+    const onEnd = () => { setPlaying(false); setPos(0); };
+    const onErr = () => setFailed(true);
+    a.addEventListener('loadedmetadata', onMeta);
+    a.addEventListener('timeupdate', onTime);
+    a.addEventListener('ended', onEnd);
+    a.addEventListener('error', onErr);
+    return () => {
+      a.pause();
+      a.removeEventListener('loadedmetadata', onMeta);
+      a.removeEventListener('timeupdate', onTime);
+      a.removeEventListener('ended', onEnd);
+      a.removeEventListener('error', onErr);
+    };
+  }, [url]);
+
+  function toggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else { void a.play().then(() => setPlaying(true)).catch(() => setFailed(true)); }
+  }
+
+  // Static bars that fill as it plays — the familiar voice-note look.
+  const bars = [7, 12, 9, 16, 11, 18, 13, 8, 15, 10, 17, 9, 13, 7, 12, 10];
+  const played = dur ? pos / dur : 0;
+  const tint = mine ? 'var(--th-primary-text)' : 'var(--th-text)';
+
+  if (failed) {
+    return (
+      <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="mb-1 flex items-center gap-2 text-sm underline" style={{ color: tint }}>
+        🎙️ Open voice message
+      </a>
+    );
+  }
+
+  return (
+    <span className="mb-1 flex w-56 max-w-full items-center gap-2.5" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={playing ? 'Pause' : 'Play'}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: mine ? 'rgba(255,255,255,0.25)' : 'var(--th-surface)', color: tint }}
+      >
+        {playing
+          ? <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+          : <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden><path d="M8 5.5v13l11-6.5z" /></svg>}
+      </button>
+      <span className="flex flex-1 items-center gap-[3px]" aria-hidden>
+        {bars.map((h, i) => (
+          <span
+            key={i}
+            className="w-[3px] rounded-full"
+            style={{ height: `${h}px`, backgroundColor: tint, opacity: i / bars.length <= played ? 0.95 : 0.35 }}
+          />
+        ))}
+      </span>
+      <span className="shrink-0 text-[0.7rem] tabular-nums" style={{ color: tint, opacity: 0.8 }}>
+        {fmtDuration(dur ? (playing ? dur - pos : dur) : 0)}
+      </span>
+    </span>
   );
 }

@@ -63,50 +63,75 @@ export async function compressImage(file: File, maxDim = 1600, quality = 0.8): P
 }
 
 /**
- * Convert a recording to 16 kHz mono WAV.
+ * Record microphone audio as raw PCM and write a WAV ourselves.
  *
- * Why: what MediaRecorder produces varies by device (iOS gives an MP4/AAC
- * container, Chrome gives WebM/Opus), and each platform refuses to play some of
- * the others — iOS Safari in particular often can't play back its OWN recording
- * from a plain URL, which showed up as "Error" in the player. WAV is plain PCM
- * that every browser decodes, so a note recorded anywhere plays everywhere.
+ * Why not MediaRecorder: what it produces depends on the device (iOS gives an
+ * MP4/AAC container, Chrome gives WebM/Opus) and platforms refuse each other's
+ * output — iOS Safari often can't even play back, or decode, its OWN recording,
+ * which is what surfaced as "Error" in the player. Capturing samples straight
+ * off the audio graph skips containers and codecs completely, so the file is
+ * always a plain WAV every browser can play.
  *
- * 16 kHz mono is voice-grade: clear speech at ~32 KB/s (≈2 MB/minute), which is
- * still far smaller than video and well under the upload cap.
- *
- * Best-effort: if decoding fails we return the original recording unchanged.
+ * 16 kHz mono is voice-grade: ~32 KB/s (≈2 MB/minute).
  */
-export async function toWavFile(blob: Blob, baseName = 'voice'): Promise<File> {
-  const AC: typeof AudioContext | undefined =
-    window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  const OAC: typeof OfflineAudioContext | undefined =
-    window.OfflineAudioContext ?? (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext;
-  if (!AC || !OAC) return new File([blob], `${baseName}.webm`, { type: blob.type || 'audio/webm' });
+export interface PcmRecorder { stop: () => Promise<File> }
 
-  try {
-    const bytes = await blob.arrayBuffer();
-    const ctx = new AC();
-    // Safari only reliably supports the callback form of decodeAudioData.
-    const decoded = await new Promise<AudioBuffer>((resolve, reject) => {
-      const p = ctx.decodeAudioData(bytes, resolve, reject) as unknown as Promise<AudioBuffer> | undefined;
-      if (p && typeof p.then === 'function') p.then(resolve, reject);
-    });
-    void ctx.close();
+export async function startPcmRecorder(stream: MediaStream, baseName = 'voice'): Promise<PcmRecorder> {
+  const AC: typeof AudioContext =
+    window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  const ctx = new AC();
+  // iOS starts contexts suspended until a gesture has resumed them.
+  if (ctx.state === 'suspended') { try { await ctx.resume(); } catch { /* keep going */ } }
 
-    const rate = 16000;
-    const frames = Math.max(1, Math.ceil(decoded.duration * rate));
-    const off = new OAC(1, frames, rate); // 1 channel → mono downmix
-    const src = off.createBufferSource();
-    src.buffer = decoded;
-    src.connect(off.destination);
-    src.start();
-    const rendered = await off.startRendering();
-    return new File([encodeWav(rendered.getChannelData(0), rate)], `${baseName}.wav`, { type: 'audio/wav' });
-  } catch {
-    // Couldn't decode — send what we recorded rather than losing the message.
-    const ext = (blob.type || '').includes('mp4') ? 'm4a' : (blob.type || '').includes('ogg') ? 'ogg' : 'webm';
-    return new File([blob], `${baseName}.${ext}`, { type: blob.type || 'audio/webm' });
+  const source = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const chunks: Float32Array[] = [];
+  let total = 0;
+
+  proc.onaudioprocess = (e) => {
+    const d = e.inputBuffer.getChannelData(0);
+    const copy = new Float32Array(d.length);
+    copy.set(d);
+    chunks.push(copy);
+    total += copy.length;
+  };
+
+  // A ScriptProcessor only runs while connected to the destination, so route it
+  // through a silent gain node — otherwise the mic would echo out the speaker.
+  const silent = ctx.createGain();
+  silent.gain.value = 0;
+  source.connect(proc);
+  proc.connect(silent);
+  silent.connect(ctx.destination);
+
+  return {
+    async stop(): Promise<File> {
+      proc.onaudioprocess = null;
+      try { source.disconnect(); proc.disconnect(); silent.disconnect(); } catch { /* already torn down */ }
+      const merged = new Float32Array(total);
+      let at = 0;
+      for (const c of chunks) { merged.set(c, at); at += c.length; }
+      const srcRate = ctx.sampleRate;
+      try { await ctx.close(); } catch { /* ignore */ }
+      const out = resample(merged, srcRate, 16000);
+      return new File([encodeWav(out, 16000)], `${baseName}.wav`, { type: 'audio/wav' });
+    },
+  };
+}
+
+/** Linear-interpolation resample (plenty for speech). */
+function resample(input: Float32Array, from: number, to: number): Float32Array {
+  if (from === to || input.length === 0) return input;
+  const ratio = from / to;
+  const len = Math.max(1, Math.floor(input.length / ratio));
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const idx = i * ratio;
+    const i0 = Math.floor(idx);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    out[i] = input[i0] + (input[i1] - input[i0]) * (idx - i0);
   }
+  return out;
 }
 
 /** 16-bit PCM WAV from mono float samples. */
