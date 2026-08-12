@@ -9,7 +9,7 @@ import {
   type ChatMessage, type ChatPostPolicy,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
-import { compressImage, uploadMedia } from '@/lib/media';
+import { compressImage, toWavFile, uploadMedia } from '@/lib/media';
 import type { ViewerCtx } from '../actions';
 
 interface ChatProps { title?: string }
@@ -735,7 +735,7 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
 
 const MAX_AUDIO_SECONDS = 300; // 5-minute soft cap — audio is tiny, this is just a guard
 
-type RecPhase = 'intro' | 'asking' | 'recording' | 'ready' | 'blocked' | 'unavailable';
+type RecPhase = 'intro' | 'asking' | 'recording' | 'converting' | 'ready' | 'blocked' | 'unavailable';
 
 /**
  * Record a voice message: ask → record → listen back → add.
@@ -795,11 +795,15 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
       rec.onstop = () => {
         const type = rec.mimeType || 'audio/mp4';
         const blob = new Blob(chunksRef.current, { type });
-        const ext = type.includes('mp4') ? 'm4a' : type.includes('aac') ? 'aac' : type.includes('ogg') ? 'ogg' : 'webm';
-        fileRef.current = new File([blob], `voice-${Date.now()}.${ext}`, { type });
-        setPreviewUrl(URL.createObjectURL(blob));
-        setPhase('ready');
         stopStream();
+        setPhase('converting');
+        // Convert to WAV so the note plays on every device — including the
+        // iPhone that recorded it, which often can't play back its own MP4.
+        void toWavFile(blob, `voice-${Date.now()}`).then((file) => {
+          fileRef.current = file;
+          setPreviewUrl(URL.createObjectURL(file));
+          setPhase('ready');
+        });
       };
       rec.start();
       recorderRef.current = rec;
@@ -890,6 +894,15 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               <div className="mx-auto mt-3 h-1 w-40 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--th-hairline)' }}>
                 <div className="h-full rounded-full transition-all" style={{ width: `${pct * 100}%`, backgroundColor: '#dc2626' }} />
               </div>
+            </>
+          )}
+
+          {/* ---------- converting to a universally playable file ---------- */}
+          {phase === 'converting' && (
+            <>
+              <p className="mx-auto mt-1.5 max-w-[17rem] text-sm text-gray-500">Preparing your recording…</p>
+              <div className="mx-auto mt-6 h-12 w-12 animate-spin rounded-full border-4" style={{ borderColor: 'var(--th-hairline)', borderTopColor: 'var(--th-primary)' }} aria-hidden />
+              <p className="mt-6 text-xs text-gray-400">This only takes a moment</p>
             </>
           )}
 
