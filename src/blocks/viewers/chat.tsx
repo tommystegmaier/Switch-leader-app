@@ -750,6 +750,7 @@ type RecPhase = 'intro' | 'asking' | 'recording' | 'ready' | 'blocked' | 'unavai
 function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void; onDone: (file: File) => void; onPickFile: () => void }) {
   const [phase, setPhase] = useState<RecPhase>('intro');
   const [seconds, setSeconds] = useState(0);
+  const [diag, setDiag] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -808,7 +809,10 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
         setSeconds((s) => { const next = s + 1; if (next >= MAX_AUDIO_SECONDS) stop(); return next; });
       }, 1000);
     } catch (err) {
-      const name = (err as { name?: string })?.name ?? '';
+      const name = (err as { name?: string })?.name ?? 'UnknownError';
+      // Keep the raw reason so a leader can read it back to us — with hundreds
+      // of users we can't guess which of several OS-level causes they hit.
+      setDiag(`${name}${(navigator as Navigator & { standalone?: boolean }).standalone ? ' · home-screen' : ' · browser'}`);
       setPhase(name === 'NotFoundError' || name === 'NotReadableError' ? 'unavailable' : 'blocked');
     }
   }
@@ -937,6 +941,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
                 <button type="button" onClick={() => void start()} className="mt-3 w-full rounded-full border px-6 py-3 text-sm font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
                   Try the microphone again
                 </button>
+                {diag && <p className="mt-3 text-center text-[0.65rem] text-gray-400">Reason: {diag}</p>}
               </details>
             </>
           )}
