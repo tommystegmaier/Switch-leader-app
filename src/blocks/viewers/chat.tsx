@@ -287,6 +287,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const audioFileRef = useRef<HTMLInputElement>(null);
 
   const msgs = useMemo(() => messages ?? [], [messages]);
 
@@ -344,6 +345,18 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
   // A finished voice recording gets staged just like a photo, so it goes out
   // with the next Send (with an optional caption).
   function stageAudio(file: File) {
+    setAudioOpen(false);
+    setPending((prev) => [...prev, { file, url: URL.createObjectURL(file), kind: 'audio' }]);
+  }
+
+  // Fallback path: attach an audio file that already exists on the device (e.g.
+  // an iPhone Voice Memo). This works even when the browser can't reach the
+  // microphone at all, so voice messages are never fully blocked.
+  function onPickAudioFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target;
+    const file = (input.files ?? [])[0];
+    input.value = '';
+    if (!file) return;
     setAudioOpen(false);
     setPending((prev) => [...prev, { file, url: URL.createObjectURL(file), kind: 'audio' }]);
   }
@@ -493,6 +506,8 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
               only — video sending has been retired. */}
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickMedia} />
           <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onPickMedia} />
+          {/* Fallback for attaching an existing recording (e.g. a Voice Memo). */}
+          <input ref={audioFileRef} type="file" accept="audio/*" className="hidden" onChange={onPickAudioFile} />
           <textarea
             ref={inputRef}
             rows={1}
@@ -528,7 +543,13 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
 
       {pollOpen && <PollComposer busy={send.isPending} onCancel={() => setPollOpen(false)} onPost={postPoll} />}
       {gifOpen && <GifPicker onCancel={() => setGifOpen(false)} onPick={sendGif} />}
-      {audioOpen && <AudioRecorder onCancel={() => setAudioOpen(false)} onDone={stageAudio} />}
+      {audioOpen && (
+        <AudioRecorder
+          onCancel={() => setAudioOpen(false)}
+          onDone={stageAudio}
+          onPickFile={() => audioFileRef.current?.click()}
+        />
+      )}
       {confirmDelete && (
         <ConfirmDelete
           deleting={del.isPending}
@@ -726,7 +747,7 @@ type RecPhase = 'intro' | 'asking' | 'recording' | 'ready' | 'blocked' | 'unavai
  * re-open that dialog — so we show a short, calm recovery screen instead of a
  * raw error.
  */
-function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (file: File) => void }) {
+function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void; onDone: (file: File) => void; onPickFile: () => void }) {
   const [phase, setPhase] = useState<RecPhase>('intro');
   const [seconds, setSeconds] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -833,6 +854,9 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
               <p className="mx-auto mt-1.5 max-w-[17rem] text-sm text-gray-500">Tap the mic to start recording. You can listen back before you send it.</p>
               <MicButton onClick={() => void start()} />
               <p className="mt-3 text-xs text-gray-400">Up to {Math.round(MAX_AUDIO_SECONDS / 60)} minutes</p>
+              <button type="button" onClick={onPickFile} className="mx-auto mt-4 block text-sm underline" style={{ color: 'var(--th-text)' }}>
+                Attach a recording instead
+              </button>
             </>
           )}
 
@@ -893,21 +917,27 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
                 <span className="text-3xl" aria-hidden>🎙️</span>
               </div>
               <p className="mx-auto mt-4 max-w-[18rem] text-sm" style={{ color: 'var(--th-text)' }}>
-                Your phone is blocking the microphone for this app. Turn it on once and it&apos;ll work from then on.
+                This phone won&apos;t let the app reach the microphone. You can still send a voice message — record it in <strong>Voice Memos</strong> and attach it.
               </p>
-              <ol className="mx-auto mt-4 max-w-[18rem] space-y-2 text-left text-sm text-gray-500">
-                <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>1.</span> Open the iPhone <strong>Settings</strong> app</li>
-                <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>2.</span> Tap <strong>Apps</strong> → this app (or <strong>Safari</strong> if you use it in the browser)</li>
-                <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>3.</span> Turn on <strong>Microphone</strong></li>
-              </ol>
               <button
                 type="button"
-                onClick={() => void start()}
+                onClick={onPickFile}
                 className="mt-5 w-full rounded-full px-6 py-3.5 text-base font-semibold"
                 style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
               >
-                I&apos;ve turned it on — try again
+                Choose a recording
               </button>
+              <details className="mt-4 text-left">
+                <summary className="cursor-pointer text-center text-sm underline" style={{ color: 'var(--th-text)' }}>Or turn the microphone on</summary>
+                <ol className="mx-auto mt-3 max-w-[18rem] space-y-2 text-sm text-gray-500">
+                  <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>1.</span> iPhone <strong>Settings</strong> → <strong>Apps</strong> → <strong>Safari</strong></li>
+                  <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>2.</span> Scroll to <strong>Settings for Websites</strong> → <strong>Microphone</strong></li>
+                  <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>3.</span> Set it to <strong>Ask</strong> or <strong>Allow</strong>, then reopen this app</li>
+                </ol>
+                <button type="button" onClick={() => void start()} className="mt-3 w-full rounded-full border px-6 py-3 text-sm font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
+                  Try the microphone again
+                </button>
+              </details>
             </>
           )}
 
@@ -919,8 +949,11 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
                   ? 'Recording needs a secure connection. Open the app from your Home Screen icon and try again.'
                   : 'No microphone is available on this device, or it’s being used by another app.'}
               </p>
-              <button type="button" onClick={() => void start()} className="mt-5 w-full rounded-full px-6 py-3.5 text-base font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
-                Try again
+              <button type="button" onClick={onPickFile} className="mt-5 w-full rounded-full px-6 py-3.5 text-base font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+                Choose a recording
+              </button>
+              <button type="button" onClick={() => void start()} className="mt-2 w-full rounded-full px-6 py-3 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
+                Try the microphone again
               </button>
             </>
           )}
