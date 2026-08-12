@@ -741,18 +741,14 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
 
   useEffect(() => () => { stopTimer(); stopStream(); if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
-  // If the browser already knows permission is granted we can skip the intro
-  // and start listening the moment they open the sheet; if it's denied we go
-  // straight to the recovery screen rather than letting them tap into a wall.
+  // Only flag a genuinely missing API here. We deliberately DON'T pre-check the
+  // Permissions API to decide "blocked": Safari reports the microphone state
+  // unreliably (often 'denied' for a permission it has never actually asked
+  // about), which stranded people on the recovery screen without the system
+  // prompt ever appearing. Everyone gets to tap the mic and trigger the real
+  // dialog; we only trust the outcome of that attempt.
   useEffect(() => {
-    let cancelled = false;
-    if (!navigator.mediaDevices?.getUserMedia) { setPhase('unavailable'); return; }
-    const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
-    if (!perms?.query) return;
-    perms.query({ name: 'microphone' as PermissionName })
-      .then((st) => { if (!cancelled && st.state === 'denied') setPhase('blocked'); })
-      .catch(() => { /* Safari may not support querying the mic — leave the intro up */ });
-    return () => { cancelled = true; };
+    if (!navigator.mediaDevices?.getUserMedia) setPhase('unavailable');
   }, []);
 
   // Prefer MP4/AAC: it's the only format iPhones can PLAY. Chrome can't record
@@ -816,7 +812,10 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
       <div
         className="relative z-10 w-full max-w-sm rounded-t-3xl shadow-2xl sm:rounded-3xl"
-        style={{ backgroundColor: 'var(--th-surface)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
+        // max() rather than adding: on a phone the home-indicator inset already
+        // provides the gap, so calc(inset + 1.5rem) left a dead white band under
+        // the button. This keeps a consistent margin on every device.
+        style={{ backgroundColor: 'var(--th-surface)', paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}
       >
         {/* Grabber + close */}
         <div className="flex items-center justify-between px-5 pb-1 pt-3">
