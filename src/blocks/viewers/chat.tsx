@@ -716,7 +716,7 @@ const MAX_AUDIO_SECONDS = 300; // 5-minute soft cap — audio is tiny, this is j
 
 /** Record a voice message, preview it, then stage it to send. Bottom sheet. */
 function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (file: File) => void }) {
-  const [phase, setPhase] = useState<'idle' | 'recording' | 'ready' | 'error'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'asking' | 'recording' | 'ready' | 'error'>('idle');
   const [seconds, setSeconds] = useState(0);
   const [errMsg, setErrMsg] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -732,15 +732,31 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
   // Clean up the stream, timer, and preview URL on unmount.
   useEffect(() => () => { stopTimer(); stopStream(); if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
+  // Prefer MP4/AAC: it's the only format iPhones can PLAY. Recording webm first
+  // (the old order) meant a note recorded on Android was silent/unplayable on
+  // every iPhone — the "nothing to listen to" bug. Chrome can't record mp4, so
+  // it falls through to webm, which Android/desktop play fine.
   function pickMime(): string {
-    const opts = ['audio/webm', 'audio/mp4', 'audio/ogg'];
+    const opts = ['audio/mp4', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
     for (const t of opts) { if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t)) return t; }
     return '';
   }
 
   async function start() {
     setErrMsg('');
+    // Not available at all (old browser, or the page isn't on https).
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErrMsg(
+        window.isSecureContext === false
+          ? 'Recording needs a secure (https) connection. Open the app from your Home Screen icon and try again.'
+          : "This browser can't record audio. On iPhone, add the app to your Home Screen and open it from there.",
+      );
+      setPhase('error');
+      return;
+    }
+    setPhase('asking');
     try {
+      // This call is what triggers the system's "Allow microphone?" prompt.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       const mimeType = pickMime();
@@ -750,7 +766,7 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
       rec.onstop = () => {
         const type = rec.mimeType || 'audio/webm';
         const blob = new Blob(chunksRef.current, { type });
-        const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+        const ext = type.includes('mp4') ? 'm4a' : type.includes('aac') ? 'aac' : type.includes('ogg') ? 'ogg' : 'webm';
         fileRef.current = new File([blob], `voice-${Date.now()}.${ext}`, { type });
         setPreviewUrl(URL.createObjectURL(blob));
         setPhase('ready');
@@ -767,8 +783,20 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
           return next;
         });
       }, 1000);
-    } catch {
-      setErrMsg('Microphone access was blocked. Allow the microphone in your settings to record a voice message.');
+    } catch (err) {
+      // Tell them what actually happened. iOS only shows its Allow prompt once —
+      // after a "Don't Allow" it silently refuses, so we have to point them to
+      // Settings rather than pretend we can re-ask.
+      const name = (err as { name?: string })?.name ?? '';
+      setErrMsg(
+        name === 'NotAllowedError' || name === 'SecurityError'
+          ? 'Microphone access is turned off for this app. On iPhone: Settings → Apps → Safari → Microphone (or tap “aA” in the address bar → Website Settings) and allow it, then come back and tap Record.'
+        : name === 'NotFoundError' || name === 'DevicesNotFoundError'
+          ? 'No microphone was found on this device.'
+        : name === 'NotReadableError'
+          ? 'Your microphone is being used by another app. Close it and try again.'
+          : 'Could not start recording. Please try again.',
+      );
       setPhase('error');
     }
   }
@@ -792,10 +820,14 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
       <div className="relative z-10 w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)' }}>
         <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>🎙️ Voice message</h3>
 
-        {phase === 'error' && <p className="mt-3 text-sm text-red-600">{errMsg}</p>}
+        {phase === 'error' && <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{errMsg}</p>}
 
         {phase === 'idle' && (
-          <p className="mt-2 text-sm text-gray-500">Tap record and speak. You can listen back before sending.</p>
+          <p className="mt-2 text-sm text-gray-500">Tap record and speak. Your phone will ask for microphone permission the first time — tap <strong>Allow</strong>. You can listen back before sending.</p>
+        )}
+
+        {phase === 'asking' && (
+          <p className="mt-2 text-sm text-gray-500">Waiting for microphone permission — tap <strong>Allow</strong> if your phone asks.</p>
         )}
 
         {phase === 'recording' && (
@@ -814,7 +846,12 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
 
         <div className="mt-5 flex flex-wrap gap-2">
           {(phase === 'idle' || phase === 'error') && (
-            <button type="button" onClick={start} className="rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>● Record</button>
+            <button type="button" onClick={start} className="rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+              {phase === 'error' ? '↻ Try again' : '● Record'}
+            </button>
+          )}
+          {phase === 'asking' && (
+            <button type="button" disabled className="rounded-full px-5 py-2.5 text-sm font-semibold opacity-60" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Waiting…</button>
           )}
           {phase === 'recording' && (
             <button type="button" onClick={stop} className="rounded-full bg-red-500 px-5 py-2.5 text-sm font-semibold text-white">■ Stop</button>
@@ -932,7 +969,15 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
         >
           {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
           {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
-          {m.audioUrl && <audio src={m.audioUrl} controls onClick={(e) => e.stopPropagation()} className="mb-1 w-56 max-w-full" />}
+          {m.audioUrl && (
+            <span className="mb-1 block" onClick={(e) => e.stopPropagation()}>
+              <audio src={m.audioUrl} controls preload="metadata" className="w-56 max-w-full" />
+              {/* Fallback: if the browser can't play this file inline (e.g. an
+                  older note recorded in a format this device doesn't support),
+                  there's still a way to open/hear it. */}
+              <a href={m.audioUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 block text-[0.65rem] underline opacity-70">Open voice message</a>
+            </span>
+          )}
           {m.body && linkify(m.body)}
         </div>
 
