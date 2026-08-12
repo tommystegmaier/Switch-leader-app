@@ -714,11 +714,21 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
 
 const MAX_AUDIO_SECONDS = 300; // 5-minute soft cap — audio is tiny, this is just a guard
 
-/** Record a voice message, preview it, then stage it to send. Bottom sheet. */
+type RecPhase = 'intro' | 'asking' | 'recording' | 'ready' | 'blocked' | 'unavailable';
+
+/**
+ * Record a voice message: ask → record → listen back → add.
+ *
+ * Permission works like the notification prompt: a single friendly screen with
+ * one big button, and tapping it is what raises the system's own "Allow
+ * microphone" dialog (the browser only shows that from a real tap). If the
+ * person previously chose "Don't Allow", iOS refuses silently and no site can
+ * re-open that dialog — so we show a short, calm recovery screen instead of a
+ * raw error.
+ */
 function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (file: File) => void }) {
-  const [phase, setPhase] = useState<'idle' | 'asking' | 'recording' | 'ready' | 'error'>('idle');
+  const [phase, setPhase] = useState<RecPhase>('intro');
   const [seconds, setSeconds] = useState(0);
-  const [errMsg, setErrMsg] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -729,13 +739,24 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
   function stopTimer() { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } }
   function stopStream() { streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
 
-  // Clean up the stream, timer, and preview URL on unmount.
   useEffect(() => () => { stopTimer(); stopStream(); if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
-  // Prefer MP4/AAC: it's the only format iPhones can PLAY. Recording webm first
-  // (the old order) meant a note recorded on Android was silent/unplayable on
-  // every iPhone — the "nothing to listen to" bug. Chrome can't record mp4, so
-  // it falls through to webm, which Android/desktop play fine.
+  // If the browser already knows permission is granted we can skip the intro
+  // and start listening the moment they open the sheet; if it's denied we go
+  // straight to the recovery screen rather than letting them tap into a wall.
+  useEffect(() => {
+    let cancelled = false;
+    if (!navigator.mediaDevices?.getUserMedia) { setPhase('unavailable'); return; }
+    const perms = (navigator as Navigator & { permissions?: Permissions }).permissions;
+    if (!perms?.query) return;
+    perms.query({ name: 'microphone' as PermissionName })
+      .then((st) => { if (!cancelled && st.state === 'denied') setPhase('blocked'); })
+      .catch(() => { /* Safari may not support querying the mic — leave the intro up */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Prefer MP4/AAC: it's the only format iPhones can PLAY. Chrome can't record
+  // mp4, so it falls through to webm, which Android/desktop play fine.
   function pickMime(): string {
     const opts = ['audio/mp4', 'audio/aac', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
     for (const t of opts) { if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t)) return t; }
@@ -743,20 +764,10 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
   }
 
   async function start() {
-    setErrMsg('');
-    // Not available at all (old browser, or the page isn't on https).
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setErrMsg(
-        window.isSecureContext === false
-          ? 'Recording needs a secure (https) connection. Open the app from your Home Screen icon and try again.'
-          : "This browser can't record audio. On iPhone, add the app to your Home Screen and open it from there.",
-      );
-      setPhase('error');
-      return;
-    }
+    if (!navigator.mediaDevices?.getUserMedia) { setPhase('unavailable'); return; }
     setPhase('asking');
     try {
-      // This call is what triggers the system's "Allow microphone?" prompt.
+      // This call is what raises the system permission dialog.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       const mimeType = pickMime();
@@ -764,7 +775,7 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
       chunksRef.current = [];
       rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
       rec.onstop = () => {
-        const type = rec.mimeType || 'audio/webm';
+        const type = rec.mimeType || 'audio/mp4';
         const blob = new Blob(chunksRef.current, { type });
         const ext = type.includes('mp4') ? 'm4a' : type.includes('aac') ? 'aac' : type.includes('ogg') ? 'ogg' : 'webm';
         fileRef.current = new File([blob], `voice-${Date.now()}.${ext}`, { type });
@@ -777,27 +788,11 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
       setSeconds(0);
       setPhase('recording');
       timerRef.current = setInterval(() => {
-        setSeconds((s) => {
-          const next = s + 1;
-          if (next >= MAX_AUDIO_SECONDS) stop();
-          return next;
-        });
+        setSeconds((s) => { const next = s + 1; if (next >= MAX_AUDIO_SECONDS) stop(); return next; });
       }, 1000);
     } catch (err) {
-      // Tell them what actually happened. iOS only shows its Allow prompt once —
-      // after a "Don't Allow" it silently refuses, so we have to point them to
-      // Settings rather than pretend we can re-ask.
       const name = (err as { name?: string })?.name ?? '';
-      setErrMsg(
-        name === 'NotAllowedError' || name === 'SecurityError'
-          ? 'Microphone access is turned off for this app. On iPhone: Settings → Apps → Safari → Microphone (or tap “aA” in the address bar → Website Settings) and allow it, then come back and tap Record.'
-        : name === 'NotFoundError' || name === 'DevicesNotFoundError'
-          ? 'No microphone was found on this device.'
-        : name === 'NotReadableError'
-          ? 'Your microphone is being used by another app. Close it and try again.'
-          : 'Could not start recording. Please try again.',
-      );
-      setPhase('error');
+      setPhase(name === 'NotFoundError' || name === 'NotReadableError' ? 'unavailable' : 'blocked');
     }
   }
 
@@ -811,61 +806,148 @@ function AudioRecorder({ onCancel, onDone }: { onCancel: () => void; onDone: (fi
     setPreviewUrl(null);
     fileRef.current = null;
     setSeconds(0);
-    setPhase('idle');
+    setPhase('intro');
   }
+
+  const pct = Math.min(1, seconds / MAX_AUDIO_SECONDS);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative z-10 w-full max-w-sm rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.25rem)' }}>
-        <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>🎙️ Voice message</h3>
+      <div
+        className="relative z-10 w-full max-w-sm rounded-t-3xl shadow-2xl sm:rounded-3xl"
+        style={{ backgroundColor: 'var(--th-surface)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}
+      >
+        {/* Grabber + close */}
+        <div className="flex items-center justify-between px-5 pb-1 pt-3">
+          <span className="w-8" />
+          <span className="h-1 w-10 rounded-full" style={{ backgroundColor: 'var(--th-hairline-strong)' }} aria-hidden />
+          <button type="button" onClick={onCancel} aria-label="Close" className="w-8 text-xl leading-none text-gray-400">×</button>
+        </div>
 
-        {phase === 'error' && <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{errMsg}</p>}
+        <div className="px-6 pt-2 text-center">
+          <h3 className="text-xl font-bold" style={{ color: 'var(--th-heading)' }}>Voice message</h3>
 
-        {phase === 'idle' && (
-          <p className="mt-2 text-sm text-gray-500">Tap record and speak. Your phone will ask for microphone permission the first time — tap <strong>Allow</strong>. You can listen back before sending.</p>
-        )}
-
-        {phase === 'asking' && (
-          <p className="mt-2 text-sm text-gray-500">Waiting for microphone permission — tap <strong>Allow</strong> if your phone asks.</p>
-        )}
-
-        {phase === 'recording' && (
-          <div className="mt-4 flex items-center justify-center gap-2 text-2xl font-semibold tabular-nums" style={{ color: 'var(--th-heading)' }}>
-            <span className="inline-block h-3 w-3 animate-pulse rounded-full bg-red-500" aria-hidden />
-            {fmtDuration(seconds)}
-          </div>
-        )}
-
-        {phase === 'ready' && previewUrl && (
-          <div className="mt-4">
-            <audio src={previewUrl} controls className="w-full" />
-            <p className="mt-1 text-center text-xs text-gray-400">{fmtDuration(seconds)}</p>
-          </div>
-        )}
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          {(phase === 'idle' || phase === 'error') && (
-            <button type="button" onClick={start} className="rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
-              {phase === 'error' ? '↻ Try again' : '● Record'}
-            </button>
-          )}
-          {phase === 'asking' && (
-            <button type="button" disabled className="rounded-full px-5 py-2.5 text-sm font-semibold opacity-60" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Waiting…</button>
-          )}
-          {phase === 'recording' && (
-            <button type="button" onClick={stop} className="rounded-full bg-red-500 px-5 py-2.5 text-sm font-semibold text-white">■ Stop</button>
-          )}
-          {phase === 'ready' && (
+          {/* ---------- intro: one big button, like the notifications prompt ---------- */}
+          {phase === 'intro' && (
             <>
-              <button type="button" onClick={() => fileRef.current && onDone(fileRef.current)} className="rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Add</button>
-              <button type="button" onClick={reset} className="rounded-full border px-5 py-2.5 text-sm" style={{ borderColor: 'var(--th-hairline-strong)' }}>Re-record</button>
+              <p className="mx-auto mt-1.5 max-w-[17rem] text-sm text-gray-500">Tap the mic to start recording. You can listen back before you send it.</p>
+              <MicButton onClick={() => void start()} />
+              <p className="mt-3 text-xs text-gray-400">Up to {Math.round(MAX_AUDIO_SECONDS / 60)} minutes</p>
             </>
           )}
-          <button type="button" onClick={onCancel} className="rounded-full px-5 py-2.5 text-sm">Cancel</button>
+
+          {/* ---------- asking: the system dialog is up ---------- */}
+          {phase === 'asking' && (
+            <>
+              <p className="mx-auto mt-1.5 max-w-[17rem] text-sm text-gray-500">Tap <strong>Allow</strong> when your phone asks for the microphone.</p>
+              <MicButton pulsing onClick={() => {}} disabled />
+              <p className="mt-3 text-xs text-gray-400">Waiting for permission…</p>
+            </>
+          )}
+
+          {/* ---------- recording ---------- */}
+          {phase === 'recording' && (
+            <>
+              <p className="mt-1.5 text-sm text-gray-500">Recording… tap to stop</p>
+              <button
+                type="button"
+                onClick={stop}
+                aria-label="Stop recording"
+                className="mx-auto mt-5 flex h-24 w-24 items-center justify-center rounded-full transition-transform active:scale-95"
+                style={{ backgroundColor: '#dc2626', boxShadow: '0 0 0 8px rgba(220,38,38,0.15)' }}
+              >
+                <span className="block h-7 w-7 rounded-md bg-white" />
+              </button>
+              <p className="mt-4 text-3xl font-semibold tabular-nums" style={{ color: 'var(--th-heading)' }}>{fmtDuration(seconds)}</p>
+              <div className="mx-auto mt-3 h-1 w-40 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--th-hairline)' }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${pct * 100}%`, backgroundColor: '#dc2626' }} />
+              </div>
+            </>
+          )}
+
+          {/* ---------- ready: listen back, then add ---------- */}
+          {phase === 'ready' && previewUrl && (
+            <>
+              <p className="mt-1.5 text-sm text-gray-500">{fmtDuration(seconds)} recorded — have a listen.</p>
+              <audio src={previewUrl} controls className="mx-auto mt-4 w-full" />
+              <div className="mt-5 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current && onDone(fileRef.current)}
+                  className="w-full rounded-full px-6 py-3.5 text-base font-semibold"
+                  style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+                >
+                  Add to message
+                </button>
+                <button type="button" onClick={reset} className="w-full rounded-full px-6 py-3 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
+                  Record again
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ---------- blocked: calm recovery, not a wall of red ---------- */}
+          {phase === 'blocked' && (
+            <>
+              <div className="mx-auto mt-4 flex h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: 'var(--th-hairline)' }}>
+                <span className="text-3xl" aria-hidden>🎙️</span>
+              </div>
+              <p className="mx-auto mt-4 max-w-[18rem] text-sm" style={{ color: 'var(--th-text)' }}>
+                Your phone is blocking the microphone for this app. Turn it on once and it&apos;ll work from then on.
+              </p>
+              <ol className="mx-auto mt-4 max-w-[18rem] space-y-2 text-left text-sm text-gray-500">
+                <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>1.</span> Open the iPhone <strong>Settings</strong> app</li>
+                <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>2.</span> Tap <strong>Apps</strong> → this app (or <strong>Safari</strong> if you use it in the browser)</li>
+                <li><span className="font-semibold" style={{ color: 'var(--th-text)' }}>3.</span> Turn on <strong>Microphone</strong></li>
+              </ol>
+              <button
+                type="button"
+                onClick={() => void start()}
+                className="mt-5 w-full rounded-full px-6 py-3.5 text-base font-semibold"
+                style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+              >
+                I&apos;ve turned it on — try again
+              </button>
+            </>
+          )}
+
+          {/* ---------- unavailable ---------- */}
+          {phase === 'unavailable' && (
+            <>
+              <p className="mx-auto mt-3 max-w-[18rem] text-sm text-gray-500">
+                {window.isSecureContext === false
+                  ? 'Recording needs a secure connection. Open the app from your Home Screen icon and try again.'
+                  : 'No microphone is available on this device, or it’s being used by another app.'}
+              </p>
+              <button type="button" onClick={() => void start()} className="mt-5 w-full rounded-full px-6 py-3.5 text-base font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+                Try again
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+/** The big round mic button that starts a recording. */
+function MicButton({ onClick, pulsing, disabled }: { onClick: () => void; pulsing?: boolean; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label="Start recording"
+      className={`mx-auto mt-5 flex h-24 w-24 items-center justify-center rounded-full transition-transform active:scale-95 ${pulsing ? 'animate-pulse' : ''}`}
+      style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)', boxShadow: '0 0 0 8px color-mix(in srgb, var(--th-primary) 15%, transparent)' }}
+    >
+      <svg viewBox="0 0 24 24" width="38" height="38" fill="currentColor" aria-hidden>
+        <rect x="9" y="2" width="6" height="12" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <path d="M12 18v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </button>
   );
 }
 
