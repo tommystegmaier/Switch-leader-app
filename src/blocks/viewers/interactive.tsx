@@ -145,7 +145,7 @@ export function CardView({ props, ctx }: { props: CardProps; ctx: ViewerCtx }) {
       ) : props.icon ? (
         <span className="text-4xl" aria-hidden>{props.icon}</span>
       ) : null}
-      <span className="text-lg font-semibold">{props.title}</span>
+      <span className="th-feature-title font-semibold">{props.title}</span>
       {props.body && <span className="text-sm opacity-90">{props.body}</span>}
     </div>
   );
@@ -169,7 +169,7 @@ export function ListView({ props, ctx }: { props: ListProps; ctx: ViewerCtx }) {
   return (
     <div>
       {props.title && (
-        <h3 className="mb-2 text-lg font-semibold" style={{ color: 'var(--th-heading)' }}>
+        <h3 className="th-feature-title mb-2 font-semibold" style={{ color: 'var(--th-heading)' }}>
           {props.title}
         </h3>
       )}

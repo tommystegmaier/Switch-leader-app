@@ -664,7 +664,7 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
     if (!user) return <></>;
     return (
       <div className={card} style={cardStyle}>
-        <p className="font-semibold uppercase tracking-wide" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
+        <p className="th-feature-title font-semibold uppercase tracking-wide" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
         <BirthdayNotifyToggle orgId={org.id} />
       </div>
     );
@@ -678,7 +678,7 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
 
   return (
     <div className={card} style={cardStyle}>
-      <p className="mb-3 font-semibold uppercase tracking-wide" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
+      <p className="th-feature-title mb-3 font-semibold uppercase tracking-wide" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
 
       <div className="mb-4">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Today</p>

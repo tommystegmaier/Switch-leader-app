@@ -19,7 +19,14 @@ import type { ViewerCtx } from '../actions';
 type HeaderSize = 'sm' | 'md' | 'lg';
 interface RosterProps { title?: string; headerSize?: HeaderSize }
 
-const HEADER_CLS: Record<HeaderSize, string> = { sm: 'text-sm', md: 'text-lg', lg: 'text-2xl' };
+// Roster keeps its own Small/Medium/Large control, but expressed as a multiple
+// of the workspace's feature-heading size — so Medium matches every other
+// feature header at any global setting, instead of drifting from them.
+const HEADER_SCALE: Record<HeaderSize, number> = { sm: 0.8, md: 1, lg: 1.3 };
+const headerSizeStyle = (size: HeaderSize) => ({
+  fontSize: `calc(var(--th-feature-title, 1.125rem) * ${HEADER_SCALE[size]})`,
+  lineHeight: 1.3,
+});
 
 const card = 'rounded-xl border p-4';
 const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
@@ -103,7 +110,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   return (
     <div className={card} style={cardStyle}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className={`font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>👥 {title}</p>
+        <p className="font-semibold" style={{ color: 'var(--th-heading)', ...headerSizeStyle(size) }}>👥 {title}</p>
         <div className="flex items-center gap-2">
           {allGroups.length > 0 && (
             <button

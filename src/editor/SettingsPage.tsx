@@ -596,7 +596,7 @@ function Section({ title, subtitle, collapsible, defaultOpen = true, children }:
   if (!collapsible) {
     return (
       <section className="mb-6 rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
-        <h2 className="mb-3 text-lg font-semibold" style={{ color: 'var(--th-heading)' }}>{title}</h2>
+        <h2 className="th-feature-title mb-3 font-semibold" style={{ color: 'var(--th-heading)' }}>{title}</h2>
         <div className="flex flex-col gap-3">{children}</div>
       </section>
     );
@@ -609,7 +609,7 @@ function Section({ title, subtitle, collapsible, defaultOpen = true, children }:
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-3 text-left"
       >
-        <h2 className="text-lg font-semibold" style={{ color: 'var(--th-heading)' }}>
+        <h2 className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>
           {title}
           {subtitle && <span className="ml-2 text-sm font-normal text-gray-500">{subtitle}</span>}
         </h2>
