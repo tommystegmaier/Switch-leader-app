@@ -16,6 +16,7 @@ import { useInvites, useCreateInvite, useRevokeInvite } from '@/data/inviteHooks
 import { useOrgMembers, useSetMemberRole, useRemoveMember, useUpdateMemberProfile, useMembersWithPush, type OrgMember } from '@/data/memberHooks';
 import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
+import { getSupabase } from '@/lib/supabase';
 import { useLiveAppSettings } from '@/data/liveContent';
 import { applyTheme } from '@/lib/theme';
 import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
@@ -391,6 +392,34 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
     try { await fn(); } catch (e) { setError(errorMessage(e)); }
   }
 
+  // Self-test for the "last opened" heartbeat. It's fire-and-forget in normal
+  // use, so a failing RPC is invisible — this calls it and reports exactly what
+  // came back, the same way the push self-test does.
+  const [trackMsg, setTrackMsg] = useState<string | null>(null);
+  const [trackBusy, setTrackBusy] = useState(false);
+  async function testTracking() {
+    setTrackBusy(true);
+    setTrackMsg(null);
+    try {
+      const s = getSupabase();
+      if (!s) { setTrackMsg('Backend not configured.'); setTrackBusy(false); return; }
+      const { error } = await s.rpc('touch_last_seen', { p_org: orgId });
+      if (error) {
+        setTrackMsg(`Not recording — ${error.message}`);
+      } else {
+        const { data } = await s.rpc('list_org_members', { p_org: orgId });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mine = (data ?? []).find((r: any) => r.user_id === user?.id);
+        setTrackMsg(mine?.last_seen_at
+          ? `Working — your visit recorded at ${new Date(mine.last_seen_at).toLocaleTimeString()}.`
+          : 'The call succeeded but nothing was saved — the heartbeat function may be out of date.');
+      }
+    } catch (e) {
+      setTrackMsg(`Not recording — ${errorMessage(e)}`);
+    }
+    setTrackBusy(false);
+  }
+
   return (
     <Section
       title="Team & access"
@@ -401,6 +430,22 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
       <p className="text-sm text-gray-500">
         Invite other people to help run this app. They sign up with their own email and get the role you pick — so several people can edit from different accounts.
       </p>
+
+      <div className="rounded-lg border border-gray-200 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium">&ldquo;Date last opened&rdquo; tracking</span>
+          <button
+            type="button"
+            onClick={() => void testTracking()}
+            disabled={trackBusy}
+            className="rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-50"
+            style={{ borderColor: 'var(--th-hairline-strong)' }}
+          >
+            {trackBusy ? 'Checking…' : 'Check tracking'}
+          </button>
+        </div>
+        {trackMsg && <p className="mt-2 text-xs text-gray-600">{trackMsg}</p>}
+      </div>
 
       {/* Current people */}
       <div className="rounded-lg border border-gray-200 p-3">
