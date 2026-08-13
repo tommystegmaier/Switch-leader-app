@@ -275,6 +275,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
 
   const [text, setText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<ChatMessage | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -455,6 +456,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
             onToggleBar={() => setReactingId((id) => (id === m.id ? null : m.id))}
             onReact={(emoji, wasMine) => react(m.id, emoji, wasMine)}
             onRequestDelete={() => { setReactingId(null); setConfirmDelete(m); }}
+            onOpenImage={(url) => setLightbox(url)}
           />
         ))}
       </div>
@@ -550,6 +552,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
           onPickFile={() => audioFileRef.current?.click()}
         />
       )}
+      {lightbox && <ImageLightbox url={lightbox} onClose={() => setLightbox(null)} />}
       {confirmDelete && (
         <ConfirmDelete
           deleting={del.isPending}
@@ -1035,7 +1038,7 @@ function DeleteDot({ side, onClick }: { side: 'left' | 'right'; onClick: () => v
   );
 }
 
-function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete }: {
+function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete, onOpenImage }: {
   m: ChatMessage;
   mine: boolean;
   canDelete: boolean;
@@ -1046,7 +1049,17 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
   onToggleBar: () => void;
   onReact: (emoji: string, wasMine: boolean) => void;
   onRequestDelete: () => void;
+  onOpenImage: (url: string) => void;
 }) {
+  // Long-press on a photo opens reactions; a plain tap opens it full screen.
+  const imgPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const imgLongPressed = useRef(false);
+  const startImgPress = () => {
+    imgLongPressed.current = false;
+    imgPressTimer.current = setTimeout(() => { imgLongPressed.current = true; onToggleBar(); }, 450);
+  };
+  const cancelImgPress = () => { if (imgPressTimer.current) { clearTimeout(imgPressTimer.current); imgPressTimer.current = null; } };
+
   // A poll renders as a tappable, live-tallied card instead of a chat bubble.
   if (m.poll) {
     const opts = m.poll.options;
@@ -1098,7 +1111,26 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
             WebkitUserSelect: 'text', userSelect: 'text', WebkitTouchCallout: 'default',
           }}
         >
-          {m.imageUrl && <img src={m.imageUrl} alt="" className="mb-1 max-h-64 rounded-lg object-cover" />}
+          {m.imageUrl && (
+            <img
+              src={m.imageUrl}
+              alt=""
+              // Tap opens the photo full screen; press-and-hold brings up
+              // reactions — the same split as the iPhone Messages app. Without
+              // the long-press an image-only message would have no way to react.
+              onPointerDown={startImgPress}
+              onPointerUp={cancelImgPress}
+              onPointerLeave={cancelImgPress}
+              onPointerCancel={cancelImgPress}
+              onContextMenu={(e) => { e.preventDefault(); cancelImgPress(); imgLongPressed.current = true; onToggleBar(); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (imgLongPressed.current) { imgLongPressed.current = false; return; }
+                onOpenImage(m.imageUrl!);
+              }}
+              className="mb-1 max-h-64 cursor-zoom-in rounded-lg object-cover"
+            />
+          )}
           {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
           {m.audioUrl && <VoicePlayer url={m.audioUrl} mine={mine} />}
           {m.body && linkify(m.body)}
@@ -1235,5 +1267,96 @@ function VoicePlayer({ url, mine }: { url: string; mine: boolean }) {
         {fmtDuration(dur ? (playing ? dur - pos : dur) : 0)}
       </span>
     </span>
+  );
+}
+
+/**
+ * Full-screen photo viewer with pinch-to-zoom, drag-to-pan and double-tap
+ * zoom — the way photos behave in the iPhone Messages app. Rendered over
+ * everything; tap the backdrop or ✕ to close, or drag down when not zoomed.
+ */
+function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const gesture = useRef<{ dist: number; scale: number; x: number; y: number; tx: number; ty: number } | null>(null);
+  const lastTap = useRef(0);
+
+  // Close on Escape, and stop the page behind from scrolling while open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+
+  const spread = (t: React.TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+  function onTouchStart(e: React.TouchEvent) {
+    if (e.touches.length === 2) {
+      gesture.current = { dist: spread(e.touches), scale, x: 0, y: 0, tx, ty };
+    } else if (e.touches.length === 1) {
+      gesture.current = { dist: 0, scale, x: e.touches[0].clientX, y: e.touches[0].clientY, tx, ty };
+      // Double-tap toggles between fit and 2.5×, like Photos.
+      const now = Date.now();
+      if (now - lastTap.current < 300) {
+        if (scale > 1) { setScale(1); setTx(0); setTy(0); } else setScale(2.5);
+      }
+      lastTap.current = now;
+    }
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    const g = gesture.current;
+    if (!g) return;
+    if (e.touches.length === 2 && g.dist > 0) {
+      setScale(Math.min(6, Math.max(1, g.scale * (spread(e.touches) / g.dist))));
+    } else if (e.touches.length === 1 && scale > 1) {
+      setTx(g.tx + (e.touches[0].clientX - g.x));
+      setTy(g.ty + (e.touches[0].clientY - g.y));
+    }
+  }
+
+  function onTouchEnd() {
+    gesture.current = null;
+    if (scale <= 1.02) { setScale(1); setTx(0); setTy(0); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close photo"
+        className="absolute right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full text-2xl leading-none text-white"
+        style={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)', backgroundColor: 'rgba(255,255,255,0.18)' }}
+      >
+        ✕
+      </button>
+      <div
+        className="flex h-full w-full items-center justify-center overflow-hidden"
+        style={{ touchAction: 'none' }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onClick={() => { if (scale === 1) onClose(); }}
+      >
+        <img
+          src={url}
+          alt=""
+          draggable={false}
+          className="max-h-full max-w-full select-none object-contain"
+          style={{
+            transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
+            transition: gesture.current ? 'none' : 'transform 0.18s ease-out',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+      <p className="pointer-events-none absolute inset-x-0 text-center text-xs text-white/60" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
+        Pinch to zoom · double-tap to fill
+      </p>
+    </div>
   );
 }
