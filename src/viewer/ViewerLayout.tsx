@@ -127,11 +127,23 @@ export function ViewerLayout() {
   useEffect(() => {
     if (!user || !org?.id) return;
     const orgId = org.id;
-    const touch = () => { void getSupabase()?.rpc('touch_last_seen', { p_org: orgId }); };
-    touch();
-    const onVisible = () => { if (document.visibilityState === 'visible') touch(); };
+    // Retry once on failure: this is fire-and-forget, so a request cancelled by
+    // the app being closed a second after opening would otherwise be lost with
+    // no trace. Errors are surfaced to the console so a failing RPC (e.g. a
+    // missing migration) is diagnosable instead of silently doing nothing.
+    const touch = async () => {
+      const s = getSupabase();
+      if (!s) return;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const { error } = await s.rpc('touch_last_seen', { p_org: orgId });
+        if (!error) return;
+        if (attempt === 1) console.warn('[last-seen] could not record visit:', error.message);
+      }
+    };
+    void touch();
+    const onVisible = () => { if (document.visibilityState === 'visible') void touch(); };
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('pageshow', touch);
+    window.addEventListener('pageshow', () => void touch());
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('pageshow', touch);
