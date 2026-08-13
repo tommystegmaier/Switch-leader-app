@@ -1363,15 +1363,30 @@ function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black" role="dialog" aria-modal="true">
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close photo"
-        className="absolute right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full text-2xl leading-none text-white"
-        style={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)', backgroundColor: 'rgba(255,255,255,0.18)' }}
+      {/* Always-visible header. A tall photo fills the whole screen, so relying
+          on tapping the backdrop left people with no way out. */}
+      <div
+        className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-3 pb-3"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)', background: 'linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0))' }}
       >
-        ✕
-      </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center gap-1.5 rounded-full py-2 pl-2 pr-3.5 text-base font-semibold text-white"
+          style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
+        >
+          <span className="text-xl leading-none">‹</span> Back
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close photo"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-xl leading-none text-white"
+          style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
+        >
+          ✕
+        </button>
+      </div>
       <div
         className="flex h-full w-full items-center justify-center overflow-hidden"
         style={{ touchAction: 'none' }}
@@ -1389,11 +1404,16 @@ function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
             transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
             transition: gesture.current ? 'none' : 'transform 0.18s ease-out',
           }}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            // Tap-to-close while fit to screen; when zoomed a tap shouldn't
+            // dismiss, so people can reposition without losing the photo.
+            if (scale === 1) onClose();
+          }}
         />
       </div>
       <p className="pointer-events-none absolute inset-x-0 text-center text-xs text-white/60" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
-        Pinch to zoom · double-tap to fill
+        Pinch to zoom · tap the photo to close
       </p>
     </div>
   );
@@ -1414,6 +1434,38 @@ function PhotoHoldMenu({ url, reactions, canDelete, onReact, onView, onDelete, o
   onClose: () => void;
 }) {
   const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState('');
+
+  /**
+   * Copy the picture itself to the clipboard. Safari only accepts image/png,
+   * and only if the ClipboardItem is constructed with a promise inside the
+   * user gesture — so we hand it the fetch/convert promise rather than
+   * awaiting first. Falls back to copying the link where that isn't allowed.
+   */
+  async function copyPhoto() {
+    const toPng = async (): Promise<Blob> => {
+      const blob = await (await fetch(url)).blob();
+      if (blob.type === 'image/png') return blob;
+      const bmp = await createImageBitmap(blob);
+      const canvas = document.createElement('canvas');
+      canvas.width = bmp.width;
+      canvas.height = bmp.height;
+      canvas.getContext('2d')?.drawImage(bmp, 0, 0);
+      return await new Promise<Blob>((res, rej) =>
+        canvas.toBlob((b) => (b ? res(b) : rej(new Error('encode failed'))), 'image/png'));
+    };
+    try {
+      const CI = (window as unknown as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
+      if (!CI || !navigator.clipboard?.write) throw new Error('unsupported');
+      await navigator.clipboard.write([new CI({ 'image/png': toPng() })]);
+      setCopied('Copied ✓');
+    } catch {
+      try { await navigator.clipboard.writeText(url); setCopied('Link copied ✓'); }
+      catch { setCopied('Couldn’t copy'); }
+    }
+    setTimeout(() => setCopied(''), 1400);
+  }
+
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true));
     const prev = document.body.style.overflow;
@@ -1475,8 +1527,11 @@ function PhotoHoldMenu({ url, reactions, canDelete, onReact, onView, onDelete, o
         className="relative z-10 mt-4 w-full max-w-[16rem] overflow-hidden rounded-2xl shadow-xl transition-all duration-200"
         style={{ backgroundColor: 'var(--th-surface)', transform: shown ? 'translateY(0)' : 'translateY(8px)', opacity: shown ? 1 : 0 }}
       >
-        <button type="button" onClick={onView} className={`block w-full px-4 py-3.5 text-center text-base ${canDelete ? 'border-b' : ''}`} style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>
+        <button type="button" onClick={onView} className="block w-full border-b px-4 py-3.5 text-center text-base" style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>
           View photo
+        </button>
+        <button type="button" onClick={copyPhoto} className={`block w-full px-4 py-3.5 text-center text-base ${canDelete ? 'border-b' : ''}`} style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>
+          {copied || 'Copy photo'}
         </button>
         {canDelete && (
           <button type="button" onClick={onDelete} className="block w-full px-4 py-3.5 text-center text-base font-semibold text-red-600">
