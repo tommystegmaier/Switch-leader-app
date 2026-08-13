@@ -11,6 +11,8 @@ export interface OrgMember {
   joinedAt: string | null;
   birthday: string | null;
   phone: string | null;
+  /** When they last opened this workspace (null = never since tracking began). */
+  lastSeenAt: string | null;
 }
 
 /** List members (email + role) of a workspace. Owner/admin only, per RPC. */
@@ -32,6 +34,7 @@ export function useOrgMembers(orgId: string | undefined, enabled: boolean) {
         joinedAt: r.created_at ?? null,
         birthday: r.birthday ?? null,
         phone: r.phone ?? null,
+        lastSeenAt: r.last_seen_at ?? null,
       }));
     },
   });

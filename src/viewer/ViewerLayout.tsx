@@ -18,6 +18,7 @@ import { useDiscardChanges, usePublishStatus, usePublishWorkspace } from '@/edit
 import { applyTheme } from '@/lib/theme';
 import { setAppBadge } from '@/lib/badge';
 import { ensurePushSubscribed } from '@/lib/push';
+import { getSupabase } from '@/lib/supabase';
 import { getDark, setDarkPref } from '@/lib/darkMode';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
 import { SendNotification } from '@/editor/SendNotification';
@@ -114,6 +115,15 @@ export function ViewerLayout() {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [org?.id, queryClient]);
+
+  // Record that this person opened the app, so Team & Access can show a "last
+  // opened" date. The RPC only touches the caller's own row and self-throttles
+  // to once an hour, so this is cheap to call on every open.
+  useEffect(() => {
+    if (!user || !org?.id) return;
+    const s = getSupabase();
+    void s?.rpc('touch_last_seen', { p_org: org.id });
+  }, [user, org?.id]);
 
   // Repair this device's push subscription on every open so it carries the
   // current user_id. Chat pushes target subscriptions BY user (only the group's
