@@ -1108,7 +1108,11 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
             ...(mine
               ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }
               : { backgroundColor: 'var(--th-hairline)', color: 'var(--th-text)' }),
-            WebkitUserSelect: 'text', userSelect: 'text', WebkitTouchCallout: 'default',
+            // Selection is scoped to the TEXT below, not the whole bubble:
+            // a selectable container made long-press start a text selection
+            // (and re-enabled iOS's image menu) even when the press landed on a
+            // photo or GIF.
+            WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none',
           }}
         >
           {m.imageUrl && (
@@ -1139,7 +1143,14 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
           )}
           {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
           {m.audioUrl && <VoicePlayer url={m.audioUrl} mine={mine} />}
-          {m.body && linkify(m.body)}
+          {m.body && (
+            <span
+              className="select-text"
+              style={{ WebkitUserSelect: 'text', userSelect: 'text', WebkitTouchCallout: 'default' }}
+            >
+              {linkify(m.body)}
+            </span>
+          )}
         </div>
 
         {open && (
