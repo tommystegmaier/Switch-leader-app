@@ -48,7 +48,10 @@ create policy chat_messages_insert on public.chat_messages for insert
     )
   );
 
--- Show the current setting per app in the command center.
+-- Show the current setting per app in the command center. DROP first: adding a
+-- column changes the return type, and Postgres refuses to redefine that in
+-- place (42P13).
+drop function if exists public.platform_list_apps();
 create or replace function public.platform_list_apps()
 returns table (
   org_id uuid, name text, slug text, app_name text, created_at timestamptz,
