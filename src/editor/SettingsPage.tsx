@@ -30,15 +30,12 @@ import { useSettingsMutations } from './useSettingsMutations';
  * live preview + presets, font, splash, navigation style, and sharing
  * (public link vs invite-only, copy link, generate invite codes).
  */
-/** "Today" / "3 days ago" / "Mar 4" — how recently someone opened the app. */
+/** "Date last opened: 08/13/26", or a clear note when there's no visit yet. */
 function fmtLastSeen(iso: string | null): string {
-  if (!iso) return 'Not opened yet';
-  const then = new Date(iso);
-  const days = Math.floor((Date.now() - then.getTime()) / 86_400_000);
-  if (days <= 0) return 'Opened today';
-  if (days === 1) return 'Yesterday';
-  if (days < 30) return `${days} days ago`;
-  return then.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  if (!iso) return 'Date last opened: never';
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `Date last opened: ${p(d.getMonth() + 1)}/${p(d.getDate())}/${p(d.getFullYear() % 100)}`;
 }
 
 export function SettingsPage() {
@@ -408,7 +405,7 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
                       className="ml-1.5 inline-block rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-gray-600"
                       title="The last time this person opened the app"
                     >
-                      🕘 {fmtLastSeen(m.lastSeenAt)}
+                      {fmtLastSeen(m.lastSeenAt)}
                     </span>
                   </span>
                   <div className="flex items-center gap-2">
