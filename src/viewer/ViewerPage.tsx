@@ -9,6 +9,7 @@ import { useOrganization, usePageBlocks, usePublishedPages } from '@/data/hooks'
 import { useLivePageBlocks } from '@/data/liveContent';
 import { useAllPages } from '@/data/pageHooks';
 import { useEditMode } from '@/editor/EditModeProvider';
+import { readableTextOn } from '@/lib/theme';
 
 // The whole editing surface (Tiptap, dnd-kit, property drawer) is loaded only
 // when an editor enters Edit Mode — public viewers never download it.
@@ -103,14 +104,45 @@ export function ViewerPage() {
   // side, full-width blocks take their own row.
   const visible = (blocks ?? []).filter((b) => isVisibleTo(b.visibility, role));
 
+  // Admin-only pages get a banner so a manager can tell at a glance that what
+  // they're looking at isn't visible to their team.
+  const adminOnly = page?.visibility?.kind === 'admins';
+
   return (
     <div className="flex flex-wrap items-stretch gap-4">
+      {adminOnly && <AdminOnlyBanner />}
       {blocksLoading && <p className="w-full text-sm text-gray-500">Loading page…</p>}
       {visible.map((block) => (
         <div key={block.id} className="th-block" style={blockFlexStyle(block)}>
           <BlockView block={block} ctx={ctx} />
         </div>
       ))}
+    </div>
+  );
+}
+
+
+/**
+ * "Only admins can see this page" strip, in the workspace's accent color.
+ * The label color is computed from the accent at runtime so it stays legible
+ * whatever accent someone picks.
+ */
+function AdminOnlyBanner() {
+  const accent = typeof window !== 'undefined'
+    ? getComputedStyle(document.documentElement).getPropertyValue('--th-accent').trim()
+    : '';
+  const bg = accent || '#e23b2e';
+  return (
+    <div
+      className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
+      style={{ backgroundColor: bg, color: readableTextOn(bg) }}
+      role="note"
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <rect x="4" y="10" width="16" height="10" rx="2" />
+        <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+      </svg>
+      This page is only viewable to admins
     </div>
   );
 }

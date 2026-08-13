@@ -43,3 +43,39 @@ export function applyTheme(
     root.classList.remove('dark');
   }
 }
+
+/**
+ * Pick black or white text for a background, whichever is easier to read.
+ *
+ * Uses WCAG relative luminance rather than a naive brightness average, so a
+ * saturated accent (a mid green, say) still gets the right answer. Lets people
+ * choose any accent color without the text on it becoming unreadable.
+ * Falls back to white for anything we can't parse.
+ */
+export function readableTextOn(bg: string | undefined): string {
+  const rgb = parseColor(bg);
+  if (!rgb) return '#ffffff';
+  const channel = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+  // Contrast against white vs black; pick the higher ratio.
+  return (1.05 / (lum + 0.05)) >= ((lum + 0.05) / 0.05) ? '#ffffff' : '#0f1420';
+}
+
+/** #rgb, #rrggbb, or rgb()/rgba() → [r,g,b]; null if unrecognized. */
+function parseColor(input: string | undefined): [number, number, number] | null {
+  if (!input) return null;
+  const s = input.trim();
+  const hex = s.replace('#', '');
+  if (/^[0-9a-f]{3}$/i.test(hex)) {
+    return [parseInt(hex[0] + hex[0], 16), parseInt(hex[1] + hex[1], 16), parseInt(hex[2] + hex[2], 16)];
+  }
+  if (/^[0-9a-f]{6}$/i.test(hex)) {
+    return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+  }
+  const m = s.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+  if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+  return null;
+}
