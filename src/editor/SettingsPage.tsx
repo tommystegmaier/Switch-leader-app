@@ -30,6 +30,14 @@ import { useSettingsMutations } from './useSettingsMutations';
  * live preview + presets, font, splash, navigation style, and sharing
  * (public link vs invite-only, copy link, generate invite codes).
  */
+/** Did they open the app at some point today (local time)? */
+function seenToday(iso: string | null): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+}
+
 /** "Date last opened: 08/13/26", or a clear note when there's no visit yet. */
 function fmtLastSeen(iso: string | null): string {
   if (!iso) return 'Date last opened: never';
@@ -402,8 +410,10 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
                       {pushSet.has(m.userId) ? '🔔 Notifications on' : '🔕 Notifications off'}
                     </span>
                     <span
-                      className="ml-1.5 inline-block rounded-full bg-black/5 px-2 py-0.5 text-xs font-medium text-gray-600"
-                      title="The last time this person opened the app"
+                      className={`ml-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                        seenToday(m.lastSeenAt) ? 'bg-green-100 text-green-700' : 'bg-black/5 text-gray-600'
+                      }`}
+                      title="The last time this person opened the app — green means today"
                     >
                       {fmtLastSeen(m.lastSeenAt)}
                     </span>
