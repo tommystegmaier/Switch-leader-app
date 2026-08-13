@@ -1128,7 +1128,13 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
                 if (imgLongPressed.current) { imgLongPressed.current = false; return; }
                 onOpenImage(m.imageUrl!);
               }}
-              className="mb-1 max-h-64 cursor-zoom-in rounded-lg object-cover"
+              // Suppress iOS's native image menu (Share / Save to Photos / …).
+              // The bubble enables text selection so messages can be copied, and
+              // the image inherits that, which let the system menu hijack our
+              // long-press reaction bar.
+              style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+              draggable={false}
+              className="mb-1 max-h-64 cursor-zoom-in select-none rounded-lg object-cover"
             />
           )}
           {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
