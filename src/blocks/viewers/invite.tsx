@@ -40,6 +40,7 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   if (ctx.editing) {
     return (
@@ -66,8 +67,25 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
 
   return (
     <div className={card} style={cardStyle}>
-      <p className="mb-1 font-semibold" style={{ color: 'var(--th-heading)' }}>✉️ {title}</p>
-      <p className="mb-3 text-sm text-gray-500">Create a join link with a role. Optionally tie it to someone&apos;s email so only they can use it.</p>
+      {/* Collapsible: the pending-invite list grows over time and this sits on
+          a page managers scroll past constantly. Collapsed by default. */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <span className="font-semibold" style={{ color: 'var(--th-heading)' }}>
+          ✉️ {title}
+          {!open && invites && invites.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-gray-500">{invites.length} pending</span>
+          )}
+        </span>
+        <span aria-hidden className="shrink-0 text-gray-400 transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
+      </button>
+      {!open ? null : (
+      <>
+      <p className="mb-3 mt-2 text-sm text-gray-500">Create a join link with a role. Optionally tie it to someone&apos;s email so only they can use it.</p>
 
       <div className="flex flex-col gap-2">
         <input type="email" className={input} placeholder="Their email (optional — ties the link to them)" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -104,6 +122,8 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
         </ul>
       )}
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      </>
+      )}
     </div>
   );
 }

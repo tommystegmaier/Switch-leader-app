@@ -10,6 +10,7 @@ import { CSS } from '@dnd-kit/utilities';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
+import { readableTextOn } from '@/lib/theme';
 import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
 import {
@@ -742,6 +743,14 @@ function BirthdayNotifyToggle({ orgId }: { orgId: string }) {
   );
 }
 
+/** Readable label color for text sitting on the workspace accent. */
+function accentLabel(): string {
+  const accent = typeof window !== 'undefined'
+    ? getComputedStyle(document.documentElement).getPropertyValue('--th-accent').trim()
+    : '';
+  return readableTextOn(accent || '#e23b2e');
+}
+
 function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | null; email: string; phone: string | null; md: string; days: number }; highlight?: boolean }) {
   return (
     <li className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm" style={{ ...cardStyle, ...(highlight ? { backgroundColor: 'rgba(226,59,46,0.06)' } : {}) }}>
@@ -749,9 +758,22 @@ function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | nul
         <span className="block truncate font-medium">🎂 {b.name || b.email}</span>
         {b.phone && <a href={`tel:${b.phone}`} className="text-xs text-gray-500 underline">{b.phone}</a>}
       </span>
-      <span className="shrink-0 text-right font-semibold" style={{ color: b.days <= 1 ? 'var(--th-accent)' : 'var(--th-text)' }}>
-        {b.days === 0 ? 'TODAY' : b.days === 1 ? 'TOMORROW' : fmtMonthDay(b.md)}
-      </span>
+      {b.days <= 1 ? (
+        // TODAY / TOMORROW as a filled accent pill. Plain accent-colored text
+        // vanished against a dark background whenever the workspace accent was
+        // itself dark; the label color here is derived from the accent so it
+        // stays readable whatever accent is chosen, in either theme.
+        <span
+          className="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tracking-wide"
+          style={{ backgroundColor: 'var(--th-accent)', color: accentLabel() }}
+        >
+          {b.days === 0 ? 'TODAY' : 'TOMORROW'}
+        </span>
+      ) : (
+        <span className="shrink-0 text-right font-semibold" style={{ color: 'var(--th-text)' }}>
+          {fmtMonthDay(b.md)}
+        </span>
+      )}
     </li>
   );
 }
