@@ -332,6 +332,13 @@ export function ViewerLayout() {
                 <Link to={`/login?next=${encodeURIComponent(location.pathname)}`} onClick={() => setMenuOpen(false)} className="underline">Admin sign in</Link>
               )}
             </div>
+
+            {/* Which build this device is actually running. An installed PWA can
+                serve a cached version for a long time, so without this there's
+                no way to tell a stale client from a broken feature. */}
+            <div className="mx-auto max-w-screen-sm px-3 pb-2 text-[0.65rem]" style={{ color: 'var(--th-text)', opacity: 0.45 }}>
+              Version {new Date(__BUILD_TIME__).toLocaleString()}
+            </div>
           </nav>
         )}
       </header>

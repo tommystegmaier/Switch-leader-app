@@ -27,6 +27,9 @@ const injectAppTitle = {
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Surfaced in the menu so a user can read back which build they're on —
+  // an installed PWA can silently serve a cached version for a long time.
+  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
   plugins: [
     react(),
     tailwindcss(),

@@ -54,5 +54,17 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     return json({ error: error.message || 'Could not save subscription.' }, 500);
   }
 
+  // Also record this as a visit. The browser-side heartbeat depends on each
+  // phone running current code, which for an installed PWA is not a safe
+  // assumption — this endpoint is hit whenever the app opens, runs with the
+  // service role, and so records reliably regardless of client version.
+  try {
+    await admin
+      .from('memberships')
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq('org_id', orgId)
+      .eq('user_id', uid);
+  } catch { /* visit tracking is never worth failing the request over */ }
+
   return json({ ok: true });
 };
