@@ -22,6 +22,11 @@ export function applyTheme(
   root.style.setProperty('--th-primary-text', theme.primaryText);
   root.style.setProperty('--th-accent', theme.accent);
   root.style.setProperty('--th-font', fontFamily);
+  // Feature heading sizes, scaled from one setting so titles and their
+  // sub-headings stay in proportion to each other.
+  const scale = Number(theme.headingScale) > 0 ? Number(theme.headingScale) : 1;
+  root.style.setProperty('--th-feature-title', `${(1.125 * scale).toFixed(3)}rem`);
+  root.style.setProperty('--th-feature-sub', `${(0.875 * scale).toFixed(3)}rem`);
 
   if (dark) {
     root.style.setProperty('--th-bg', '#0f141b');

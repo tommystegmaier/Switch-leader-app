@@ -42,6 +42,11 @@ export interface ThemeColors {
   primaryText: string;
   accent: string;
   heading: string;
+  /**
+   * Multiplier for feature (block) headings — 1 = default. Lives in the theme
+   * JSON so it needs no schema change, and is applied as a CSS variable.
+   */
+  headingScale?: number;
 }
 
 /** One button in the custom bottom icon bar. */

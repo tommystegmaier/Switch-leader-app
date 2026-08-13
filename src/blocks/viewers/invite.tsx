@@ -45,7 +45,7 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
   if (ctx.editing) {
     return (
       <div className={card} style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>✉️ {title}</p>
+        <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>✉️ {title}</p>
         <p className="mt-1 text-sm text-gray-500">Owners/admins get an invite composer here (create a join link with a role). Hidden from everyone else.</p>
       </div>
     );
@@ -75,7 +75,7 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-3 text-left"
       >
-        <span className="font-semibold" style={{ color: 'var(--th-heading)' }}>
+        <span className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>
           ✉️ {title}
           {!open && invites && invites.length > 0 && (
             <span className="ml-2 text-sm font-normal text-gray-500">{invites.length} pending</span>

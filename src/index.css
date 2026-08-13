@@ -133,6 +133,18 @@ body {
  * Scoped to the block's OUTER card (a direct child of .th-block), so inner
  * dividers, channel tabs, table rules and form fields keep their lines.
  */
+/*
+ * Structural dividers inside a block (chat header, channel tabs, composer)
+ * stopped at the page's own side padding, so they looked like short floating
+ * lines. Pull them out by that padding: the box grows 1rem each side while its
+ * own px-4 keeps the CONTENT exactly where it was, so only the rule extends.
+ */
+.th-view > .th-block > .border > .border-b,
+.th-view > .th-block > .border > .border-t {
+  margin-left: -1rem;
+  margin-right: -1rem;
+}
+
 .th-view > .th-block > .border {
   /* Zero the WIDTH, not the color: block cards set borderColor with an inline
      style, and inline styles beat a stylesheet rule. Width isn't set inline,
@@ -140,4 +152,18 @@ body {
   border-width: 0;
   padding-left: 0;
   padding-right: 0;
+}
+
+/*
+ * Feature heading sizes, driven by the workspace's headingScale setting so an
+ * owner can make every block title bigger or smaller in one place. Blocks opt
+ * in with these classes rather than hard-coded text-lg / text-sm.
+ */
+.th-feature-title {
+  font-size: var(--th-feature-title, 1.125rem);
+  line-height: 1.3;
+}
+.th-feature-sub {
+  font-size: var(--th-feature-sub, 0.875rem);
+  line-height: 1.35;
 }

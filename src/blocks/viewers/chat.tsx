@@ -82,7 +82,7 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
   if (ctx.editing) {
     return (
       <div className={`${card} p-4`} style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {title}</p>
+        <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {title}</p>
         <p className="mt-1 text-sm text-gray-500">Group chat. Each channel is a Roster group — managers see all, everyone else sees only the groups they&apos;re assigned to. Add people to Roster groups to populate channels.</p>
       </div>
     );
@@ -93,7 +93,7 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
   if (!user) {
     return (
       <div className={`${card} p-4`} style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {title}</p>
+        <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {title}</p>
         <p className="mt-1 text-sm text-gray-600">Sign in to see your group chats.</p>
         <a href={`/login?next=/o/${org.slug}`} className="mt-3 inline-block rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Sign in</a>
       </div>
@@ -140,7 +140,7 @@ function ChatInner({ orgId, title, userId, authorName, canModerate, canConfigure
   if (list.length === 0) {
     return (
       <div className={`${card} p-4`} style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {title}</p>
+        <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {title}</p>
         <p className="mt-2 text-sm text-gray-500">No group chats yet. You&apos;ll see a channel here for each Roster group you&apos;re part of.</p>
       </div>
     );
@@ -149,7 +149,7 @@ function ChatInner({ orgId, title, userId, authorName, canModerate, canConfigure
   return (
     <div className={`${card} flex flex-col`} style={{ ...cardStyle, height: 'min(70vh, 640px)' }}>
       <div className="flex items-center gap-2 border-b px-4 py-3" style={cardStyle}>
-        <p className="min-w-0 flex-1 truncate font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {headerName}</p>
+        <p className="th-feature-title min-w-0 flex-1 truncate font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {headerName}</p>
         {canConfigure && activeCh?.isAll && (
           <button
             type="button"

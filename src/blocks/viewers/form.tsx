@@ -104,7 +104,7 @@ export function FormView({ props, ctx }: { props: FormProps; ctx: ViewerCtx }) {
     if (!isAdmin || !org || !ctx.blockId) return <></>;
     return (
       <div className="rounded-xl border p-5" style={hairline}>
-        <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{props.title}</h3>
+        <h3 className="th-feature-title font-bold" style={{ color: 'var(--th-heading)' }}>{props.title}</h3>
         <p className="mt-1 text-sm text-gray-500">Hidden from people who’ve already submitted. Only you (owners &amp; admins) see this.</p>
         <button
           type="button"
@@ -121,7 +121,7 @@ export function FormView({ props, ctx }: { props: FormProps; ctx: ViewerCtx }) {
 
   return (
     <div className="rounded-xl border p-5" style={hairline}>
-      <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{props.title}</h3>
+      <h3 className="th-feature-title font-bold" style={{ color: 'var(--th-heading)' }}>{props.title}</h3>
       {props.description && <p className="mt-1 text-sm text-gray-500">{props.description}</p>}
 
       {done ? (
@@ -251,7 +251,7 @@ function ResponsesView({ orgId, blockId, title, fields, onClose }: { orgId: stri
     <div className="fixed inset-0 z-50 flex flex-col bg-white" role="dialog" aria-modal="true">
       <div className="flex items-center gap-2 border-b px-4 py-3" style={{ borderColor: 'var(--th-hairline)', paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}>
         <button type="button" onClick={onClose} aria-label="Close" className="rounded-full px-2 text-2xl leading-none text-gray-500 hover:bg-black/5">×</button>
-        <h3 className="min-w-0 flex-1 truncate text-lg font-bold" style={{ color: 'var(--th-heading)' }}>{title}</h3>
+        <h3 className="th-feature-title min-w-0 flex-1 truncate font-bold" style={{ color: 'var(--th-heading)' }}>{title}</h3>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2" style={{ borderColor: 'var(--th-hairline)' }}>

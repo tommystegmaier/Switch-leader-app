@@ -146,6 +146,19 @@ export function SettingsPage() {
           <ColorField label="Button text" value={draft.theme.primaryText} onChange={(v) => setColor('primaryText', v)} />
           <ColorField label="Accent" value={draft.theme.accent} onChange={(v) => setColor('accent', v)} />
         </div>
+        <Field label="Feature heading size">
+          <select
+            className={input}
+            value={String(draft.theme.headingScale ?? 1)}
+            onChange={(e) => set({ theme: { ...draft.theme, headingScale: Number(e.target.value) } })}
+          >
+            <option value="0.9">Small</option>
+            <option value="1">Default</option>
+            <option value="1.15">Large</option>
+            <option value="1.3">Extra large</option>
+          </select>
+          <span className="text-xs text-gray-500">Sizes the title on every feature (Roster, Chat, Birthdays…) and their sub-headings together.</span>
+        </Field>
         <Field label="Font">
           <select className={input} value={draft.fontFamily} onChange={(e) => set({ fontFamily: e.target.value })}>
             {FONT_OPTIONS.map((f) => <option key={f.label} value={f.value}>{f.label}</option>)}

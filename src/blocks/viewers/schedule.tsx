@@ -84,7 +84,7 @@ export function ScheduleView({ props, ctx }: { props: ScheduleProps; ctx: Viewer
   if (!user) {
     return (
       <div className={card} style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
+        <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
         <p className="mt-1 text-sm text-gray-600">Sign in to see the weeks you&apos;re scheduled to serve.</p>
         <a href={`/login?next=/o/${org.slug}`} className="mt-3 inline-block rounded-full px-5 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>Sign in</a>
       </div>
@@ -651,7 +651,7 @@ export function BirthdaysView({ props, ctx }: { props: BirthdaysProps; ctx: View
   if (ctx.editing) {
     return (
       <div className={card} style={cardStyle}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
+        <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>🎂 {title}</p>
         <p className="mt-1 text-sm text-gray-500">The birthday list is managers-only. Anyone can turn on their own daily birthday reminder here.</p>
       </div>
     );

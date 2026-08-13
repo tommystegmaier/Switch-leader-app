@@ -18,7 +18,7 @@ export function TeamAccessBlockView({ ctx }: { props: TeamAccessProps; ctx: View
   if (ctx.editing) {
     return (
       <div className="rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
-        <p className="font-semibold" style={{ color: 'var(--th-heading)' }}>👥 Team &amp; access</p>
+        <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>👥 Team &amp; access</p>
         <p className="mt-1 text-sm text-gray-500">Manage people, roles, and invites — and see who has notifications on. Only owners &amp; admins can see this block.</p>
       </div>
     );
