@@ -9,6 +9,7 @@ import {
   type ChatMessage, type ChatPostPolicy,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
+import { tapHaptic } from '@/lib/haptics';
 import { compressImage, createAudioContext, startPcmRecorder, uploadMedia, type PcmRecorder } from '@/lib/media';
 import type { ViewerCtx } from '../actions';
 
@@ -276,6 +277,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
   const [text, setText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<ChatMessage | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [photoMenu, setPhotoMenu] = useState<ChatMessage | null>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -457,6 +459,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
             onReact={(emoji, wasMine) => react(m.id, emoji, wasMine)}
             onRequestDelete={() => { setReactingId(null); setConfirmDelete(m); }}
             onOpenImage={(url) => setLightbox(url)}
+            onHoldImage={() => setPhotoMenu(m)}
           />
         ))}
       </div>
@@ -553,6 +556,17 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
         />
       )}
       {lightbox && <ImageLightbox url={lightbox} onClose={() => setLightbox(null)} />}
+      {photoMenu?.imageUrl && (
+        <PhotoHoldMenu
+          url={photoMenu.imageUrl}
+          reactions={byMessage.get(photoMenu.id)}
+          canDelete={photoMenu.userId === userId || canModerate}
+          onReact={(emoji, wasMine) => { react(photoMenu.id, emoji, wasMine); setPhotoMenu(null); }}
+          onView={() => { const u = photoMenu.imageUrl!; setPhotoMenu(null); setLightbox(u); }}
+          onDelete={() => { const msg = photoMenu; setPhotoMenu(null); setConfirmDelete(msg); }}
+          onClose={() => setPhotoMenu(null)}
+        />
+      )}
       {confirmDelete && (
         <ConfirmDelete
           deleting={del.isPending}
@@ -1038,7 +1052,7 @@ function DeleteDot({ side, onClick }: { side: 'left' | 'right'; onClick: () => v
   );
 }
 
-function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete, onOpenImage }: {
+function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete, onOpenImage, onHoldImage }: {
   m: ChatMessage;
   mine: boolean;
   canDelete: boolean;
@@ -1050,13 +1064,18 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
   onReact: (emoji: string, wasMine: boolean) => void;
   onRequestDelete: () => void;
   onOpenImage: (url: string) => void;
+  onHoldImage: () => void;
 }) {
   // Long-press on a photo opens reactions; a plain tap opens it full screen.
   const imgPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imgLongPressed = useRef(false);
   const startImgPress = () => {
     imgLongPressed.current = false;
-    imgPressTimer.current = setTimeout(() => { imgLongPressed.current = true; onToggleBar(); }, 450);
+    imgPressTimer.current = setTimeout(() => {
+      imgLongPressed.current = true;
+      tapHaptic(); // confirm the press landed, like a native long-press
+      onHoldImage();
+    }, 450);
   };
   const cancelImgPress = () => { if (imgPressTimer.current) { clearTimeout(imgPressTimer.current); imgPressTimer.current = null; } };
 
@@ -1126,7 +1145,7 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
               onPointerUp={cancelImgPress}
               onPointerLeave={cancelImgPress}
               onPointerCancel={cancelImgPress}
-              onContextMenu={(e) => { e.preventDefault(); cancelImgPress(); imgLongPressed.current = true; onToggleBar(); }}
+              onContextMenu={(e) => { e.preventDefault(); cancelImgPress(); imgLongPressed.current = true; onHoldImage(); }}
               onClick={(e) => {
                 e.stopPropagation();
                 if (imgLongPressed.current) { imgLongPressed.current = false; return; }
@@ -1374,6 +1393,102 @@ function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
       <p className="pointer-events-none absolute inset-x-0 text-center text-xs text-white/60" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
         Pinch to zoom · double-tap to fill
       </p>
+    </div>
+  );
+}
+
+/**
+ * iPhone-style long-press on a photo: the picture lifts off a blurred backdrop,
+ * the reaction row floats above it and the actions sit underneath. Mirrors the
+ * Messages app so the gesture feels familiar.
+ */
+function PhotoHoldMenu({ url, reactions, canDelete, onReact, onView, onDelete, onClose }: {
+  url: string;
+  reactions: Map<string, { count: number; mine: boolean }> | undefined;
+  canDelete: boolean;
+  onReact: (emoji: string, wasMine: boolean) => void;
+  onView: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(true));
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      cancelAnimationFrame(id);
+      document.body.style.overflow = prev;
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center px-6" role="dialog" aria-modal="true">
+      <div
+        className="absolute inset-0 transition-opacity duration-200"
+        style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', opacity: shown ? 1 : 0 }}
+        onClick={onClose}
+      />
+
+      {/* Reactions */}
+      <div
+        className="relative z-10 mb-4 flex items-center gap-1 rounded-full px-2.5 py-2 shadow-xl transition-all duration-200"
+        style={{
+          backgroundColor: 'var(--th-surface)',
+          transform: shown ? 'scale(1)' : 'scale(0.85)',
+          opacity: shown ? 1 : 0,
+        }}
+      >
+        {REACTIONS.map((e) => {
+          const mineAlready = Boolean(reactions?.get(e)?.mine);
+          return (
+            <button
+              key={e}
+              type="button"
+              onClick={() => onReact(e, mineAlready)}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-2xl leading-none transition-transform active:scale-90"
+              style={mineAlready ? { backgroundColor: 'color-mix(in srgb, var(--th-primary) 22%, transparent)' } : undefined}
+            >
+              {e}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* The photo, lifted */}
+      <img
+        src={url}
+        alt=""
+        draggable={false}
+        onClick={onView}
+        className="relative z-10 max-h-[45vh] max-w-full rounded-2xl object-contain shadow-2xl transition-transform duration-200"
+        style={{ transform: shown ? 'scale(1)' : 'scale(0.92)', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+      />
+
+      {/* Actions */}
+      <div
+        className="relative z-10 mt-4 w-full max-w-[16rem] overflow-hidden rounded-2xl shadow-xl transition-all duration-200"
+        style={{ backgroundColor: 'var(--th-surface)', transform: shown ? 'translateY(0)' : 'translateY(8px)', opacity: shown ? 1 : 0 }}
+      >
+        <button type="button" onClick={onView} className="block w-full border-b px-4 py-3.5 text-center text-base" style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>
+          View photo
+        </button>
+        <a href={url} target="_blank" rel="noopener noreferrer" onClick={onClose} className={`block w-full px-4 py-3.5 text-center text-base ${canDelete ? 'border-b' : ''}`} style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>
+          Open in browser
+        </a>
+        {canDelete && (
+          <button type="button" onClick={onDelete} className="block w-full px-4 py-3.5 text-center text-base font-semibold text-red-600">
+            Delete
+          </button>
+        )}
+      </div>
+
+      <button type="button" onClick={onClose} className="relative z-10 mt-3 rounded-full px-6 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-surface)', color: 'var(--th-text)' }}>
+        Cancel
+      </button>
     </div>
   );
 }
