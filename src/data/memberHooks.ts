@@ -20,6 +20,10 @@ export function useOrgMembers(orgId: string | undefined, enabled: boolean) {
   return useQuery({
     queryKey: ['org', orgId, 'members'],
     enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
+    // "Date last opened" changes as people use the app, so this list can't be
+    // fetched once and cached — watching the page would never show an update.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
     queryFn: async (): Promise<OrgMember[]> => {
       const s = getSupabase();
       if (!s || !orgId) return [];
