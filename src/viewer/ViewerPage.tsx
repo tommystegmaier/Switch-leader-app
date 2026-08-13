@@ -134,8 +134,8 @@ function AdminOnlyBanner() {
   const bg = accent || '#e23b2e';
   return (
     <div
-      className="w-full rounded-lg px-4 py-2 text-center text-sm font-semibold"
-      style={{ backgroundColor: bg, color: readableTextOn(bg) }}
+      className="w-full rounded-xl px-4 py-3 text-center text-base font-bold tracking-wide"
+      style={{ backgroundColor: bg, color: readableTextOn(bg), boxShadow: '0 1px 4px rgba(0,0,0,0.14)' }}
       role="note"
     >
       This page is only viewable to admins
