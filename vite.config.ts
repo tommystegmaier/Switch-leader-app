@@ -70,11 +70,17 @@ export default defineConfig({
             handler: 'NetworkOnly',
           },
           {
+            // CacheFirst, not StaleWhileRevalidate: SWR re-fetched every image
+            // in the background on every view, so a cached photo still cost
+            // full CDN egress each time it appeared. Uploaded paths are
+            // timestamped and never change, so serving from cache without
+            // revalidating is safe — and cuts repeat egress to zero.
             urlPattern: ({ url }) => url.pathname.includes('/storage/v1/object/public/'),
-            handler: 'StaleWhileRevalidate',
+            handler: 'CacheFirst',
             options: {
               cacheName: 'supabase-media',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
         ],

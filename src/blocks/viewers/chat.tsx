@@ -1157,6 +1157,8 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
               // long-press reaction bar.
               style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
               draggable={false}
+              loading="lazy"
+              decoding="async"
               className="mb-1 max-h-64 cursor-zoom-in select-none rounded-lg object-cover"
             />
           )}

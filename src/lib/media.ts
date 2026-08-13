@@ -178,7 +178,10 @@ export async function uploadMedia(orgId: string, file: File): Promise<MediaObjec
   if (!s) throw new Error('Uploads require a configured Supabase backend.');
   const path = `${orgId}/${Date.now()}-${sanitizeName(file.name)}`;
   const { error } = await s.storage.from(BUCKET).upload(path, file, {
-    cacheControl: '3600',
+    // One year: every path is timestamped and therefore immutable, so a short
+    // TTL just forced every viewer to re-download the same photo hourly — the
+    // single biggest driver of CDN egress.
+    cacheControl: '31536000',
     upsert: false,
     contentType: file.type || undefined,
   });
