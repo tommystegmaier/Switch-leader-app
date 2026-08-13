@@ -6,7 +6,7 @@ import { errorMessage } from '@/lib/errors';
 import {
   useIsPlatformAdmin, usePlatformAddAdmin, usePlatformAddTemplate, usePlatformAdmins, usePlatformApps,
   usePlatformDeleteApp, usePlatformJoinApp, usePlatformRemoveAdmin, usePlatformRemoveTemplate,
-  usePlatformSetUserDisabled, type PlatformApp,
+  usePlatformSetChatMedia, usePlatformSetUserDisabled, type PlatformApp,
 } from '@/data/platformHooks';
 import { slugify, useAppTemplates, useDuplicateWorkspace } from '@/data/workspaceHooks';
 
@@ -164,6 +164,7 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
   const join = usePlatformJoinApp();
   const del = usePlatformDeleteApp();
   const duplicate = useDuplicateWorkspace();
+  const setChatMedia = usePlatformSetChatMedia();
   const addTemplate = usePlatformAddTemplate();
   const removeTemplate = usePlatformRemoveTemplate();
   const [tplOpen, setTplOpen] = useState(false);
@@ -257,6 +258,18 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
         </button>
         <button type="button" onClick={() => { setDupOpen((v) => !v); setDupName(`${app.appName} (copy)`); setDupSlug(''); setDupSlugEdited(false); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
           Duplicate
+        </button>
+        <button
+          type="button"
+          onClick={() => { setError(null); setChatMedia.mutate({ orgId: app.orgId, enabled: !app.chatMediaEnabled }, { onError: (e) => setError(errorMessage(e)) }); }}
+          disabled={setChatMedia.isPending}
+          title="Photos and voice messages in this app's chat. Turning them off keeps text chat and GIFs working, and stops the app using file storage."
+          className="rounded-full border px-4 py-1.5 text-xs font-semibold disabled:opacity-50"
+          style={app.chatMediaEnabled
+            ? { borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }
+            : { borderColor: 'rgba(220,38,38,0.4)', color: '#dc2626' }}
+        >
+          {app.chatMediaEnabled ? 'Media on' : 'Media off'}
         </button>
         {isTemplate ? (
           <button type="button" onClick={() => { setError(null); removeTemplate.mutate(app.orgId, { onError: (e) => setError(errorMessage(e)) }); }} disabled={removeTemplate.isPending} className="rounded-full border px-4 py-1.5 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>

@@ -31,6 +31,8 @@ export interface Organization {
   /** Unique slug used for the per-workspace viewer URL `/o/{slug}`. */
   slug: string;
   createdAt: string;
+  /** Platform switch: when false, chat can't carry photos or voice messages. */
+  chatMediaEnabled?: boolean;
 }
 
 export interface ThemeColors {

@@ -100,7 +100,7 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
     );
   }
 
-  return <ChatInner orgId={org.id} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} canConfigure={canConfigure} />;
+  return <ChatInner orgId={org.id} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} canConfigure={canConfigure} mediaEnabled={org.chatMediaEnabled !== false} />;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,7 +109,7 @@ function displayName(user: any): string {
   return (m.full_name || m.name || user?.email || 'Someone') as string;
 }
 
-function ChatInner({ orgId, title, userId, authorName, canModerate, canConfigure }: { orgId: string; title: string; userId: string; authorName: string; canModerate: boolean; canConfigure: boolean }) {
+function ChatInner({ orgId, title, userId, authorName, canModerate, canConfigure, mediaEnabled }: { orgId: string; title: string; userId: string; authorName: string; canModerate: boolean; canConfigure: boolean; mediaEnabled: boolean }) {
   const { data: channels } = useChatChannels(orgId);
   const { data: mutes } = useChatMutes(orgId);
   const setMute = useSetChatMute(orgId);
@@ -208,7 +208,7 @@ function ChatInner({ orgId, title, userId, authorName, canModerate, canConfigure
         })}
       </div>
 
-      {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} canModerate={canModerate} deleteMode={deleteMode} canPost={activeCh?.canPost ?? true} onSeen={() => markRead.mutate(active)} />}
+      {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} canModerate={canModerate} deleteMode={deleteMode} mediaEnabled={mediaEnabled} canPost={activeCh?.canPost ?? true} onSeen={() => markRead.mutate(active)} />}
 
       {policyOpen && activeCh && (
         <PostPolicyChooser
@@ -265,7 +265,7 @@ function PostPolicyChooser({ current, busy, onChoose, onCancel }: { current: Cha
 interface PollTally { counts: Record<number, number>; total: number; mine: number | null }
 interface PendingMedia { file: File; url: string; kind: 'photo' | 'audio' }
 
-function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMode, canPost, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; canModerate: boolean; deleteMode: boolean; canPost: boolean; onSeen: () => void }) {
+function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMode, mediaEnabled, canPost, onSeen }: { orgId: string; groupId: string; userId: string; authorName: string; canModerate: boolean; deleteMode: boolean; mediaEnabled: boolean; canPost: boolean; onSeen: () => void }) {
   const { data: messages } = useChatMessages(orgId, groupId);
   const { data: reactions } = useChatReactions(orgId, groupId);
   const { data: pollVotes } = useChatPollVotes(orgId, groupId);
@@ -473,9 +473,12 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
           <>
             <button type="button" aria-label="Close menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setAttachOpen(false)} />
             <div className="absolute bottom-full left-2 z-50 mb-2 w-56 overflow-hidden rounded-2xl border shadow-xl" style={{ backgroundColor: 'var(--th-surface)', borderColor: 'var(--th-hairline)' }}>
-              <AttachRow icon={<CameraIcon />} label="Camera" onClick={() => { setAttachOpen(false); cameraRef.current?.click(); }} />
-              <AttachRow icon={<PhotosIcon />} label="Photos" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />
-              <AttachRow icon={<AudioIcon />} label="Audio" onClick={() => { setAttachOpen(false); setAudioOpen(true); }} />
+              {/* Photos + voice are hidden entirely when the platform has media
+                  off for this app, so nothing is offered that would fail. GIFs
+                  stay: they're hotlinked from GIPHY and use no storage. */}
+              {mediaEnabled && <AttachRow icon={<CameraIcon />} label="Camera" onClick={() => { setAttachOpen(false); cameraRef.current?.click(); }} />}
+              {mediaEnabled && <AttachRow icon={<PhotosIcon />} label="Photos" onClick={() => { setAttachOpen(false); fileRef.current?.click(); }} />}
+              {mediaEnabled && <AttachRow icon={<AudioIcon />} label="Audio" onClick={() => { setAttachOpen(false); setAudioOpen(true); }} />}
               <AttachRow icon={<PollsIcon />} label="Polls" onClick={() => { setAttachOpen(false); setPollOpen(true); }} />
               <AttachRow icon={<GifIcon />} label="GIF" onClick={() => { setAttachOpen(false); setGifOpen(true); }} last />
             </div>

@@ -36,6 +36,8 @@ function mapOrg(row: any): Organization {
     name: row.name,
     slug: row.slug,
     createdAt: row.created_at,
+    // Older rows predate the column; treat missing as allowed.
+    chatMediaEnabled: row.chat_media_enabled !== false,
   };
 }
 

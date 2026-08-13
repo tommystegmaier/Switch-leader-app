@@ -17,6 +17,7 @@ export interface PlatformApp {
   createdAt: string;
   memberCount: number;
   owners: PlatformAppOwner[];
+  chatMediaEnabled: boolean;
 }
 
 /** Is the signed-in user a platform admin? */
@@ -51,6 +52,7 @@ export function usePlatformApps(enabled = true) {
         createdAt: r.created_at,
         memberCount: r.member_count ?? 0,
         owners: Array.isArray(r.owners) ? r.owners : [],
+        chatMediaEnabled: r.chat_media_enabled !== false,
       }));
     },
   });
@@ -119,6 +121,19 @@ export function usePlatformRemoveTemplate() {
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['app-templates'] }); },
+  });
+}
+
+/** Turn chat photos + voice messages on/off for an app (platform admin only). */
+export function usePlatformSetChatMedia() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orgId, enabled }: { orgId: string; enabled: boolean }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('platform_set_chat_media', { p_org: orgId, p_enabled: enabled });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'apps'] }),
   });
 }
 
