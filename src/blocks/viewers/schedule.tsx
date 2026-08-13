@@ -28,7 +28,14 @@ import type { ViewerCtx } from '../actions';
 type HeaderSize = 'sm' | 'md' | 'lg';
 interface ScheduleProps { title?: string; headerSize?: HeaderSize }
 
-const HEADER_CLS: Record<HeaderSize, string> = { sm: 'text-sm', md: 'text-lg', lg: 'text-2xl' };
+// Same approach as Roster: the block's own Small/Medium/Large control is a
+// multiple of the workspace feature-heading size, so Medium matches the other
+// features at any global setting.
+const HEADER_SCALE: Record<HeaderSize, number> = { sm: 0.8, md: 1, lg: 1.3 };
+const headerSizeStyle = (size: HeaderSize) => ({
+  fontSize: `calc(var(--th-feature-title, 1.125rem) * ${HEADER_SCALE[size]})`,
+  lineHeight: 1.3,
+});
 const ROLE_CLS: Record<HeaderSize, string> = { sm: 'text-sm', md: 'text-base', lg: 'text-lg' };
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -207,7 +214,7 @@ function ManagerSchedule({ orgId, userId, title, size, editing }: { orgId: strin
   return (
     <div className={card} style={cardStyle}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className={`font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>📅 {title}</p>
+        <p className="font-semibold" style={{ color: 'var(--th-heading)', ...headerSizeStyle(size) }}>📅 {title}</p>
         <div className="flex flex-wrap gap-1 text-sm">
           {([['roster', 'Roster'], ['teams', 'Teams & roles'], ['weeks', 'Weeks off'], ['settings', 'Notifications']] as [Tab, string][]).map(([t, label]) => (
             <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-3 py-1 ${tab === t ? 'font-semibold' : 'opacity-60'}`} style={tab === t ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid var(--th-hairline-strong)' }}>{label}</button>
@@ -314,7 +321,7 @@ function RosterTab({ orgId, userId, size, editing }: { orgId: string; userId: st
                 <div>
                   <button type="button" onClick={() => toggleTeam(t.id)} className="mb-1 flex w-full items-center gap-2 text-left" aria-expanded={!collapsed[t.id]}>
                     <span className="text-gray-400" aria-hidden>{collapsed[t.id] ? '▸' : '▾'}</span>
-                    <span className={`font-semibold ${HEADER_CLS[size]}`} style={{ color: 'var(--th-heading)' }}>{t.name}</span>
+                    <span className="font-semibold" style={{ color: 'var(--th-heading)', ...headerSizeStyle(size) }}>{t.name}</span>
                     <span className="ml-auto text-xs font-normal text-gray-400">{teamRoles.length} role{teamRoles.length === 1 ? '' : 's'}</span>
                   </button>
                   {!collapsed[t.id] && (
