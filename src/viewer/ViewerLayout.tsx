@@ -15,7 +15,7 @@ import type { NavTab } from '@/types';
 import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
 import { useDiscardChanges, usePublishStatus, usePublishWorkspace } from '@/editor/usePublish';
-import { applyTheme } from '@/lib/theme';
+import { applyTheme, readableTextOn } from '@/lib/theme';
 import { setAppBadge } from '@/lib/badge';
 import { ensurePushSubscribed } from '@/lib/push';
 import { getSupabase } from '@/lib/supabase';
@@ -148,6 +148,7 @@ export function ViewerLayout() {
   }
 
   const appName = settings?.appName ?? org.name;
+  const accentColor = settings?.theme?.accent || '#e23b2e';
   // Editors navigate all pages (incl. drafts); viewers only published pages
   // they're allowed to see (admins-only pages are hidden from viewers).
   const navPages = editing && canEdit
@@ -243,8 +244,15 @@ export function ViewerLayout() {
               type="button"
               onClick={() => publish.mutate()}
               disabled={publish.isPending || publishStatus?.dirty === false}
-              className="rounded-full bg-white px-3 py-0.5 font-semibold disabled:opacity-50"
-              style={{ color: 'var(--th-accent)' }}
+              className="rounded-full px-3 py-0.5 font-semibold"
+              // The draft bar is accent-colored, so a 50%-opacity white pill
+              // turned muddy and unreadable in dark mode. Give the disabled
+              // state its own readable treatment, and only tint the label with
+              // the accent when that accent is actually dark enough to read on
+              // white (readableTextOn returning white means it is).
+              style={publishStatus?.dirty === false || publish.isPending
+                ? { backgroundColor: 'rgba(255,255,255,0.25)', color: '#ffffff' }
+                : { backgroundColor: '#ffffff', color: readableTextOn(accentColor) === '#ffffff' ? accentColor : '#0f1420' }}
             >
               {publish.isPending ? 'Publishing…' : 'Publish changes'}
             </button>

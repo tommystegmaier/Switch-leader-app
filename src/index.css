@@ -134,7 +134,10 @@ body {
  * dividers, channel tabs, table rules and form fields keep their lines.
  */
 .th-view > .th-block > .border {
-  border-color: transparent;
+  /* Zero the WIDTH, not the color: block cards set borderColor with an inline
+     style, and inline styles beat a stylesheet rule. Width isn't set inline,
+     so this wins without needing !important. */
+  border-width: 0;
   padding-left: 0;
   padding-right: 0;
 }
