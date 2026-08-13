@@ -117,12 +117,25 @@ export function ViewerLayout() {
   }, [org?.id, queryClient]);
 
   // Record that this person opened the app, so Team & Access can show a "last
-  // opened" date. The RPC only touches the caller's own row and self-throttles
-  // to once an hour, so this is cheap to call on every open.
+  // opened" date. The RPC only touches the caller's own row and self-throttles,
+  // so it's cheap to call on every open.
+  //
+  // Mount alone isn't enough: reopening a Home Screen app usually RESTORES the
+  // existing page rather than reloading it, so React never re-mounts and the
+  // visit went unrecorded — the common "opened it, looked, closed it" case.
+  // Also listen for the app returning to the foreground (and bfcache restores).
   useEffect(() => {
     if (!user || !org?.id) return;
-    const s = getSupabase();
-    void s?.rpc('touch_last_seen', { p_org: org.id });
+    const orgId = org.id;
+    const touch = () => { void getSupabase()?.rpc('touch_last_seen', { p_org: orgId }); };
+    touch();
+    const onVisible = () => { if (document.visibilityState === 'visible') touch(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', touch);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', touch);
+    };
   }, [user, org?.id]);
 
   // Repair this device's push subscription on every open so it carries the
