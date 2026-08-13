@@ -109,7 +109,9 @@ export function ViewerPage() {
   const adminOnly = page?.visibility?.kind === 'admins';
 
   return (
-    <div className="flex flex-wrap items-stretch gap-4">
+    /* `th-view` lets one stylesheet rule strip the per-block card chrome in
+       read-only mode without touching every block viewer (see index.css). */
+    <div className="th-view flex flex-wrap items-stretch gap-4">
       {adminOnly && <AdminOnlyBanner />}
       {blocksLoading && <p className="w-full text-sm text-gray-500">Loading page…</p>}
       {visible.map((block) => (

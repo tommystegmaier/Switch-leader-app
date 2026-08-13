@@ -124,3 +124,17 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * View mode: blocks sit flush on the page — like the text block, which has no
+ * card — instead of each being outlined. Edit mode keeps the outline so an
+ * admin can see where each block starts and ends while arranging them.
+ *
+ * Scoped to the block's OUTER card (a direct child of .th-block), so inner
+ * dividers, channel tabs, table rules and form fields keep their lines.
+ */
+.th-view > .th-block > .border {
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
