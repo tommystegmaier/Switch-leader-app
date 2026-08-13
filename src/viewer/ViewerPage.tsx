@@ -134,14 +134,10 @@ function AdminOnlyBanner() {
   const bg = accent || '#e23b2e';
   return (
     <div
-      className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
+      className="w-full rounded-lg px-4 py-2 text-center text-sm font-semibold"
       style={{ backgroundColor: bg, color: readableTextOn(bg) }}
       role="note"
     >
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <rect x="4" y="10" width="16" height="10" rx="2" />
-        <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-      </svg>
       This page is only viewable to admins
     </div>
   );
