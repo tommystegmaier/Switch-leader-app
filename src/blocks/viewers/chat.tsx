@@ -560,7 +560,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
         <PhotoHoldMenu
           url={photoMenu.imageUrl}
           reactions={byMessage.get(photoMenu.id)}
-          canDelete={photoMenu.userId === userId || canModerate}
+          canDelete={photoMenu.userId === userId}
           onReact={(emoji, wasMine) => { react(photoMenu.id, emoji, wasMine); setPhotoMenu(null); }}
           onView={() => { const u = photoMenu.imageUrl!; setPhotoMenu(null); setLightbox(u); }}
           onDelete={() => { const msg = photoMenu; setPhotoMenu(null); setConfirmDelete(msg); }}
@@ -1473,12 +1473,9 @@ function PhotoHoldMenu({ url, reactions, canDelete, onReact, onView, onDelete, o
         className="relative z-10 mt-4 w-full max-w-[16rem] overflow-hidden rounded-2xl shadow-xl transition-all duration-200"
         style={{ backgroundColor: 'var(--th-surface)', transform: shown ? 'translateY(0)' : 'translateY(8px)', opacity: shown ? 1 : 0 }}
       >
-        <button type="button" onClick={onView} className="block w-full border-b px-4 py-3.5 text-center text-base" style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>
+        <button type="button" onClick={onView} className={`block w-full px-4 py-3.5 text-center text-base ${canDelete ? 'border-b' : ''}`} style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>
           View photo
         </button>
-        <a href={url} target="_blank" rel="noopener noreferrer" onClick={onClose} className={`block w-full px-4 py-3.5 text-center text-base ${canDelete ? 'border-b' : ''}`} style={{ borderColor: 'var(--th-hairline)', color: 'var(--th-text)' }}>
-          Open in browser
-        </a>
         {canDelete && (
           <button type="button" onClick={onDelete} className="block w-full px-4 py-3.5 text-center text-base font-semibold text-red-600">
             Delete
