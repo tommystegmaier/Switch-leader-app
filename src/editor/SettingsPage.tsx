@@ -216,9 +216,19 @@ export function SettingsPage() {
       {/* Team & access — who can edit / view (owner & admin only) */}
       {isAdmin && <TeamAccessSection orgId={org.id} currentRole={role} />}
 
-      <div className="sticky bottom-0 mt-6 flex items-center gap-2 border-t bg-white/90 py-3 text-sm text-gray-500 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <span>{save.isPending ? 'Saving draft…' : '✓ Saved to draft'}</span>
-        <span className="text-gray-400">— hit <strong>Publish changes</strong> (top bar) to make it live.</span>
+      {/* Draft status. Was a hard-coded white bar, which rendered as a bright
+          slab in dark mode; use the theme surface/text so it adapts. */}
+      <div
+        className="sticky bottom-0 mt-6 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t py-3 text-sm backdrop-blur"
+        style={{
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.25rem)',
+          backgroundColor: 'color-mix(in srgb, var(--th-bg) 90%, transparent)',
+          borderColor: 'var(--th-hairline)',
+          color: 'var(--th-text)',
+        }}
+      >
+        <span className="font-medium">{save.isPending ? 'Saving draft…' : '✓ Saved to draft'}</span>
+        <span style={{ opacity: 0.7 }}>— hit <strong>Publish changes</strong> (top bar) to make it live.</span>
       </div>
 
       {pickLogo && <MediaPicker orgId={org.id} accept="image/*" onSelect={(u) => set({ logoUrl: u })} onClose={() => setPickLogo(false)} />}
