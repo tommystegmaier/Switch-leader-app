@@ -369,7 +369,12 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
   }
 
   return (
-    <Section title="Team & access">
+    <Section
+      title="Team & access"
+      collapsible
+      defaultOpen={false}
+      subtitle={members ? `${members.length} ${members.length === 1 ? 'person' : 'people'}` : undefined}
+    >
       <p className="text-sm text-gray-500">
         Invite other people to help run this app. They sign up with their own email and get the role you pick — so several people can edit from different accounts.
       </p>
@@ -562,11 +567,48 @@ function MemberEditor({ orgId, member, onDone }: { orgId: string; member: OrgMem
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * A settings section. Pass `collapsible` for long sections (Team & access grows
+ * with every person invited) so the rest of Settings stays reachable without a
+ * lot of scrolling. `subtitle` shows next to the heading while collapsed.
+ */
+function Section({ title, subtitle, collapsible, defaultOpen = true, children }: {
+  title: string;
+  subtitle?: string;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (!collapsible) {
+    return (
+      <section className="mb-6 rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
+        <h2 className="mb-3 text-lg font-semibold" style={{ color: 'var(--th-heading)' }}>{title}</h2>
+        <div className="flex flex-col gap-3">{children}</div>
+      </section>
+    );
+  }
   return (
     <section className="mb-6 rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
-      <h2 className="mb-3 text-lg font-semibold" style={{ color: 'var(--th-heading)' }}>{title}</h2>
-      <div className="flex flex-col gap-3">{children}</div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <h2 className="text-lg font-semibold" style={{ color: 'var(--th-heading)' }}>
+          {title}
+          {subtitle && <span className="ml-2 text-sm font-normal text-gray-500">{subtitle}</span>}
+        </h2>
+        <span
+          aria-hidden
+          className="shrink-0 text-gray-400 transition-transform"
+          style={{ transform: open ? 'rotate(90deg)' : 'none' }}
+        >
+          ›
+        </span>
+      </button>
+      {open && <div className="mt-3 flex flex-col gap-3">{children}</div>}
     </section>
   );
 }
