@@ -22,7 +22,14 @@ export function useOrgMembers(orgId: string | undefined, enabled: boolean) {
     enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
     // "Date last opened" changes as people use the app, so this list can't be
     // fetched once and cached — watching the page would never show an update.
-    refetchInterval: 30_000,
+    // A minute is frequent enough to watch someone open the app, at half the
+    // requests of 30s. The list is ~20 KB for a large workspace, so this is
+    // ~1.2 MB/hour per admin with the page open.
+    refetchInterval: 60_000,
+    // Explicitly off in the background: without this a phone left on this page
+    // keeps polling while the app is closed, spending data and battery for
+    // nobody to see. Focus refetch below covers coming back to look.
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     queryFn: async (): Promise<OrgMember[]> => {
       const s = getSupabase();
