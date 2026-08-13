@@ -143,10 +143,11 @@ export function ViewerLayout() {
     void touch();
     const onVisible = () => { if (document.visibilityState === 'visible') void touch(); };
     document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('pageshow', () => void touch());
+    const onShow = () => { void touch(); };
+    window.addEventListener('pageshow', onShow);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('pageshow', touch);
+      window.removeEventListener('pageshow', onShow);
     };
   }, [user, org?.id]);
 
