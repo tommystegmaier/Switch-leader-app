@@ -132,7 +132,7 @@ function VolunteerSchedule({ orgId }: { orgId: string }) {
 
   return (
     <div className={card} style={cardStyle}>
-      <p className="mb-3 font-semibold" style={{ color: 'var(--th-heading)' }}>📅 My Serving Schedule</p>
+      <p className="th-feature-title mb-3 font-semibold" style={{ color: 'var(--th-heading)' }}>📅 My Serving Schedule</p>
       {isLoading ? (
         <p className="text-sm text-gray-500">Loading your weeks…</p>
       ) : rows.length === 0 ? (
@@ -211,20 +211,38 @@ type Tab = 'roster' | 'teams' | 'weeks' | 'settings';
 
 function ManagerSchedule({ orgId, userId, title, size, editing }: { orgId: string; userId: string; title: string; size: HeaderSize; editing: boolean }) {
   const [tab, setTab] = useState<Tab>('roster');
+  // Collapsible: the manager view carries the whole serving roster, so it
+  // dominates the page. Collapsed by default; the tab row and contents only
+  // render once it's open.
+  const [open, setOpen] = useState(false);
   return (
     <div className={card} style={cardStyle}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="font-semibold" style={{ color: 'var(--th-heading)', ...headerSizeStyle(size) }}>📅 {title}</p>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+        >
+          <span className="font-semibold" style={{ color: 'var(--th-heading)', ...headerSizeStyle(size) }}>📅 {title}</span>
+          <span aria-hidden className="shrink-0 text-gray-400 transition-transform" style={{ transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
+        </button>
+        {open && (
         <div className="flex flex-wrap gap-1 text-sm">
           {([['roster', 'Roster'], ['teams', 'Teams & roles'], ['weeks', 'Weeks off'], ['settings', 'Notifications']] as [Tab, string][]).map(([t, label]) => (
             <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-3 py-1 ${tab === t ? 'font-semibold' : 'opacity-60'}`} style={tab === t ? { backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' } : { border: '1px solid var(--th-hairline-strong)' }}>{label}</button>
           ))}
         </div>
+        )}
       </div>
-      {tab === 'roster' && <RosterTab orgId={orgId} userId={userId} size={size} editing={editing} />}
-      {tab === 'teams' && <TeamsTab orgId={orgId} editing={editing} />}
-      {tab === 'weeks' && <WeeksTab orgId={orgId} />}
-      {tab === 'settings' && <SettingsTab orgId={orgId} userId={userId} />}
+      {open && (
+        <>
+          {tab === 'roster' && <RosterTab orgId={orgId} userId={userId} size={size} editing={editing} />}
+          {tab === 'teams' && <TeamsTab orgId={orgId} editing={editing} />}
+          {tab === 'weeks' && <WeeksTab orgId={orgId} />}
+          {tab === 'settings' && <SettingsTab orgId={orgId} userId={userId} />}
+        </>
+      )}
     </div>
   );
 }
