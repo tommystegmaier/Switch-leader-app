@@ -776,23 +776,39 @@ function accentLabel(): string {
   return readableTextOn(accent || '#e23b2e');
 }
 
+// A birthday that has arrived is celebratory, not an alert — so today's row is
+// tinted green rather than borrowing the (red) workspace accent, which read as a
+// warning. Fixed green, not a theme variable: the meaning is "it's today", which
+// shouldn't change colour with the workspace's branding.
+const BIRTHDAY_GREEN = '#16a34a';
+
 function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | null; email: string; phone: string | null; md: string; days: number }; highlight?: boolean }) {
+  const today = b.days === 0;
   return (
-    <li className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm" style={{ ...cardStyle, ...(highlight ? { backgroundColor: 'rgba(226,59,46,0.06)' } : {}) }}>
+    <li
+      className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm"
+      style={{
+        ...cardStyle,
+        ...(highlight ? { backgroundColor: 'rgba(22,163,74,0.10)', borderColor: 'rgba(22,163,74,0.45)' } : {}),
+      }}
+    >
       <span className="min-w-0">
         <span className="block truncate font-medium">🎂 {b.name || b.email}</span>
         {b.phone && <a href={`tel:${b.phone}`} className="text-xs text-gray-500 underline">{b.phone}</a>}
       </span>
       {b.days <= 1 ? (
-        // TODAY / TOMORROW as a filled accent pill. Plain accent-colored text
-        // vanished against a dark background whenever the workspace accent was
-        // itself dark; the label color here is derived from the accent so it
-        // stays readable whatever accent is chosen, in either theme.
+        // TODAY / TOMORROW as a filled pill. Plain coloured text vanished against
+        // a dark background whenever the workspace accent was itself dark, so the
+        // label colour is derived from the fill and stays readable in either theme.
         <span
           className="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold tracking-wide"
-          style={{ backgroundColor: 'var(--th-accent)', color: accentLabel() }}
+          style={
+            today
+              ? { backgroundColor: BIRTHDAY_GREEN, color: readableTextOn(BIRTHDAY_GREEN) }
+              : { backgroundColor: 'var(--th-accent)', color: accentLabel() }
+          }
         >
-          {b.days === 0 ? 'TODAY' : 'TOMORROW'}
+          {today ? 'TODAY' : 'TOMORROW'}
         </span>
       ) : (
         <span className="shrink-0 text-right font-semibold" style={{ color: 'var(--th-text)' }}>
