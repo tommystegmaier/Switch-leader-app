@@ -3,18 +3,21 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { applyHubMetadata } from '@/lib/appMetadata';
+import { useIsPlatformAdmin } from '@/data/platformHooks';
 import { slugify, useAppTemplates, useCreateWorkspace, useCreateWorkspaceFromTemplate } from '@/data/workspaceHooks';
 
 /**
- * Self-service "create a new workspace" screen. Any signed-in user can spin up
- * a fresh app — blank, or pre-built from a starter template — and immediately
- * become its owner. The slug becomes the shareable viewer URL `/o/{slug}`.
+ * "Create a new app" screen — platform admins only. New apps are set up
+ * centrally for a location; everyone else is invited into one that already
+ * exists. Blank or pre-built from a template; the creator becomes its owner and
+ * the slug becomes the shareable viewer URL `/o/{slug}`.
  */
 export function CreateWorkspacePage() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const create = useCreateWorkspace();
   const createFromTemplate = useCreateWorkspaceFromTemplate();
+  const { data: isPlatformAdmin, isLoading: adminLoading } = useIsPlatformAdmin(Boolean(user));
   const { data: templates } = useAppTemplates(Boolean(user));
 
   // null = start from a blank app; otherwise a template id.
@@ -29,6 +32,13 @@ export function CreateWorkspacePage() {
   useEffect(() => {
     if (!loading && !user) navigate('/login?next=/new', { replace: true });
   }, [loading, user, navigate]);
+
+  // Nobody links here without the button, but the URL is guessable — send
+  // non-admins back to their apps rather than showing a form that can only
+  // fail at the server.
+  useEffect(() => {
+    if (user && !adminLoading && isPlatformAdmin === false) navigate('/workspaces', { replace: true });
+  }, [user, adminLoading, isPlatformAdmin, navigate]);
 
   const effectiveSlug = slugEdited ? slug : slugify(name);
   const pending = create.isPending || createFromTemplate.isPending;
@@ -48,6 +58,10 @@ export function CreateWorkspacePage() {
       const msg = err instanceof Error ? err.message : String(err);
       setError(/duplicate|unique/i.test(msg) ? 'That link is already taken — try a different one.' : msg);
     }
+  }
+
+  if (!user || adminLoading || !isPlatformAdmin) {
+    return <div className="mx-auto max-w-2xl px-4 py-10 text-sm text-gray-500">Loading…</div>;
   }
 
   return (

@@ -34,13 +34,13 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
 
   const list = workspaces ?? [];
   const hasApps = list.length > 0;
-  // App-creation is only for owners (people building their own apps) and brand
-  // new accounts with nothing yet. Someone who was INVITED into apps but owns
-  // none is a member — we never nudge or let them accidentally spin up their
-  // own app; they just see and open the apps they belong to.
+  // New apps are created centrally, by whoever runs the platform — everyone
+  // else is invited into an app that already exists. So creating (and
+  // duplicating, which also produces a new app) is platform-admin only. The
+  // RPCs enforce this too; hiding the button is just the polite half.
   const ownsAny = list.some((w) => w.role === 'owner');
   const isMemberOnly = hasApps && !ownsAny;
-  const canCreate = !isMemberOnly;
+  const canCreate = Boolean(isPlatformAdmin);
 
   // Unread chat totals per app → the red badge on each card. Also mirror the
   // grand total onto the Home Screen app icon while sitting on the hub, so the
@@ -67,9 +67,9 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
 
       {hasApps ? (
         <ul className="mb-6 flex flex-col gap-3">
-          {list.map((w) => <WorkspaceCard key={w.org.id} w={w} unread={byOrg[w.org.id] ?? 0} />)}
+          {list.map((w) => <WorkspaceCard key={w.org.id} w={w} unread={byOrg[w.org.id] ?? 0} canDuplicate={canCreate} />)}
         </ul>
-      ) : (
+      ) : canCreate ? (
         <>
           <div className="mb-6 rounded-xl border border-dashed p-8 text-center text-sm text-gray-500" style={{ borderColor: 'var(--th-hairline-strong)' }}>
             You don&apos;t have any apps yet. Create your first one!
@@ -78,6 +78,10 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
             + Create a new app
           </Link>
         </>
+      ) : (
+        <div className="mb-6 rounded-xl border border-dashed p-8 text-center text-sm text-gray-500" style={{ borderColor: 'var(--th-hairline-strong)' }}>
+          You don&apos;t have any apps yet. Ask whoever runs your app to invite you — apps are created for you, not by you.
+        </div>
       )}
     </div>
   );
@@ -95,14 +99,13 @@ function WorkspaceLogo({ name, iconUrl }: { name: string; iconUrl: string | null
   );
 }
 
-function WorkspaceCard({ w, unread = 0 }: { w: WorkspaceMembership; unread?: number }) {
+function WorkspaceCard({ w, unread = 0, canDuplicate = false }: { w: WorkspaceMembership; unread?: number; canDuplicate?: boolean }) {
   const { org, role, iconUrl } = w;
   const navigate = useNavigate();
   const duplicate = useDuplicateWorkspace();
   const rename = useRenameWorkspace();
   const del = useDeleteWorkspace();
   const canManage = role === 'owner' || role === 'admin';
-  const canDuplicate = canManage;
   const isOwner = role === 'owner';
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState(org.name);
