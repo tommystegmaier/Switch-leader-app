@@ -35,6 +35,33 @@ export function useChatChannels(orgId: string | undefined, enabled = true) {
   });
 }
 
+const MSG_COLS = 'id, group_id, user_id, author_name, body, image_url, video_url, audio_url, media_kind, poll, created_at';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toMessage = (r: any): ChatMessage => ({ id: r.id, groupId: r.group_id, userId: r.user_id, authorName: r.author_name ?? null, body: r.body ?? null, imageUrl: r.image_url ?? null, videoUrl: r.video_url ?? null, audioUrl: r.audio_url ?? null, mediaKind: (r.media_kind ?? null) as ChatMediaKind | null, poll: r.poll && Array.isArray(r.poll.options) ? { options: r.poll.options as string[] } : null, createdAt: r.created_at });
+
+/**
+ * Incremental polling state, per channel.
+ *
+ * Re-reading the whole channel every 4 seconds was by far this app's biggest
+ * source of Supabase egress: a busy channel is ~200 KB per read, so one person
+ * with the chat open cost ~3 MB a minute, and a few dozen people across a few
+ * dozen apps runs into gigabytes a day. Almost all of it was the same messages
+ * over and over. So we read the backlog once and then ask only for what's
+ * arrived since — a few hundred bytes when nothing has happened.
+ *
+ * Kept outside the hook deliberately: leaving a channel and coming back reuses
+ * the backlog instead of paying for it again.
+ */
+interface MessageSync { last: string | null; list: ChatMessage[]; fullAt: number }
+const messageSync = new Map<string, MessageSync>();
+// Deletions are the one change a "what's new since" read can't see, so we still
+// re-read in full on a slow beat. A minute is well inside how long anyone looks
+// at a message they've just seen removed, and costs 1/15th of what 4s did.
+const FULL_RESYNC_MS = 60_000;
+
+/** Force this channel's next poll to be a full re-read (used after a delete). */
+export function resetChatMessageSync(groupId: string) { messageSync.delete(groupId); }
+
 export function useChatMessages(orgId: string | undefined, groupId: string | undefined) {
   return useQuery({
     queryKey: KEY(orgId, 'messages', groupId ?? ''),
@@ -42,12 +69,30 @@ export function useChatMessages(orgId: string | undefined, groupId: string | und
     refetchInterval: 4_000,
     queryFn: async (): Promise<ChatMessage[]> => {
       const s = getSupabase(); if (!s || !groupId) return [];
+      const prev = messageSync.get(groupId);
+      const now = Date.now();
+      // An empty channel has no watermark to read forward from, so it falls
+      // back to a full read — which is free, because it's empty.
+      const full = !prev || !prev.last || now - prev.fullAt > FULL_RESYNC_MS;
+
+      if (full) {
+        const { data, error } = await s.from('chat_messages')
+          .select(MSG_COLS).eq('group_id', groupId).order('created_at').limit(500);
+        if (error) throw error;
+        const list = (data ?? []).map(toMessage);
+        messageSync.set(groupId, { last: list.length ? list[list.length - 1].createdAt : null, list, fullAt: now });
+        return list;
+      }
+
       const { data, error } = await s.from('chat_messages')
-        .select('id, group_id, user_id, author_name, body, image_url, video_url, audio_url, media_kind, poll, created_at')
-        .eq('group_id', groupId).order('created_at').limit(500);
+        .select(MSG_COLS).eq('group_id', groupId).gt('created_at', prev.last).order('created_at');
       if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, groupId: r.group_id, userId: r.user_id, authorName: r.author_name ?? null, body: r.body ?? null, imageUrl: r.image_url ?? null, videoUrl: r.video_url ?? null, audioUrl: r.audio_url ?? null, mediaKind: (r.media_kind ?? null) as ChatMediaKind | null, poll: r.poll && Array.isArray(r.poll.options) ? { options: r.poll.options as string[] } : null, createdAt: r.created_at }));
+      const fresh = (data ?? []).map(toMessage);
+      if (!fresh.length) return prev.list;
+      const seen = new Set(prev.list.map((m) => m.id));
+      const list = [...prev.list, ...fresh.filter((m) => !seen.has(m.id))];
+      messageSync.set(groupId, { last: list[list.length - 1].createdAt, list, fullAt: prev.fullAt });
+      return list;
     },
   });
 }
@@ -56,7 +101,11 @@ export function useChatReactions(orgId: string | undefined, groupId: string | un
   return useQuery({
     queryKey: KEY(orgId, 'reactions', groupId ?? ''),
     enabled: Boolean(orgId) && Boolean(groupId) && isSupabaseConfigured,
-    refetchInterval: 4_000,
+    // Every reaction in the channel comes back on each poll, so this is the
+    // second-largest repeat read after messages. Your own taps still show
+    // instantly (the mutation invalidates); someone else's arriving a few
+    // seconds later is not worth 2.5x the bandwidth.
+    refetchInterval: 10_000,
     queryFn: async (): Promise<ChatReaction[]> => {
       const s = getSupabase(); if (!s || !groupId) return [];
       const { data, error } = await s.from('chat_reactions')
@@ -112,6 +161,9 @@ export function useDeleteChatMessage(orgId: string) {
       if (error) throw error;
     },
     onSuccess: (_r, v) => {
+      // A "what's new since" poll can't notice a row that's gone, so drop the
+      // cached backlog and make the next read a full one.
+      resetChatMessageSync(v.groupId);
       qc.invalidateQueries({ queryKey: KEY(orgId, 'messages', v.groupId) });
       qc.invalidateQueries({ queryKey: KEY(orgId, 'channels') });
     },
@@ -140,7 +192,7 @@ export function useChatPollVotes(orgId: string | undefined, groupId: string | un
   return useQuery({
     queryKey: KEY(orgId, 'pollvotes', groupId ?? ''),
     enabled: Boolean(orgId) && Boolean(groupId) && isSupabaseConfigured,
-    refetchInterval: 4_000,
+    refetchInterval: 10_000,
     queryFn: async (): Promise<ChatPollVote[]> => {
       const s = getSupabase(); if (!s || !groupId) return [];
       const { data, error } = await s.from('chat_poll_votes')
