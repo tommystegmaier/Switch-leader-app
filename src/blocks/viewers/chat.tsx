@@ -753,7 +753,12 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
   );
 }
 
-const MAX_AUDIO_SECONDS = 300; // 5-minute soft cap — audio is tiny, this is just a guard
+// Voice messages are uncompressed WAV, so length is bandwidth: ~1.4 MB a
+// minute, downloaded by every person who plays it. At the old 5-minute cap one
+// message could be 7 MB and cost hundreds of MB across a channel. Two minutes
+// is longer than anyone actually talks into a chat, and keeps the worst case
+// under 3 MB. (Raise it if leaders start hitting it — it's just a number.)
+const MAX_AUDIO_SECONDS = 120;
 
 type RecPhase = 'intro' | 'asking' | 'recording' | 'converting' | 'ready' | 'blocked' | 'unavailable';
 

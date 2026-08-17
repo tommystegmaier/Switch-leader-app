@@ -125,11 +125,26 @@ export async function startPcmRecorder(stream: MediaStream, baseName = 'voice', 
       for (const c of chunks) { merged.set(c, at); at += c.length; }
       const srcRate = ctx.sampleRate;
       try { await ctx.close(); } catch { /* ignore */ }
-      const out = resample(merged, srcRate, 16000);
-      return new File([encodeWav(out, 16000)], `${baseName}.wav`, { type: 'audio/wav' });
+      const out = resample(merged, srcRate, VOICE_RATE);
+      return new File([encodeWav(out, VOICE_RATE)], `${baseName}.wav`, { type: 'audio/wav' });
     },
   };
 }
+
+/**
+ * Sample rate for voice messages, in Hz.
+ *
+ * WAV is uncompressed, so this rate IS the file size: 16-bit mono works out at
+ * exactly 2 bytes per sample, so 12 kHz is 24 KB per second — about 1.4 MB a
+ * minute. Every listener downloads that, so a single long voice note in a busy
+ * channel is a meaningful share of a month's bandwidth.
+ *
+ * 12 kHz carries frequencies up to 6 kHz, comfortably above the ~3.4 kHz a
+ * phone call gives you, so speech is unaffected; it's a quarter smaller than
+ * the 16 kHz we used to write. Raising it is safe (any browser plays PCM WAV at
+ * any rate) — it just costs proportionally more to send.
+ */
+const VOICE_RATE = 12000;
 
 /** Linear-interpolation resample (plenty for speech). */
 function resample(input: Float32Array, from: number, to: number): Float32Array {
