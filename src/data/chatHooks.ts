@@ -49,15 +49,21 @@ const toMessage = (r: any): ChatMessage => ({ id: r.id, groupId: r.group_id, use
  * over and over. So we read the backlog once and then ask only for what's
  * arrived since — a few hundred bytes when nothing has happened.
  *
+ * `last` is the newest created_at we hold, and the watermark the next read
+ * starts from; `list` is the messages themselves, in chronological order.
+ *
  * Kept outside the hook deliberately: leaving a channel and coming back reuses
  * the backlog instead of paying for it again.
  */
-interface MessageSync { last: string | null; list: ChatMessage[]; fullAt: number }
+interface MessageSync { last: string | null; list: ChatMessage[]; checkedAt: number }
 const messageSync = new Map<string, MessageSync>();
-// Deletions are the one change a "what's new since" read can't see, so we still
-// re-read in full on a slow beat. A minute is well inside how long anyone looks
-// at a message they've just seen removed, and costs 1/15th of what 4s did.
-const FULL_RESYNC_MS = 60_000;
+/** How far back a channel opens. Newest ones — you scroll up, not down. */
+const BACKLOG = 500;
+// Deletions are the one change a "what's new since" read can't see, so on a slow
+// beat we re-read the ids we're holding and drop any that have gone. Ids alone
+// are a fraction of the size of the rows, and nothing has to be re-downloaded:
+// we already have the content of every message that survived.
+const RECONCILE_MS = 60_000;
 
 /** Force this channel's next poll to be a full re-read (used after a delete). */
 export function resetChatMessageSync(groupId: string) { messageSync.delete(groupId); }
@@ -69,19 +75,34 @@ export function useChatMessages(orgId: string | undefined, groupId: string | und
     refetchInterval: 4_000,
     queryFn: async (): Promise<ChatMessage[]> => {
       const s = getSupabase(); if (!s || !groupId) return [];
-      const prev = messageSync.get(groupId);
       const now = Date.now();
-      // An empty channel has no watermark to read forward from, so it falls
-      // back to a full read — which is free, because it's empty.
-      const full = !prev || !prev.last || now - prev.fullAt > FULL_RESYNC_MS;
+      let prev = messageSync.get(groupId);
 
-      if (full) {
+      // No backlog yet (or an empty channel, which has no watermark to read
+      // forward from): read it once. Newest first, then flipped back into
+      // chronological order — ascending would have pinned a channel past 500
+      // messages to its oldest ones and never shown anything recent.
+      if (!prev || !prev.last) {
         const { data, error } = await s.from('chat_messages')
-          .select(MSG_COLS).eq('group_id', groupId).order('created_at').limit(500);
+          .select(MSG_COLS).eq('group_id', groupId).order('created_at', { ascending: false }).limit(BACKLOG);
         if (error) throw error;
-        const list = (data ?? []).map(toMessage);
-        messageSync.set(groupId, { last: list.length ? list[list.length - 1].createdAt : null, list, fullAt: now });
+        const list = (data ?? []).map(toMessage).reverse();
+        messageSync.set(groupId, { last: list.length ? list[list.length - 1].createdAt : null, list, checkedAt: now });
         return list;
+      }
+
+      // Slow beat: reconcile deletions across the window we hold.
+      if (now - prev.checkedAt > RECONCILE_MS) {
+        const { data, error } = await s.from('chat_messages')
+          .select('id').eq('group_id', groupId).gte('created_at', prev.list[0].createdAt);
+        if (error) throw error;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const live = new Set((data ?? []).map((r: any) => r.id as string));
+        const kept = prev.list.filter((m) => live.has(m.id));
+        // If every message went, keep the old watermark so the next read still
+        // moves forward rather than re-fetching the channel from scratch.
+        prev = { last: kept.length ? kept[kept.length - 1].createdAt : prev.last, list: kept, checkedAt: now };
+        messageSync.set(groupId, prev);
       }
 
       const { data, error } = await s.from('chat_messages')
@@ -91,7 +112,7 @@ export function useChatMessages(orgId: string | undefined, groupId: string | und
       if (!fresh.length) return prev.list;
       const seen = new Set(prev.list.map((m) => m.id));
       const list = [...prev.list, ...fresh.filter((m) => !seen.has(m.id))];
-      messageSync.set(groupId, { last: list[list.length - 1].createdAt, list, fullAt: prev.fullAt });
+      messageSync.set(groupId, { last: list[list.length - 1].createdAt, list, checkedAt: prev.checkedAt });
       return list;
     },
   });
