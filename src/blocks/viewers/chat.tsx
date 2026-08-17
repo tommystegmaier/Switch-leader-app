@@ -755,10 +755,12 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
 
 // Voice messages are uncompressed WAV, so length is bandwidth: ~1.4 MB a
 // minute, downloaded by every person who plays it. At the old 5-minute cap one
-// message could be 7 MB and cost hundreds of MB across a channel. Two minutes
-// is longer than anyone actually talks into a chat, and keeps the worst case
-// under 3 MB. (Raise it if leaders start hitting it — it's just a number.)
-const MAX_AUDIO_SECONDS = 120;
+// message could be 9.5 MB and cost hundreds of MB across a channel. Three
+// minutes keeps the worst case around 4 MB. Recording stops on its own when it
+// runs out, so every screen that can be looked at before then says the limit
+// out loud — being cut off mid-sentence with no warning reads as a bug.
+const MAX_AUDIO_SECONDS = 180;
+const MAX_AUDIO_LABEL = `${Math.round(MAX_AUDIO_SECONDS / 60)} minutes`;
 
 type RecPhase = 'intro' | 'asking' | 'recording' | 'converting' | 'ready' | 'blocked' | 'unavailable';
 
@@ -782,6 +784,11 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<File | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Set when recording ended because it ran out of time rather than because
+  // someone tapped stop, so the playback screen can explain the cut-off. A ref,
+  // not state: the timer needs to record it in the same tick it calls stop().
+  const ranOutRef = useRef(false);
+  const [ranOut, setRanOut] = useState(false);
 
   function stopTimer() { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } }
   function stopStream() { streamRef.current?.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
@@ -813,9 +820,15 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
       // Capture raw samples rather than using MediaRecorder — see startPcmRecorder.
       recorderRef.current = await startPcmRecorder(stream, `voice-${Date.now()}`, ctx);
       setSeconds(0);
+      ranOutRef.current = false;
+      setRanOut(false);
       setPhase('recording');
       timerRef.current = setInterval(() => {
-        setSeconds((s) => { const next = s + 1; if (next >= MAX_AUDIO_SECONDS) stop(); return next; });
+        setSeconds((s) => {
+          const next = s + 1;
+          if (next >= MAX_AUDIO_SECONDS) { ranOutRef.current = true; stop(); }
+          return next;
+        });
       }, 1000);
     } catch (err) {
       const name = (err as { name?: string })?.name ?? 'UnknownError';
@@ -843,6 +856,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
         return;
       }
       setNotice('');
+      setRanOut(ranOutRef.current);
       fileRef.current = file;
       setPreviewUrl(URL.createObjectURL(file));
       setPhase('ready');
@@ -854,6 +868,8 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
     setPreviewUrl(null);
     fileRef.current = null;
     setSeconds(0);
+    ranOutRef.current = false;
+    setRanOut(false);
     setPhase('intro');
   }
 
@@ -885,7 +901,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               <p className="mx-auto mt-1.5 max-w-[17rem] text-sm text-gray-500">Tap the mic to start recording. You can listen back before you send it.</p>
               {notice && <p className="mx-auto mt-2 max-w-[17rem] rounded-md bg-amber-50 p-2 text-xs text-amber-900">{notice}</p>}
               <MicButton onClick={() => void start()} />
-              <p className="mt-3 text-xs text-gray-400">Up to {Math.round(MAX_AUDIO_SECONDS / 60)} minutes</p>
+              <p className="mx-auto mt-3 max-w-[17rem] text-xs text-gray-400">Voice messages can be up to {MAX_AUDIO_LABEL} long. Recording stops on its own when you reach it.</p>
               <button type="button" onClick={onPickFile} className="mx-auto mt-4 block text-sm underline" style={{ color: 'var(--th-text)' }}>
                 Attach a recording instead
               </button>
@@ -914,10 +930,14 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               >
                 <span className="block h-7 w-7 rounded-md bg-white" />
               </button>
-              <p className="mt-4 text-3xl font-semibold tabular-nums" style={{ color: 'var(--th-heading)' }}>{fmtDuration(seconds)}</p>
+              <p className="mt-4 text-3xl font-semibold tabular-nums" style={{ color: 'var(--th-heading)' }}>
+                {fmtDuration(seconds)}
+                <span className="ml-1.5 text-base font-normal text-gray-400">/ {fmtDuration(MAX_AUDIO_SECONDS)}</span>
+              </p>
               <div className="mx-auto mt-3 h-1 w-40 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--th-hairline)' }}>
                 <div className="h-full rounded-full transition-all" style={{ width: `${pct * 100}%`, backgroundColor: '#dc2626' }} />
               </div>
+              <p className="mt-3 text-xs text-gray-400">{MAX_AUDIO_LABEL} max</p>
             </>
           )}
 
@@ -934,6 +954,11 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
           {phase === 'ready' && previewUrl && (
             <>
               <p className="mt-1.5 text-sm text-gray-500">{fmtDuration(seconds)} recorded — have a listen.</p>
+              {ranOut && (
+                <p className="mx-auto mt-2 max-w-[17rem] rounded-md bg-amber-50 p-2 text-xs text-amber-900">
+                  That&apos;s the {MAX_AUDIO_LABEL} limit, so recording stopped here. Send this one and record another if you have more to say.
+                </p>
+              )}
               <audio src={previewUrl} controls className="mx-auto mt-4 w-full" />
               <div className="mt-5 flex flex-col gap-2">
                 <button
