@@ -10,7 +10,7 @@ import {
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
 import { tapHaptic } from '@/lib/haptics';
-import { compressImage, createAudioContext, startPcmRecorder, uploadMedia, type PcmRecorder } from '@/lib/media';
+import { audioDuration, compressImage, createAudioContext, startPcmRecorder, uploadMedia, type PcmRecorder } from '@/lib/media';
 import type { ViewerCtx } from '../actions';
 
 interface ChatProps { title?: string }
@@ -355,12 +355,30 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
   // Fallback path: attach an audio file that already exists on the device (e.g.
   // an iPhone Voice Memo). This works even when the browser can't reach the
   // microphone at all, so voice messages are never fully blocked.
-  function onPickAudioFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPickAudioFile(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.target;
     const file = (input.files ?? [])[0];
     input.value = '';
     if (!file) return;
     setAudioOpen(false);
+    setError(null);
+
+    // Attached recordings get the same length limit as ones made here — the
+    // cost of a voice message falls on everyone who plays it, and that doesn't
+    // depend on where it was recorded. Size is checked too, because a minute of
+    // uncompressed audio from a computer can outweigh ten from a phone.
+    if (file.size > MAX_AUDIO_BYTES) {
+      setError(`That recording is ${(file.size / 1e6).toFixed(1)} MB — too big to send. Try a shorter one; voice messages can be up to ${MAX_AUDIO_LABEL}.`);
+      return;
+    }
+    const seconds = await audioDuration(file);
+    // A couple of seconds of slack: a "3 minute" recording often measures a
+    // fraction over. An unreadable length (null) is let through — we don't
+    // block someone over a question the browser wouldn't answer.
+    if (seconds !== null && seconds > MAX_AUDIO_SECONDS + 2) {
+      setError(`That recording is ${fmtDuration(seconds)} long. Voice messages can be up to ${MAX_AUDIO_LABEL} — try sending it in shorter parts.`);
+      return;
+    }
     setPending((prev) => [...prev, { file, url: URL.createObjectURL(file), kind: 'audio' }]);
   }
 
@@ -761,6 +779,11 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
 // out loud — being cut off mid-sentence with no warning reads as a bug.
 const MAX_AUDIO_SECONDS = 180;
 const MAX_AUDIO_LABEL = `${Math.round(MAX_AUDIO_SECONDS / 60)} minutes`;
+// Ceiling for an ATTACHED recording, where we don't control the format. Three
+// minutes recorded here is ~4 MB, and a phone's own voice memo of the same
+// length is under 2 MB, so this leaves generous room — while still turning away
+// the uncompressed studio-quality files that are tens of MB per listener.
+const MAX_AUDIO_BYTES = 12_000_000;
 
 type RecPhase = 'intro' | 'asking' | 'recording' | 'converting' | 'ready' | 'blocked' | 'unavailable';
 
@@ -905,6 +928,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               <button type="button" onClick={onPickFile} className="mx-auto mt-4 block text-sm underline" style={{ color: 'var(--th-text)' }}>
                 Attach a recording instead
               </button>
+              <p className="mt-1 text-xs text-gray-400">Same {MAX_AUDIO_LABEL} limit</p>
             </>
           )}
 
@@ -993,6 +1017,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               >
                 Choose a recording
               </button>
+              <p className="mt-3 text-xs text-gray-400">Up to {MAX_AUDIO_LABEL} long</p>
               <details className="mt-4 text-left">
                 <summary className="cursor-pointer text-center text-sm underline" style={{ color: 'var(--th-text)' }}>Or turn the microphone on</summary>
                 <ol className="mx-auto mt-3 max-w-[18rem] space-y-2 text-sm text-gray-500">
@@ -1019,6 +1044,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               <button type="button" onClick={onPickFile} className="mt-5 w-full rounded-full px-6 py-3.5 text-base font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
                 Choose a recording
               </button>
+              <p className="mt-3 text-xs text-gray-400">Up to {MAX_AUDIO_LABEL} long</p>
               <button type="button" onClick={() => void start()} className="mt-2 w-full rounded-full px-6 py-3 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
                 Try the microphone again
               </button>

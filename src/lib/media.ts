@@ -188,6 +188,38 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
+/**
+ * How long an audio file runs, in seconds — or null if we can't tell.
+ *
+ * Reads it off a throwaway <audio> element's metadata, which is the only way to
+ * get at it without parsing container formats ourselves. Null on anything
+ * unexpected (a format the browser won't open, or metadata that never arrives),
+ * so callers can decide what an unknown length means rather than getting a
+ * wrong number: never block someone on a question we couldn't answer.
+ */
+export function audioDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const el = document.createElement('audio');
+    let settled = false;
+    const done = (seconds: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      el.removeAttribute('src');
+      URL.revokeObjectURL(url);
+      resolve(seconds);
+    };
+    // iOS in particular can open a file and then fire neither event, which
+    // would leave the picker hanging with no feedback at all.
+    const timer = setTimeout(() => done(null), 5000);
+    el.preload = 'metadata';
+    el.onloadedmetadata = () => done(Number.isFinite(el.duration) && el.duration > 0 ? el.duration : null);
+    el.onerror = () => done(null);
+    el.src = url;
+  });
+}
+
 export async function uploadMedia(orgId: string, file: File): Promise<MediaObject> {
   const s = getSupabase();
   if (!s) throw new Error('Uploads require a configured Supabase backend.');
