@@ -10,7 +10,7 @@ import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks
 import { useLiveAppSettings } from '@/data/liveContent';
 import { useAllPages } from '@/data/pageHooks';
 import { useSchedulePageId } from '@/data/scheduleHooks';
-import { useChatPageSlug, useChatUnreadTotal } from '@/data/chatHooks';
+import { useChatBlocks, useChatPageSlug, useChatUnreadTotal } from '@/data/chatHooks';
 import type { NavTab } from '@/types';
 import { useEditMode } from '@/editor/EditModeProvider';
 import { PageManager } from '@/editor/PageManager';
@@ -22,6 +22,7 @@ import { getSupabase } from '@/lib/supabase';
 import { getDark, setDarkPref } from '@/lib/darkMode';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
 import { SendNotification } from '@/editor/SendNotification';
+import { BlockedPeopleDialog } from './BlockedPeopleDialog';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { InstallPrompt } from './InstallPrompt';
 import { NotificationPrompt } from './NotificationPrompt';
@@ -42,6 +43,7 @@ export function ViewerLayout() {
   const [pagesOpen, setPagesOpen] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [blockedOpen, setBlockedOpen] = useState(false);
 
   const { data: org, isLoading: orgLoading } = useOrganization(slug);
   const { data: publishedSettings } = useAppSettings(org?.id);
@@ -56,6 +58,8 @@ export function ViewerLayout() {
   const { data: schedulePageId } = useSchedulePageId(org?.id);
   const { data: chatPageSlug } = useChatPageSlug(org?.id);
   const { data: chatUnread = 0 } = useChatUnreadTotal(org?.id, Boolean(user));
+  const { data: blockedPeople } = useChatBlocks(org?.id);
+  const blockedCount = blockedPeople?.length ?? 0;
 
   // Editors preview the draft theme/title; viewers see the published one.
   const settings = liveMode ? (liveSettings ?? publishedSettings) : publishedSettings;
@@ -348,6 +352,14 @@ export function ViewerLayout() {
             <div className="mx-auto flex max-w-screen-sm flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2 text-[0.65rem]" style={{ color: 'var(--th-text)', opacity: 0.45 }}>
               <span>Version {new Date(__BUILD_TIME__).toLocaleString()}</span>
               <Link to="/privacy" onClick={() => setMenuOpen(false)} className="underline">Privacy</Link>
+              {/* Only once there's something to manage — for almost everyone
+                  this never appears, and an empty "Hidden people" entry would
+                  be a standing invitation to wonder who's in it. */}
+              {user && blockedCount > 0 && (
+                <button type="button" onClick={() => { setMenuOpen(false); setBlockedOpen(true); }} className="underline">
+                  Hidden people ({blockedCount})
+                </button>
+              )}
               {user && (
                 <button type="button" onClick={() => { setMenuOpen(false); setDeleteAccountOpen(true); }} className="underline">
                   Delete account
@@ -420,6 +432,7 @@ export function ViewerLayout() {
         />
       )}
 
+      {blockedOpen && <BlockedPeopleDialog orgId={org.id} onClose={() => setBlockedOpen(false)} />}
       {deleteAccountOpen && <DeleteAccountDialog onClose={() => setDeleteAccountOpen(false)} />}
     </div>
   );

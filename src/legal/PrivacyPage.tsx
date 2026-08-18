@@ -96,11 +96,13 @@ export function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="Reporting something">
+      <Section title="Reporting and hiding">
         <p>
-          Tap any message and then the flag (⚑) to report it. Reports go to the administrators, who can
-          remove the content and act on the account behind it. Leaders in your app can also delete
-          messages directly.
+          Tap any message and then the flag (⚑). From there you can report it to the administrators,
+          who can remove it and act on the account behind it — or simply hide that person&apos;s messages
+          from yourself, which affects nobody else and doesn&apos;t tell them. Anyone you&apos;ve hidden is
+          listed under <B>Hidden people</B> in the menu, and you can undo it there at any time.
+          Leaders in your app can also delete messages directly.
         </p>
       </Section>
 

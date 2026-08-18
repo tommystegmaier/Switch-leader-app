@@ -376,3 +376,54 @@ export function useReportChatMessage() {
     },
   });
 }
+
+export interface BlockedPerson { userId: string; name: string | null }
+
+/**
+ * People this user has chosen to hide, in this app.
+ *
+ * Polled slowly and cached: blocks change once in a blue moon, and the list is
+ * consulted on every render of the message list.
+ */
+export function useChatBlocks(orgId: string | undefined) {
+  return useQuery({
+    queryKey: KEY(orgId, 'blocks'),
+    enabled: Boolean(orgId) && isSupabaseConfigured,
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<BlockedPerson[]> => {
+      const s = getSupabase(); if (!s || !orgId) return [];
+      const { data, error } = await s.from('chat_blocks')
+        .select('blocked_id, blocked_name').eq('org_id', orgId);
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ userId: r.blocked_id, name: r.blocked_name ?? null }));
+    },
+  });
+}
+
+/**
+ * Hide or unhide someone's messages. One-way and personal — it changes only
+ * what the person doing it sees.
+ */
+export function useSetChatBlock(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, name, blocked }: { userId: string; name?: string | null; blocked: boolean }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { data: sess } = await s.auth.getSession();
+      const me = sess.session?.user.id;
+      if (!me) throw new Error('Please sign in again.');
+      if (blocked) {
+        const { error } = await s.from('chat_blocks')
+          .upsert({ blocker_id: me, blocked_id: userId, org_id: orgId, blocked_name: name ?? null },
+                  { onConflict: 'blocker_id,blocked_id,org_id' });
+        if (error) throw error;
+      } else {
+        const { error } = await s.from('chat_blocks')
+          .delete().eq('blocker_id', me).eq('blocked_id', userId).eq('org_id', orgId);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'blocks') }),
+  });
+}

@@ -5,8 +5,8 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import {
   useChatChannels, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useDeleteChatMessage,
-  useMarkChatRead, useReportChatMessage, useSendChatMessage, useSetChatMute, useSetChatPostPolicy,
-  useToggleReaction, useVoteChatPoll,
+  useChatBlocks, useMarkChatRead, useReportChatMessage, useSendChatMessage, useSetChatBlock,
+  useSetChatMute, useSetChatPostPolicy, useToggleReaction, useVoteChatPoll,
   type ChatMessage, type ChatPostPolicy,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
@@ -275,6 +275,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
   const { data: messages } = useChatMessages(orgId, groupId);
   const { data: reactions } = useChatReactions(orgId, groupId);
   const { data: pollVotes } = useChatPollVotes(orgId, groupId);
+  const { data: blocks } = useChatBlocks(orgId);
   const send = useSendChatMessage(orgId);
   const toggle = useToggleReaction(orgId);
   const vote = useVoteChatPoll(orgId);
@@ -299,7 +300,15 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const audioFileRef = useRef<HTMLInputElement>(null);
 
-  const msgs = useMemo(() => messages ?? [], [messages]);
+  // Blocked people's messages never reach the list. Filtered here rather than
+  // in the query so unblocking is instant — the backlog is already in hand, and
+  // it keeps the incremental "what's new since" watermark honest, which a
+  // server-side filter would quietly skew.
+  const blockedIds = useMemo(() => new Set((blocks ?? []).map((b) => b.userId)), [blocks]);
+  const msgs = useMemo(
+    () => (messages ?? []).filter((m) => !blockedIds.has(m.userId)),
+    [messages, blockedIds],
+  );
 
   // Poll votes grouped by message → { counts per option, total, my choice }.
   const pollByMessage = useMemo(() => {
@@ -609,6 +618,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
       )}
       {confirmReport && (
         <ConfirmReport
+          orgId={orgId}
           message={confirmReport}
           onDone={() => setConfirmReport(null)}
           onError={(m) => { setError(m); setConfirmReport(null); }}
@@ -623,27 +633,48 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
  * usually upset, and a screen that shouts at them doesn't help. It says plainly
  * where the report goes, takes an optional note, and does not tell the author.
  */
-function ConfirmReport({ message, onDone, onError }: { message: ChatMessage; onDone: () => void; onError: (m: string) => void }) {
+function ConfirmReport({ orgId, message, onDone, onError }: { orgId: string; message: ChatMessage; onDone: () => void; onError: (m: string) => void }) {
   const report = useReportChatMessage();
+  const setBlock = useSetChatBlock(orgId);
   const [reason, setReason] = useState('');
-  const [sent, setSent] = useState(false);
+  const [alsoBlock, setAlsoBlock] = useState(false);
+  const [sent, setSent] = useState<'reported' | 'hidden' | null>(null);
+  const who = message.authorName || 'this person';
+  const busy = report.isPending || setBlock.isPending;
+
+  const block = () => setBlock.mutateAsync({ userId: message.userId, name: message.authorName, blocked: true });
 
   async function send() {
     try {
       await report.mutateAsync({ messageId: message.id, reason });
-      setSent(true);
+      // Blocking is the half that helps immediately — reviewing the report
+      // takes as long as it takes, but the messages stop the moment they ask.
+      if (alsoBlock) await block();
+      setSent('reported');
+      setTimeout(onDone, 1600);
+    } catch (e) { onError(errorMessage(e)); }
+  }
+
+  async function hideOnly() {
+    try {
+      await block();
+      setSent('hidden');
       setTimeout(onDone, 1600);
     } catch (e) { onError(errorMessage(e)); }
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/50" onClick={report.isPending ? undefined : onDone} />
+      <div className="absolute inset-0 bg-black/50" onClick={busy ? undefined : onDone} />
       <div className="relative z-10 w-full max-w-sm rounded-t-3xl p-5 shadow-2xl sm:rounded-3xl" style={{ backgroundColor: 'var(--th-surface)', paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}>
         {sent ? (
           <>
-            <p className="text-center text-lg font-bold" style={{ color: 'var(--th-heading)' }}>Thank you</p>
-            <p className="mt-1 text-center text-sm text-gray-500">We&apos;ll take a look at this.</p>
+            <p className="text-center text-lg font-bold" style={{ color: 'var(--th-heading)' }}>
+              {sent === 'reported' ? 'Thank you' : 'Done'}
+            </p>
+            <p className="mt-1 text-center text-sm text-gray-500">
+              {sent === 'reported' ? 'We’ll take a look at this.' : `You won’t see ${who}’s messages any more.`}
+            </p>
           </>
         ) : (
           <>
@@ -660,20 +691,48 @@ function ConfirmReport({ message, onDone, onError }: { message: ChatMessage; onD
                 style={{ borderColor: 'var(--th-hairline-strong)' }}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                disabled={report.isPending}
+                disabled={busy}
               />
             </label>
+
+            <label className="mt-3 flex items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-5 w-5 shrink-0"
+                checked={alsoBlock}
+                onChange={(e) => setAlsoBlock(e.target.checked)}
+                disabled={busy}
+              />
+              <span>
+                <span className="block font-medium">Also hide {who}&apos;s messages from me</span>
+                <span className="block text-xs text-gray-500">Only affects what you see. They aren&apos;t told, and everyone else&apos;s view is unchanged. You can undo this from the menu.</span>
+              </span>
+            </label>
+
             <div className="mt-4 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => void send()}
-                disabled={report.isPending}
+                disabled={busy}
                 className="w-full rounded-full px-6 py-3 text-base font-semibold text-white disabled:opacity-50"
                 style={{ backgroundColor: '#dc2626' }}
               >
                 {report.isPending ? 'Sending…' : 'Send report'}
               </button>
-              <button type="button" onClick={onDone} disabled={report.isPending} className="w-full rounded-full px-6 py-3 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
+              {/* Hiding someone has to stand on its own: plenty of situations
+                  warrant "I'd rather not see this" without wanting to accuse
+                  anyone, and burying it inside a report would make asking for
+                  quiet feel like making a complaint. */}
+              <button
+                type="button"
+                onClick={() => void hideOnly()}
+                disabled={busy}
+                className="w-full rounded-full border px-6 py-3 text-sm font-semibold disabled:opacity-50"
+                style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}
+              >
+                {setBlock.isPending ? 'Hiding…' : `Just hide ${who}'s messages`}
+              </button>
+              <button type="button" onClick={onDone} disabled={busy} className="w-full rounded-full px-6 py-3 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
                 Cancel
               </button>
             </div>
