@@ -141,6 +141,23 @@ export function usePlatformSetChatMedia() {
   });
 }
 
+/**
+ * Set an app's logo and icon from the command center. Both are sent every
+ * time — the caller holds the current values — so clearing one is just sending
+ * null for it, with no separate "clear" call to get out of step.
+ */
+export function usePlatformSetBranding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orgId, logoUrl, iconUrl }: { orgId: string; logoUrl: string | null; iconUrl: string | null }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('platform_set_app_branding', { p_org: orgId, p_logo_url: logoUrl, p_icon_url: iconUrl });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'apps'] }),
+  });
+}
+
 export function usePlatformDeleteApp() {
   const qc = useQueryClient();
   return useMutation({

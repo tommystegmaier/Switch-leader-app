@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { errorMessage } from '@/lib/errors';
+import { compressImage, uploadMedia } from '@/lib/media';
 import {
   useIsPlatformAdmin, usePlatformAddAdmin, usePlatformAddTemplate, usePlatformAdmins, usePlatformApps,
   usePlatformDeleteApp, usePlatformJoinApp, usePlatformRemoveAdmin, usePlatformRemoveTemplate,
-  usePlatformSetChatMedia, usePlatformSetUserDisabled, type PlatformApp,
+  usePlatformSetBranding, usePlatformSetChatMedia, usePlatformSetUserDisabled, type PlatformApp,
 } from '@/data/platformHooks';
 import { slugify, useAppTemplates, useDuplicateWorkspace } from '@/data/workspaceHooks';
 import { BrandHeader } from './BrandHeader';
@@ -190,6 +191,7 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
   const [dupName, setDupName] = useState('');
   const [dupSlug, setDupSlug] = useState('');
   const [dupSlugEdited, setDupSlugEdited] = useState(false);
+  const [brandOpen, setBrandOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const effectiveSlug = dupSlugEdited ? dupSlug : slugify(dupName);
@@ -227,12 +229,15 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
   return (
     <li className="rounded-xl border p-4" style={{ borderColor: 'var(--th-hairline)' }}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate font-semibold" style={{ color: 'var(--th-heading)' }}>
-            {app.appName}
-            {isTemplate && <span className="ml-2 rounded-full bg-black/10 px-2 py-0.5 text-xs font-semibold">Template</span>}
-          </p>
-          <p className="truncate text-sm text-gray-500">/o/{app.slug} · {app.memberCount} member{app.memberCount === 1 ? '' : 's'} · created {created}</p>
+        <div className="flex min-w-0 items-center gap-3">
+          <AppThumb name={app.appName} url={app.iconUrl || app.logoUrl} />
+          <div className="min-w-0">
+            <p className="truncate font-semibold" style={{ color: 'var(--th-heading)' }}>
+              {app.appName}
+              {isTemplate && <span className="ml-2 rounded-full bg-black/10 px-2 py-0.5 text-xs font-semibold">Template</span>}
+            </p>
+            <p className="truncate text-sm text-gray-500">/o/{app.slug} · {app.memberCount} member{app.memberCount === 1 ? '' : 's'} · created {created}</p>
+          </div>
         </div>
       </div>
 
@@ -265,6 +270,9 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
         <button type="button" onClick={() => { setDupOpen((v) => !v); setDupName(`${app.appName} (copy)`); setDupSlug(''); setDupSlugEdited(false); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
           Duplicate
         </button>
+        <button type="button" onClick={() => { setBrandOpen((v) => !v); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
+          Logo &amp; icon
+        </button>
         <button
           type="button"
           onClick={() => { setError(null); setChatMedia.mutate({ orgId: app.orgId, enabled: !app.chatMediaEnabled }, { onError: (e) => setError(errorMessage(e)) }); }}
@@ -290,6 +298,8 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
           Delete app
         </button>
       </div>
+
+      {brandOpen && <BrandingEditor app={app} onError={setError} />}
 
       {tplOpen && !isTemplate && (
         <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
@@ -349,6 +359,113 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
         </div>
       )}
     </li>
+  );
+}
+
+/** Small square preview of an app's icon, or its initial if it has none. */
+function AppThumb({ name, url }: { name: string; url: string | null }) {
+  if (url) return <img src={url} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" />;
+  return (
+    <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
+      {(name.trim()[0] || '?').toUpperCase()}
+    </span>
+  );
+}
+
+/**
+ * Set an app's logo and icon. This lives here rather than in each app's own
+ * Settings so every location looks the same and only the platform operator can
+ * change it.
+ *
+ * Uploading writes straight through — there's no draft or Publish step on this
+ * page, and the RPC updates the published snapshot as well as the live row, so
+ * a new logo is on everyone's phone as soon as it finishes.
+ */
+function BrandingEditor({ app, onError }: { app: PlatformApp; onError: (message: string | null) => void }) {
+  const setBranding = usePlatformSetBranding();
+  const [busy, setBusy] = useState<'logo' | 'icon' | null>(null);
+  const logoRef = useRef<HTMLInputElement>(null);
+  const iconRef = useRef<HTMLInputElement>(null);
+
+  async function apply(which: 'logo' | 'icon', url: string | null) {
+    onError(null);
+    setBusy(which);
+    try {
+      await setBranding.mutateAsync({
+        orgId: app.orgId,
+        logoUrl: which === 'logo' ? url : app.logoUrl,
+        iconUrl: which === 'icon' ? url : app.iconUrl,
+      });
+    } catch (e) { onError(errorMessage(e)); }
+    finally { setBusy(null); }
+  }
+
+  async function upload(which: 'logo' | 'icon', e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target;
+    const file = (input.files ?? [])[0];
+    input.value = '';
+    if (!file) return;
+    onError(null);
+    setBusy(which);
+    try {
+      // 512px is more than any logo slot renders at, and keeps a photo dropped
+      // in by mistake from becoming a multi-megabyte download for every viewer.
+      const url = (await uploadMedia(app.orgId, await compressImage(file, 512, 0.9))).url;
+      await setBranding.mutateAsync({
+        orgId: app.orgId,
+        logoUrl: which === 'logo' ? url : app.logoUrl,
+        iconUrl: which === 'icon' ? url : app.iconUrl,
+      });
+    } catch (err) { onError(errorMessage(err)); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <div className="mt-3 flex flex-col gap-3 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
+      <p className="text-xs text-gray-500">
+        The logo shows inside the app; the icon is what people get on their Home Screen. Changes go live straight away — no publish needed.
+      </p>
+      <div className="flex gap-6">
+        <BrandSlot
+          label="Logo"
+          url={app.logoUrl}
+          busy={busy === 'logo'}
+          onPick={() => logoRef.current?.click()}
+          onClear={() => void apply('logo', null)}
+        />
+        <BrandSlot
+          label="App icon"
+          url={app.iconUrl}
+          busy={busy === 'icon'}
+          onPick={() => iconRef.current?.click()}
+          onClear={() => void apply('icon', null)}
+        />
+      </div>
+      <input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={(e) => void upload('logo', e)} />
+      <input ref={iconRef} type="file" accept="image/*" className="hidden" onChange={(e) => void upload('icon', e)} />
+    </div>
+  );
+}
+
+function BrandSlot({ label, url, busy, onPick, onClear }: { label: string; url: string | null; busy: boolean; onPick: () => void; onClear: () => void }) {
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <span className="font-medium">{label}</span>
+      <button
+        type="button"
+        onClick={onPick}
+        disabled={busy}
+        className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-dashed hover:bg-black/5 disabled:opacity-50"
+        style={{ borderColor: 'var(--th-hairline-strong)' }}
+      >
+        {busy
+          ? <span className="text-xs text-gray-400">Saving…</span>
+          : url
+            ? <img src={url} alt="" className="h-full w-full object-contain" />
+            : <span className="text-xs text-gray-400">Upload</span>}
+      </button>
+      {url && !busy && <button type="button" onClick={onClear} className="text-xs text-red-600 underline">Remove</button>}
+    </div>
   );
 }
 

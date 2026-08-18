@@ -22,13 +22,15 @@ import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
 import { useAllPages } from '@/data/pageHooks';
 import { NavIcon, NAV_ICON_NAMES, isNavIconName } from '@/blocks/navIcons';
 import type { AppSettings, NavStyle, NavTab, Role, ThemeColors, ViewerAccess } from '@/types';
-import { MediaPicker } from './MediaPicker';
 import { useSettingsMutations } from './useSettingsMutations';
 
 /**
- * Workspace settings (editor+ only): app identity (name/logo/icon), theme with
- * live preview + presets, font, splash, navigation style, and sharing
- * (public link vs invite-only, copy link, generate invite codes).
+ * Workspace settings (editor+ only): theme with live preview + presets, font,
+ * splash, navigation style, and sharing (public link vs invite-only, copy link,
+ * generate invite codes).
+ *
+ * App identity — the name and the logo/icon — is NOT here. It's set centrally:
+ * the name from "My apps", the logo from the command center.
  */
 /** Did they open the app at some point today (local time)? */
 function seenToday(iso: string | null): boolean {
@@ -55,8 +57,6 @@ export function SettingsPage() {
   const save = useSettingsMutations(org?.id ?? '');
 
   const [draft, setDraft] = useState<AppSettings | null>(null);
-  const [pickLogo, setPickLogo] = useState(false);
-  const [pickIcon, setPickIcon] = useState(false);
 
   useEffect(() => { if (saved && !draft) setDraft(saved); }, [saved, draft]);
 
@@ -112,16 +112,11 @@ export function SettingsPage() {
         <Link to={`/o/${org.slug}`} className="text-sm underline">← Back to app</Link>
       </div>
 
-      {/* Identity */}
-      <Section title="App identity">
-        <Field label="App name">
-          <input className={input} value={draft.appName} onChange={(e) => set({ appName: e.target.value })} />
-        </Field>
-        <div className="flex gap-6">
-          <ImageSlot label="Logo" url={draft.logoUrl} onPick={() => setPickLogo(true)} onClear={() => set({ logoUrl: null })} />
-          <ImageSlot label="App icon" url={draft.iconUrl} onPick={() => setPickIcon(true)} onClear={() => set({ iconUrl: null })} />
-        </div>
-      </Section>
+      {/* App identity — name and logo — is deliberately not here. The name is
+          changed from "My apps" (Rename) and the logo from the command center,
+          so every location's app keeps the same look and only the platform
+          operator can change it. The draft still carries both values through
+          untouched on save. */}
 
       {/* Theme */}
       <Section title="Theme">
@@ -231,8 +226,6 @@ export function SettingsPage() {
         <span style={{ opacity: 0.7 }}>— hit <strong>Publish changes</strong> (top bar) to make it live.</span>
       </div>
 
-      {pickLogo && <MediaPicker orgId={org.id} accept="image/*" onSelect={(u) => set({ logoUrl: u })} onClose={() => setPickLogo(false)} />}
-      {pickIcon && <MediaPicker orgId={org.id} accept="image/*" onSelect={(u) => set({ iconUrl: u })} onClose={() => setPickIcon(false)} />}
     </div>
   );
 }
@@ -666,14 +659,3 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
   );
 }
 
-function ImageSlot({ label, url, onPick, onClear }: { label: string; url: string | null; onPick: () => void; onClear: () => void }) {
-  return (
-    <div className="flex flex-col gap-1 text-sm">
-      <span className="font-medium">{label}</span>
-      <button type="button" onClick={onPick} className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-dashed hover:bg-black/5" style={{ borderColor: 'var(--th-hairline-strong)' }}>
-        {url ? <img src={url} alt="" className="h-full w-full object-contain" /> : <span className="text-xs text-gray-400">Upload</span>}
-      </button>
-      {url && <button type="button" onClick={onClear} className="text-xs text-red-600 underline">Remove</button>}
-    </div>
-  );
-}
