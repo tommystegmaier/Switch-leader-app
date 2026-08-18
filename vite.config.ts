@@ -4,15 +4,18 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// Baked into the static HTML at build time. iOS reads the home-screen name
-// from the built-in <title>/apple-mobile-web-app-title, not from later JS —
-// so set VITE_APP_TITLE (e.g. "Switch Leader App") for single-workspace apps.
-const APP_TITLE = process.env.VITE_APP_TITLE || 'Team Hub';
+// The product name, baked into the static HTML at build time — iOS reads the
+// home-screen name from <title>/apple-mobile-web-app-title, not from later JS.
+//
+// EVERY workspace installs under this one name and icon. The platform is still
+// multi-tenant, but each workspace is a Switch Leader team at a particular
+// location, not a separate product: one icon on the phone, one entry in the
+// stores, and the location's own name shown inside the app once you're in it.
+// Keep in step with PLATFORM_NAME in src/lib/appMetadata.ts.
+const APP_TITLE = process.env.VITE_APP_TITLE || 'Switch Leader App';
 
 // Replaces the placeholder title + apple title in index.html so the installed
-// app name is correct on iOS. (The manifest <link> is hardcoded in index.html
-// pointing at our dynamic /app-manifest endpoint — see that file — so each
-// workspace on this multi-tenant build installs under its own name.)
+// app name is correct on iOS.
 const injectAppTitle = {
   name: 'inject-app-title',
   transformIndexHtml(html: string) {
@@ -37,11 +40,30 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
-      // The install manifest is served dynamically per-workspace from the
-      // /app-manifest Pages Function, and index.html links to it directly, so we
-      // disable the plugin's own static manifest (one build serves many
-      // workspaces, so a baked name would be wrong for all but one).
-      manifest: false,
+      // A real, static manifest at a fixed URL — not the per-workspace one this
+      // used to generate at request time. Every install is "Switch Leader App",
+      // and the Play Store's TWA tooling needs a manifest file it can fetch and
+      // read at build time; a dynamic endpoint that varies by referer can't
+      // serve that purpose.
+      manifest: {
+        name: APP_TITLE,
+        short_name: APP_TITLE,
+        description: 'The app for Switch leaders — schedules, roster, and team chat.',
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        orientation: 'portrait',
+        theme_color: '#0f1420',
+        background_color: '#ffffff',
+        icons: [
+          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          // Android crops icons to whatever shape the launcher uses, so the
+          // maskable copy needs its artwork inside the safe circle or the edges
+          // get shaved off.
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+      },
       workbox: {
         // Cache the built app shell for offline use; runtime-cache published
         // content (Supabase reads) so a viewer can reopen the app offline.

@@ -6,17 +6,17 @@
     <meta name="theme-color" content="#0f1420" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!--
-      Multi-tenant PWA manifest: one build serves every workspace, so the
-      install name/icon can't be baked in. This points at a Pages Function that
-      resolves the current workspace (from the page's URL/Referer) and returns a
-      manifest with ITS name + icon — so "Add to Home Screen" shows the right
-      app name on iOS/Android. See functions/app-manifest.ts.
+      One manifest for the whole platform. Every workspace installs as "Switch
+      Leader App" with the same icon — the workspace's own name identifies the
+      location inside the app, not on the home screen. The title and apple title
+      below are replaced at build time (see injectAppTitle in vite.config.ts).
+      The <link rel="manifest"> itself is injected by vite-plugin-pwa from the
+      `manifest` block in vite.config.ts — don't add a second one here.
     -->
-    <link rel="manifest" href="/app-manifest" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Team Hub" />
-    <title>Team Hub</title>
+    <meta name="apple-mobile-web-app-title" content="Switch Leader App" />
+    <title>Switch Leader App</title>
     <script>
       // Apply dark mode before first paint to avoid a light flash.
       try {
