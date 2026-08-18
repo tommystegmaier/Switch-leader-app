@@ -120,11 +120,16 @@ function ChatInner({ orgId, title, userId, authorName, canModerate, canConfigure
   const markRead = useMarkChatRead(orgId);
   const mutedSet = new Set(mutes ?? []);
 
-  // Land on the subgroup they're in first (prefer an unread one), falling back
-  // to any subgroup, then any unread channel, then the first channel.
+  // Open on All Leaders. It's the one channel everybody can see, so opening
+  // there means the chat always starts somewhere familiar — landing on whichever
+  // subgroup happened to sort first showed people a channel they didn't
+  // recognise and hadn't chosen. The old order stays as the fallback for apps
+  // with no All Leaders channel: a subgroup (unread first), then any unread,
+  // then whatever is first.
   useEffect(() => {
     if (active || !channels || channels.length === 0) return;
     const pick =
+      channels.find((c) => c.isAll) ??
       channels.find((c) => c.parentId && c.unread > 0) ??
       channels.find((c) => c.parentId) ??
       channels.find((c) => c.unread > 0) ??
