@@ -5,7 +5,8 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import {
   useChatChannels, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useDeleteChatMessage,
-  useMarkChatRead, useSendChatMessage, useSetChatMute, useSetChatPostPolicy, useToggleReaction, useVoteChatPoll,
+  useMarkChatRead, useReportChatMessage, useSendChatMessage, useSetChatMute, useSetChatPostPolicy,
+  useToggleReaction, useVoteChatPoll,
   type ChatMessage, type ChatPostPolicy,
 } from '@/data/chatHooks';
 import { errorMessage } from '@/lib/errors';
@@ -281,6 +282,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
 
   const [text, setText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<ChatMessage | null>(null);
+  const [confirmReport, setConfirmReport] = useState<ChatMessage | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [photoMenu, setPhotoMenu] = useState<ChatMessage | null>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
@@ -481,6 +483,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
             onToggleBar={() => setReactingId((id) => (id === m.id ? null : m.id))}
             onReact={(emoji, wasMine) => react(m.id, emoji, wasMine)}
             onRequestDelete={() => { setReactingId(null); setConfirmDelete(m); }}
+            onRequestReport={() => { setReactingId(null); setConfirmReport(m); }}
             onOpenImage={(url) => setLightbox(url)}
             onHoldImage={() => setPhotoMenu(m)}
           />
@@ -604,7 +607,80 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
           onCancel={() => setConfirmDelete(null)}
         />
       )}
+      {confirmReport && (
+        <ConfirmReport
+          message={confirmReport}
+          onDone={() => setConfirmReport(null)}
+          onError={(m) => { setError(m); setConfirmReport(null); }}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * Confirm and send a report. Deliberately calm: someone reaching for this is
+ * usually upset, and a screen that shouts at them doesn't help. It says plainly
+ * where the report goes, takes an optional note, and does not tell the author.
+ */
+function ConfirmReport({ message, onDone, onError }: { message: ChatMessage; onDone: () => void; onError: (m: string) => void }) {
+  const report = useReportChatMessage();
+  const [reason, setReason] = useState('');
+  const [sent, setSent] = useState(false);
+
+  async function send() {
+    try {
+      await report.mutateAsync({ messageId: message.id, reason });
+      setSent(true);
+      setTimeout(onDone, 1600);
+    } catch (e) { onError(errorMessage(e)); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/50" onClick={report.isPending ? undefined : onDone} />
+      <div className="relative z-10 w-full max-w-sm rounded-t-3xl p-5 shadow-2xl sm:rounded-3xl" style={{ backgroundColor: 'var(--th-surface)', paddingBottom: 'max(env(safe-area-inset-bottom), 1.25rem)' }}>
+        {sent ? (
+          <>
+            <p className="text-center text-lg font-bold" style={{ color: 'var(--th-heading)' }}>Thank you</p>
+            <p className="mt-1 text-center text-sm text-gray-500">We&apos;ll take a look at this.</p>
+          </>
+        ) : (
+          <>
+            <h3 className="text-xl font-bold" style={{ color: 'var(--th-heading)' }}>Report this message?</h3>
+            <p className="mt-2 text-sm" style={{ color: 'var(--th-text)' }}>
+              It goes to the people who run the app, who can remove it and act on the account.
+              {message.authorName ? <> {message.authorName} won&apos;t be told you reported it.</> : ' The sender won’t be told you reported it.'}
+            </p>
+            <label className="mt-4 flex flex-col gap-1 text-sm">
+              <span className="font-medium">What&apos;s wrong with it? <span className="font-normal text-gray-500">(optional)</span></span>
+              <textarea
+                rows={3}
+                className="resize-none rounded-md border px-3 py-2 text-base"
+                style={{ borderColor: 'var(--th-hairline-strong)' }}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                disabled={report.isPending}
+              />
+            </label>
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void send()}
+                disabled={report.isPending}
+                className="w-full rounded-full px-6 py-3 text-base font-semibold text-white disabled:opacity-50"
+                style={{ backgroundColor: '#dc2626' }}
+              >
+                {report.isPending ? 'Sending…' : 'Send report'}
+              </button>
+              <button type="button" onClick={onDone} disabled={report.isPending} className="w-full rounded-full px-6 py-3 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1116,7 +1192,7 @@ function DeleteDot({ side, onClick }: { side: 'left' | 'right'; onClick: () => v
   );
 }
 
-function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete, onOpenImage, onHoldImage }: {
+function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete, onRequestReport, onOpenImage, onHoldImage }: {
   m: ChatMessage;
   mine: boolean;
   canDelete: boolean;
@@ -1127,6 +1203,7 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
   onToggleBar: () => void;
   onReact: (emoji: string, wasMine: boolean) => void;
   onRequestDelete: () => void;
+  onRequestReport: () => void;
   onOpenImage: (url: string) => void;
   onHoldImage: () => void;
 }) {
@@ -1239,10 +1316,26 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
         </div>
 
         {open && (
-          <div className={`absolute z-10 mt-1 flex gap-1 rounded-full border bg-white px-2 py-1 shadow ${mine ? 'right-0' : 'left-0'}`} style={cardStyle}>
+          <div className={`absolute z-10 mt-1 flex items-center gap-1 rounded-full border bg-white px-2 py-1 shadow ${mine ? 'right-0' : 'left-0'}`} style={cardStyle}>
             {REACTIONS.map((e) => (
               <button key={e} type="button" onClick={() => onReact(e, Boolean(reactions?.get(e)?.mine))} className="text-lg leading-none hover:scale-110">{e}</button>
             ))}
+            {/* Reporting lives at the end of the reaction bar rather than on the
+                message itself: it has to be there, but a flag sitting next to
+                every message all day would set a tone this app doesn't want.
+                Not shown on your own messages — you can just delete those. */}
+            {!mine && (
+              <button
+                type="button"
+                onClick={onRequestReport}
+                aria-label="Report this message"
+                title="Report this message"
+                className="ml-0.5 border-l pl-1.5 text-sm leading-none text-gray-400"
+                style={{ borderColor: 'var(--th-hairline)' }}
+              >
+                ⚑
+              </button>
+            )}
           </div>
         )}
       </div>

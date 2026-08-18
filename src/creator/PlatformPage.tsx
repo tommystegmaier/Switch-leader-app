@@ -7,7 +7,8 @@ import { compressImage, uploadMedia } from '@/lib/media';
 import {
   useIsPlatformAdmin, usePlatformAddAdmin, usePlatformAddTemplate, usePlatformAdmins, usePlatformApps,
   usePlatformDeleteApp, usePlatformJoinApp, usePlatformRemoveAdmin, usePlatformRemoveTemplate,
-  usePlatformSetBranding, usePlatformSetChatMedia, usePlatformSetUserDisabled, type PlatformApp,
+  usePlatformReports, usePlatformResolveReport, usePlatformSetBranding, usePlatformSetChatMedia,
+  usePlatformSetUserDisabled, type PlatformApp,
 } from '@/data/platformHooks';
 import { slugify, useAppTemplates, useDuplicateWorkspace } from '@/data/workspaceHooks';
 import { BrandHeader } from './BrandHeader';
@@ -62,6 +63,7 @@ export function PlatformPage() {
         </>
       )}
 
+      <ReportsSection />
       <AdminsSection currentUserId={user.id} />
     </div>
   );
@@ -359,6 +361,90 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * Reported messages. Both app stores require that flagged content reaches a
+ * human who can act on it — this is that human's screen.
+ *
+ * Shown even when empty, and placed above the admin list, because a moderation
+ * queue you have to remember to look for is one that stops being looked at.
+ * Each report carries a copy of what was said, so it still means something
+ * after the message itself is gone.
+ */
+function ReportsSection() {
+  const [showResolved, setShowResolved] = useState(false);
+  const { data: reports, isLoading } = usePlatformReports(true, showResolved);
+  const resolve = usePlatformResolveReport();
+  const [error, setError] = useState<string | null>(null);
+  const list = reports ?? [];
+  const open = list.filter((r) => !r.resolvedAt).length;
+
+  async function act(reportId: string, deleteMessage: boolean) {
+    setError(null);
+    try { await resolve.mutateAsync({ reportId, deleteMessage }); }
+    catch (e) { setError(errorMessage(e)); }
+  }
+
+  return (
+    <section className="mt-8 border-t pt-6" style={{ borderColor: 'var(--th-hairline)' }}>
+      <div className="mb-1 flex items-center gap-2">
+        <h2 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>Reported content</h2>
+        {open > 0 && (
+          <span className="rounded-full px-2 py-0.5 text-xs font-bold text-white" style={{ backgroundColor: '#dc2626' }}>{open}</span>
+        )}
+      </div>
+      <p className="mb-3 text-sm text-gray-500">
+        Messages people have flagged from inside the chat. The sender is never told who reported them.
+      </p>
+
+      {isLoading ? (
+        <p className="text-sm text-gray-500">Loading…</p>
+      ) : list.length === 0 ? (
+        <p className="text-sm text-gray-500">{showResolved ? 'Nothing reported yet.' : 'Nothing waiting. 🎉'}</p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {list.map((r) => (
+            <li key={r.id} className="rounded-xl border p-3" style={{ borderColor: r.resolvedAt ? 'var(--th-hairline)' : 'rgba(220,38,38,0.4)' }}>
+              <p className="text-xs text-gray-500">
+                {r.appName} · reported by {r.reporterName || 'someone'} · {new Date(r.createdAt).toLocaleString()}
+              </p>
+              <p className="mt-1 text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>{r.authorName || 'Unknown sender'} wrote:</p>
+              {r.bodyExcerpt
+                ? <p className="mt-0.5 whitespace-pre-wrap break-words rounded-lg bg-black/5 p-2 text-sm">{r.bodyExcerpt}</p>
+                : <p className="mt-0.5 text-sm italic text-gray-500">(no text)</p>}
+              {r.mediaUrl && (
+                <a href={r.mediaUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs underline" style={{ color: 'var(--th-primary)' }}>
+                  Open the attached file
+                </a>
+              )}
+              {r.reason && <p className="mt-1.5 text-sm"><span className="font-medium">Reason:</span> {r.reason}</p>}
+              <p className="mt-1.5 text-xs text-gray-500">{r.stillPosted ? 'Still posted.' : 'Already deleted.'}</p>
+
+              {r.resolvedAt ? (
+                <p className="mt-2 text-xs font-semibold text-gray-500">Handled {new Date(r.resolvedAt).toLocaleDateString()}</p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {r.stillPosted && (
+                    <button type="button" onClick={() => void act(r.id, true)} disabled={resolve.isPending} className="rounded-full px-3 py-1 text-xs font-semibold text-white disabled:opacity-50" style={{ backgroundColor: '#dc2626' }}>
+                      Delete the message
+                    </button>
+                  )}
+                  <button type="button" onClick={() => void act(r.id, false)} disabled={resolve.isPending} className="rounded-full border px-3 py-1 text-xs font-semibold disabled:opacity-50" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
+                    Leave it, mark handled
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      <button type="button" onClick={() => setShowResolved((v) => !v)} className="mt-3 text-xs underline text-gray-500">
+        {showResolved ? 'Show only what’s waiting' : 'Show handled reports too'}
+      </button>
+    </section>
   );
 }
 

@@ -7,6 +7,7 @@ import { CreateWorkspacePage } from '@/creator/CreateWorkspacePage';
 import { HomeRoute, WorkspacesRoute } from '@/creator/HomeRoute';
 import { PlatformPage } from '@/creator/PlatformPage';
 import { SettingsPage } from '@/editor/SettingsPage';
+import { PrivacyPage } from '@/legal/PrivacyPage';
 import { ViewerLayout } from '@/viewer/ViewerLayout';
 import { ViewerPage } from '@/viewer/ViewerPage';
 
@@ -47,6 +48,12 @@ export const router = createBrowserRouter([
   {
     path: '/join',
     element: <JoinPage />,
+  },
+  {
+    // Deliberately outside every sign-in guard: the app stores require a policy
+    // at a URL their reviewers can open cold, with no account.
+    path: '/privacy',
+    element: <PrivacyPage />,
   },
   {
     path: '/o/:slug',

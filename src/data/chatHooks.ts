@@ -359,3 +359,20 @@ export function useChatPageSlug(orgId: string | undefined) {
     },
   });
 }
+
+/**
+ * Flag a message for the people who run the platform.
+ *
+ * Nothing is invalidated on success: the message stays exactly where it is and
+ * the sender is told nothing. Reporting is a private act, and a list that
+ * visibly shifted underneath you afterwards would give that away.
+ */
+export function useReportChatMessage() {
+  return useMutation({
+    mutationFn: async ({ messageId, reason }: { messageId: string; reason?: string }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('report_chat_message', { p_message: messageId, p_reason: reason?.trim() || null });
+      if (error) throw error;
+    },
+  });
+}

@@ -22,6 +22,7 @@ import { getSupabase } from '@/lib/supabase';
 import { getDark, setDarkPref } from '@/lib/darkMode';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
 import { SendNotification } from '@/editor/SendNotification';
+import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { InstallPrompt } from './InstallPrompt';
 import { NotificationPrompt } from './NotificationPrompt';
 import { NotifyButton } from './NotifyButton';
@@ -40,6 +41,7 @@ export function ViewerLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [pagesOpen, setPagesOpen] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
 
   const { data: org, isLoading: orgLoading } = useOrganization(slug);
   const { data: publishedSettings } = useAppSettings(org?.id);
@@ -333,11 +335,24 @@ export function ViewerLayout() {
               )}
             </div>
 
-            {/* Which build this device is actually running. An installed PWA can
-                serve a cached version for a long time, so without this there's
-                no way to tell a stale client from a broken feature. */}
-            <div className="mx-auto max-w-screen-sm px-3 pb-2 text-[0.65rem]" style={{ color: 'var(--th-text)', opacity: 0.45 }}>
-              Version {new Date(__BUILD_TIME__).toLocaleString()}
+            {/* The fine print: which build this device is actually running (an
+                installed PWA can serve a cached version for a long time, so
+                without this there's no telling a stale client from a broken
+                feature), the privacy policy, and account deletion.
+
+                Deletion is required to be reachable but shouldn't invite a
+                curious tap, so it sits here at the very bottom, at the same
+                weight as the version string — findable when looked for, easy to
+                scroll past when not. The confirmation is what actually guards
+                it. */}
+            <div className="mx-auto flex max-w-screen-sm flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2 text-[0.65rem]" style={{ color: 'var(--th-text)', opacity: 0.45 }}>
+              <span>Version {new Date(__BUILD_TIME__).toLocaleString()}</span>
+              <Link to="/privacy" onClick={() => setMenuOpen(false)} className="underline">Privacy</Link>
+              {user && (
+                <button type="button" onClick={() => { setMenuOpen(false); setDeleteAccountOpen(true); }} className="underline">
+                  Delete account
+                </button>
+              )}
             </div>
           </nav>
         )}
@@ -404,6 +419,8 @@ export function ViewerLayout() {
           onClose={() => setPagesOpen(false)}
         />
       )}
+
+      {deleteAccountOpen && <DeleteAccountDialog onClose={() => setDeleteAccountOpen(false)} />}
     </div>
   );
 }

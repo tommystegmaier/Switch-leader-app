@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { applyHubMetadata } from '@/lib/appMetadata';
 import { useAuth } from './AuthProvider';
@@ -173,6 +173,10 @@ export function LoginPage() {
             ? 'Need an account? Create one'
             : 'Already have an account? Sign in'}
         </button>
+
+        {/* Reachable before signing in, which is where the stores (and anyone
+            deciding whether to make an account) expect to find it. */}
+        <Link to="/privacy" className="mt-6 text-xs text-gray-400 underline">Privacy Policy</Link>
       </div>
     </div>
   );

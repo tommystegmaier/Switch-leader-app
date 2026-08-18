@@ -202,3 +202,59 @@ export function usePlatformSetUserDisabled() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'apps'] }),
   });
 }
+
+export interface ContentReport {
+  id: string;
+  orgId: string;
+  appName: string;
+  messageId: string | null;
+  stillPosted: boolean;
+  reporterName: string | null;
+  authorName: string | null;
+  bodyExcerpt: string | null;
+  mediaUrl: string | null;
+  reason: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+/** Reported messages awaiting review (platform admins). */
+export function usePlatformReports(enabled = true, includeResolved = false) {
+  return useQuery({
+    queryKey: ['platform', 'reports', includeResolved],
+    enabled: enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<ContentReport[]> => {
+      const s = getSupabase(); if (!s) return [];
+      const { data, error } = await s.rpc('platform_list_reports', { p_include_resolved: includeResolved });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        orgId: r.org_id,
+        appName: r.app_name,
+        messageId: r.message_id ?? null,
+        stillPosted: Boolean(r.still_posted),
+        reporterName: r.reporter_name ?? null,
+        authorName: r.author_name ?? null,
+        bodyExcerpt: r.body_excerpt ?? null,
+        mediaUrl: r.media_url ?? null,
+        reason: r.reason ?? null,
+        createdAt: r.created_at,
+        resolvedAt: r.resolved_at ?? null,
+      }));
+    },
+  });
+}
+
+/** Close a report, optionally deleting the offending message in the same step. */
+export function usePlatformResolveReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ reportId, deleteMessage }: { reportId: string; deleteMessage: boolean }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('platform_resolve_report', { p_report: reportId, p_delete_message: deleteMessage });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'reports'] }),
+  });
+}

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useInviteInfo, useRedeemInvite } from '@/data/inviteHooks';
 import { errorMessage } from '@/lib/errors';
@@ -187,6 +187,10 @@ export function JoinPage() {
           <button type="button" onClick={() => { setMode((m) => (m === 'signup' ? 'signin' : 'signup')); setError(null); setNotice(null); }} className="text-sm underline">
             {mode === 'signup' ? 'Already have an account? Sign in' : 'Need an account? Create one'}
           </button>
+
+          {/* People are handing over a phone number and birthday on this screen;
+              the policy saying what happens to them belongs on it. */}
+          <Link to="/privacy" className="mt-2 self-start text-xs text-gray-400 underline">Privacy Policy</Link>
         </form>
       )}
     </Shell>
