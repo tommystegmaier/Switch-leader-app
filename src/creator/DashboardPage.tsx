@@ -8,6 +8,7 @@ import { errorMessage } from '@/lib/errors';
 import { useWorkspaceUnread } from '@/data/chatHooks';
 import { useIsPlatformAdmin } from '@/data/platformHooks';
 import { slugify, useDeleteWorkspace, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, type WorkspaceMembership } from '@/data/workspaceHooks';
+import { BrandHeader } from './BrandHeader';
 
 /**
  * "My Workspaces" — the creator home. Lists every app the signed-in user
@@ -38,9 +39,10 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
   // else is invited into an app that already exists. So creating (and
   // duplicating, which also produces a new app) is platform-admin only. The
   // RPCs enforce this too; hiding the button is just the polite half.
-  const ownsAny = list.some((w) => w.role === 'owner');
-  const isMemberOnly = hasApps && !ownsAny;
   const canCreate = Boolean(isPlatformAdmin);
+  // Brand mark for the masthead — taken from the apps themselves, same as the
+  // command center does, so there's no second logo setting to keep in sync.
+  const brandLogo = list.map((w) => w.iconUrl).find(Boolean) ?? null;
 
   // Unread chat totals per app → the red badge on each card. Also mirror the
   // grand total onto the Home Screen app icon while sitting on the hub, so the
@@ -55,8 +57,8 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-8" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.75rem)' }}>
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>{isMemberOnly ? 'My apps' : 'My workspaces'}</h1>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <BrandHeader logoUrl={brandLogo} subtitle="My apps" />
+      <div className="-mt-2 mb-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         {isPlatformAdmin && (
           <Link to="/platform" className="rounded-full px-3 py-1 font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>⚡ Command center</Link>
         )}

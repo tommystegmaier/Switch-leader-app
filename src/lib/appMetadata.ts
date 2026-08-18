@@ -39,6 +39,14 @@ export function applyWorkspaceMetadata(org: Organization, settings: AppSettings 
   ensureLink('manifest').href = `/app-manifest?${params.toString()}`;
 }
 
+/**
+ * The product this platform is. Every workspace on it is a Switch Leader app
+ * for a particular location, not a generic hub other ministries build on, so
+ * platform-level screens say so by name. One constant, so if that ever changes
+ * there's a single place to change it.
+ */
+export const PLATFORM_NAME = 'Switch Leader';
+
 /** The platform hub's name — shown at the root, outside any workspace. */
 export const HUB_TITLE = 'Create an app';
 

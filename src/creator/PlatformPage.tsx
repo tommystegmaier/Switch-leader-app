@@ -9,6 +9,7 @@ import {
   usePlatformSetChatMedia, usePlatformSetUserDisabled, type PlatformApp,
 } from '@/data/platformHooks';
 import { slugify, useAppTemplates, useDuplicateWorkspace } from '@/data/workspaceHooks';
+import { BrandHeader } from './BrandHeader';
 
 /**
  * Platform command center — for the owner of the WHOLE platform (the
@@ -34,12 +35,17 @@ export function PlatformPage() {
 
   const list = apps ?? [];
   const templateOrgIds = new Set((templates ?? []).map((t) => t.orgId));
+  // The brand mark comes from the apps themselves rather than a separate
+  // platform-logo setting: every app here is a Switch Leader app, so the first
+  // logo we find is the right one, and there's no second place to keep in sync.
+  const brandLogo = list.map((a) => a.logoUrl || a.iconUrl).find(Boolean) ?? null;
   return (
     <div className="mx-auto max-w-3xl px-4 pb-10" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.75rem)' }}>
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--th-heading)' }}>⚡ Command center</h1>
-        <Link to="/workspaces" className="text-sm text-gray-500 underline">My apps</Link>
-      </div>
+      <BrandHeader
+        logoUrl={brandLogo}
+        subtitle="⚡ Command center"
+        action={<Link to="/workspaces" className="text-sm text-gray-500 underline">My apps</Link>}
+      />
       <p className="mb-6 text-sm text-gray-500">Every app on the platform. You can open any one to troubleshoot, delete it, or disable an owner&apos;s account.</p>
 
       {appsLoading ? (

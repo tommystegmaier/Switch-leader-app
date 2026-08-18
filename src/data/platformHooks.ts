@@ -18,6 +18,8 @@ export interface PlatformApp {
   memberCount: number;
   owners: PlatformAppOwner[];
   chatMediaEnabled: boolean;
+  iconUrl: string | null;
+  logoUrl: string | null;
 }
 
 /** Is the signed-in user a platform admin? */
@@ -53,6 +55,8 @@ export function usePlatformApps(enabled = true) {
         memberCount: r.member_count ?? 0,
         owners: Array.isArray(r.owners) ? r.owners : [],
         chatMediaEnabled: r.chat_media_enabled !== false,
+        iconUrl: r.icon_url ?? null,
+        logoUrl: r.logo_url ?? null,
       }));
     },
   });
