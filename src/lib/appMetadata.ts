@@ -45,7 +45,7 @@ export function applyWorkspaceMetadata(org: Organization, settings: AppSettings 
  * platform-level screens say so by name. One constant, so if that ever changes
  * there's a single place to change it.
  */
-export const PLATFORM_NAME = 'Switch Leader';
+export const PLATFORM_NAME = 'Switch Leader App';
 
 /** The platform hub's name — shown at the root, outside any workspace. */
 export const HUB_TITLE = 'Create an app';
