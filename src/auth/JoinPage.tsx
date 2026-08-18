@@ -30,10 +30,16 @@ export function JoinPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Pre-fill the intended email once the invite loads.
+  // Pre-fill whatever the invite is addressed to once it loads. The phone
+  // matters more than the email here: the account has to match the number on
+  // the invite, and someone typing their own number a different way is the
+  // easiest way to get locked out of a link meant for them.
   useEffect(() => {
     if (info?.email && !email) setEmail(info.email);
   }, [info?.email]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (info?.phone && !phone) setPhone(info.phone);
+  }, [info?.phone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // If already signed in, join with one tap (handled by the button below).
   async function doRedeem() {

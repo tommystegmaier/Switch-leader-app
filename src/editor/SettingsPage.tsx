@@ -349,8 +349,11 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
   const setRole = useSetMemberRole(orgId);
   const removeMember = useRemoveMember(orgId);
 
-  const [inviteRole, setInviteRole] = useState<Role>('editor');
+  // Viewer by default — see the invite block: a role is far easier to raise
+  // later than to discover you handed out by accident.
+  const [inviteRole, setInviteRole] = useState<Role>('viewer');
   const [inviteEmail, setInviteEmail] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<string | null>(null);
@@ -378,8 +381,9 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
   async function onCreate() {
     setError(null);
     try {
-      const code = await createInvite.mutateAsync({ role: inviteRole, email: inviteEmail });
+      const code = await createInvite.mutateAsync({ role: inviteRole, email: inviteEmail, phone: invitePhone });
       setInviteEmail('');
+      setInvitePhone('');
       await copy(joinLinkFor(code));
     } catch (e) {
       setError(errorMessage(e));
@@ -499,12 +503,20 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
           />
+          <input
+            type="tel"
+            autoComplete="tel"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            placeholder="Or their phone number (optional)"
+            value={invitePhone}
+            onChange={(e) => setInvitePhone(e.target.value)}
+          />
           <div className="flex flex-wrap items-center gap-2">
             <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
+              <option value="viewer">{ROLE_LABEL.viewer}</option>
               <option value="editor">{ROLE_LABEL.editor}</option>
               <option value="admin">{ROLE_LABEL.admin}</option>
               {isOwner && <option value="owner">{ROLE_LABEL.owner}</option>}
-              <option value="viewer">{ROLE_LABEL.viewer}</option>
             </select>
             <button
               type="button"
@@ -526,7 +538,9 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
               return (
                 <li key={inv.id} className="flex items-center justify-between gap-2">
                   <span className="min-w-0 flex-1 truncate rounded bg-black/5 px-2 py-1 text-xs">
-                    {ROLE_LABEL[inv.role] ?? inv.role}{inv.email && <span className="text-gray-500"> · {inv.email}</span>}
+                    {ROLE_LABEL[inv.role] ?? inv.role}
+                    {inv.email && <span className="text-gray-500"> · {inv.email}</span>}
+                    {inv.phone && <span className="text-gray-500"> · {inv.phone}</span>}
                   </span>
                   <div className="flex shrink-0 items-center gap-2">
                     <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-black/5" onClick={() => copy(link)}>

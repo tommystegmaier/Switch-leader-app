@@ -8,6 +8,7 @@ export interface Invite {
   code: string;
   role: Role;
   email: string | null;
+  phone: string | null;
   expiresAt: string | null;
 }
 
@@ -21,12 +22,12 @@ export function useInvites(orgId: string | undefined, enabled: boolean) {
       if (!s || !orgId) return [];
       const { data, error } = await s
         .from('invites')
-        .select('id, code, role, email, expires_at')
+        .select('id, code, role, email, phone, expires_at')
         .eq('org_id', orgId)
         .order('created_at', { ascending: false });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, code: r.code, role: r.role, email: r.email ?? null, expiresAt: r.expires_at }));
+      return (data ?? []).map((r: any) => ({ id: r.id, code: r.code, role: r.role, email: r.email ?? null, phone: r.phone ?? null, expiresAt: r.expires_at }));
     },
   });
 }
@@ -34,10 +35,15 @@ export function useInvites(orgId: string | undefined, enabled: boolean) {
 export function useCreateInvite(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ role = 'viewer' as Role, email }: { role?: Role; email?: string }) => {
+    mutationFn: async ({ role = 'viewer' as Role, email, phone }: { role?: Role; email?: string; phone?: string }) => {
       const s = getSupabase();
       if (!s) throw new Error('Backend not configured.');
-      const { data, error } = await s.rpc('create_invite', { p_org: orgId, p_role: role, p_email: email?.trim() || null });
+      const { data, error } = await s.rpc('create_invite', {
+        p_org: orgId,
+        p_role: role,
+        p_email: email?.trim() || null,
+        p_phone: phone?.trim() || null,
+      });
       if (error) throw error;
       return data as string;
     },
@@ -56,6 +62,7 @@ export interface InviteInfo {
   headingColor: string;
   role: Role;
   email: string | null;
+  phone: string | null;
   valid: boolean;
 }
 
@@ -82,6 +89,7 @@ export function useInviteInfo(code: string | undefined) {
         headingColor: row.heading_color || '#1c2541',
         role: row.role,
         email: row.email ?? null,
+        phone: row.phone ?? null,
         valid: row.valid,
       };
     },

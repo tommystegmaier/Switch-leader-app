@@ -36,8 +36,12 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
   const createInvite = useCreateInvite(org?.id ?? '');
   const revokeInvite = useRevokeInvite(org?.id ?? '');
 
-  const [inviteRole, setInviteRole] = useState<Role>('editor');
+  // Viewer by default: most invites go to leaders who only need to look, and a
+  // role is far easier to raise later than to discover you handed out by
+  // accident. Anything more has to be chosen deliberately.
+  const [inviteRole, setInviteRole] = useState<Role>('viewer');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -59,8 +63,9 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
   async function onCreate() {
     setError(null);
     try {
-      const code = await createInvite.mutateAsync({ role: inviteRole, email });
+      const code = await createInvite.mutateAsync({ role: inviteRole, email, phone });
       setEmail('');
+      setPhone('');
       await copy(joinLinkFor(code));
     } catch (e) { setError(errorMessage(e)); }
   }
@@ -85,16 +90,19 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
       </button>
       {!open ? null : (
       <>
-      <p className="mb-3 mt-2 text-sm text-gray-500">Create a join link with a role. Optionally tie it to someone&apos;s email so only they can use it.</p>
+      <p className="mb-3 mt-2 text-sm text-gray-500">Create a join link with a role. Optionally tie it to someone&apos;s email or phone number so only they can use it.</p>
 
       <div className="flex flex-col gap-2">
         <input type="email" className={input} placeholder="Their email (optional — ties the link to them)" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input type="tel" autoComplete="tel" className={input} placeholder="Or their phone number (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <div className="flex flex-wrap items-center gap-2">
+          {/* Viewer first as well as default — the list reads least-access-first,
+              so the safe choice is the one under your thumb. */}
           <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
+            <option value="viewer">{ROLE_LABEL.viewer}</option>
             <option value="editor">{ROLE_LABEL.editor}</option>
             <option value="admin">{ROLE_LABEL.admin}</option>
             {isOwner && <option value="owner">{ROLE_LABEL.owner}</option>}
-            <option value="viewer">{ROLE_LABEL.viewer}</option>
           </select>
           <button type="button" onClick={onCreate} disabled={createInvite.isPending} className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
             {createInvite.isPending ? 'Creating…' : 'Create invite link'}
@@ -110,7 +118,9 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
             return (
               <li key={inv.id} className="flex items-center justify-between gap-2">
                 <span className="min-w-0 flex-1 truncate rounded bg-black/5 px-2 py-1 text-xs">
-                  {ROLE_LABEL[inv.role] ?? inv.role}{inv.email && <span className="text-gray-500"> · {inv.email}</span>}
+                  {ROLE_LABEL[inv.role] ?? inv.role}
+                  {inv.email && <span className="text-gray-500"> · {inv.email}</span>}
+                  {inv.phone && <span className="text-gray-500"> · {inv.phone}</span>}
                 </span>
                 <div className="flex shrink-0 items-center gap-2">
                   <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-black/5" onClick={() => copy(link)}>{copied === link ? 'Copied ✓' : 'Copy link'}</button>
