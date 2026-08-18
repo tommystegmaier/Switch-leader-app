@@ -21,6 +21,7 @@ import { ensurePushSubscribed } from '@/lib/push';
 import { getSupabase } from '@/lib/supabase';
 import { getDark, setDarkPref } from '@/lib/darkMode';
 import { applyWorkspaceMetadata } from '@/lib/appMetadata';
+import { forceAppUpdate } from '@/lib/appUpdate';
 import { SendNotification } from '@/editor/SendNotification';
 import { BlockedPeopleDialog } from './BlockedPeopleDialog';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
@@ -44,6 +45,7 @@ export function ViewerLayout() {
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [blockedOpen, setBlockedOpen] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   const { data: org, isLoading: orgLoading } = useOrganization(slug);
   const { data: publishedSettings } = useAppSettings(org?.id);
@@ -350,7 +352,19 @@ export function ViewerLayout() {
                 scroll past when not. The confirmation is what actually guards
                 it. */}
             <div className="mx-auto flex max-w-screen-sm flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2 text-[0.65rem]" style={{ color: 'var(--th-text)', opacity: 0.45 }}>
-              <span>Version {new Date(__BUILD_TIME__).toLocaleString()}</span>
+              {/* Tapping the version forces this device onto the newest build.
+                  The automatic check usually gets there first, but a suspended
+                  home-screen app or a desktop tab left open for hours can sit
+                  on old code, which is indistinguishable from a feature never
+                  having shipped. This is the one thing to tell someone to try. */}
+              <button
+                type="button"
+                onClick={() => { setUpdating(true); void forceAppUpdate(); }}
+                className="underline"
+                title="Reload the app on the newest version"
+              >
+                {updating ? 'Updating…' : `Version ${new Date(__BUILD_TIME__).toLocaleString()}`}
+              </button>
               <Link to="/privacy" onClick={() => setMenuOpen(false)} className="underline">Privacy</Link>
               {/* Only once there's something to manage — for almost everyone
                   this never appears, and an empty "Hidden people" entry would

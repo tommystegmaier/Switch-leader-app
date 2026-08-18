@@ -43,6 +43,12 @@ if ('serviceWorker' in navigator) {
       const check = () => { if (document.visibilityState === 'visible') void reg.update(); };
       document.addEventListener('visibilitychange', check);
       window.addEventListener('focus', check);
+      // Reopening an installed app on iOS usually RESTORES the page rather than
+      // loading it, so neither of the above necessarily fires and the timer
+      // below hasn't been running while the app was suspended. pageshow does
+      // fire on a restore, and is what makes reopening the app pick up a new
+      // deploy — the same blind spot that once broke visit tracking.
+      window.addEventListener('pageshow', check);
       // Check right away, then poll — so even a tab that stays open for hours
       // (a desktop browser left on the page) picks up new deploys on its own.
       check();
