@@ -258,3 +258,25 @@ export function usePlatformResolveReport() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'reports'] }),
   });
 }
+
+/**
+ * Put an existing account into an app. The rescue hatch for someone who signed
+ * up but never landed anywhere — another invite can't help them, because the
+ * sign-up form only tells them they already have an account.
+ *
+ * Resolves to a short description of what happened, so the UI can distinguish
+ * "added" from "their role was changed".
+ */
+export function usePlatformAddMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ orgId, email, role }: { orgId: string; email: string; role: string }): Promise<{ existed: boolean; email: string }> => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { data, error } = await s.rpc('platform_add_member', { p_org: orgId, p_email: email.trim(), p_role: role });
+      if (error) throw error;
+      const out = String(data ?? '');
+      return { existed: out.startsWith('updated:'), email: out.replace(/^(added|updated):/, '') };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'apps'] }),
+  });
+}

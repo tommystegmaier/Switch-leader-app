@@ -7,8 +7,8 @@ import { compressImage, uploadMedia } from '@/lib/media';
 import {
   useIsPlatformAdmin, usePlatformAddAdmin, usePlatformAddTemplate, usePlatformAdmins, usePlatformApps,
   usePlatformDeleteApp, usePlatformJoinApp, usePlatformRemoveAdmin, usePlatformRemoveTemplate,
-  usePlatformReports, usePlatformResolveReport, usePlatformSetBranding, usePlatformSetChatMedia,
-  usePlatformSetUserDisabled, type PlatformApp,
+  usePlatformAddMember, usePlatformReports, usePlatformResolveReport, usePlatformSetBranding,
+  usePlatformSetChatMedia, usePlatformSetUserDisabled, type PlatformApp,
 } from '@/data/platformHooks';
 import { slugify, useAppTemplates, useDuplicateWorkspace } from '@/data/workspaceHooks';
 import { BrandHeader } from './BrandHeader';
@@ -194,6 +194,7 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
   const [dupSlug, setDupSlug] = useState('');
   const [dupSlugEdited, setDupSlugEdited] = useState(false);
   const [brandOpen, setBrandOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const effectiveSlug = dupSlugEdited ? dupSlug : slugify(dupName);
@@ -275,6 +276,9 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
         <button type="button" onClick={() => { setBrandOpen((v) => !v); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
           Logo &amp; icon
         </button>
+        <button type="button" onClick={() => { setAddOpen((v) => !v); setError(null); }} className="rounded-full border px-4 py-1.5 text-xs font-semibold" style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}>
+          Add a person
+        </button>
         <button
           type="button"
           onClick={() => { setError(null); setChatMedia.mutate({ orgId: app.orgId, enabled: !app.chatMediaEnabled }, { onError: (e) => setError(errorMessage(e)) }); }}
@@ -302,6 +306,7 @@ function AppRow({ app, isTemplate }: { app: PlatformApp; isTemplate: boolean }) 
       </div>
 
       {brandOpen && <BrandingEditor app={app} onError={setError} />}
+      {addOpen && <AddPersonPanel app={app} onError={setError} />}
 
       {tplOpen && !isTemplate && (
         <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
@@ -445,6 +450,82 @@ function ReportsSection() {
         {showResolved ? 'Show only what’s waiting' : 'Show handled reports too'}
       </button>
     </section>
+  );
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  viewer: 'Viewer (can only look)',
+  editor: 'Editor (can edit the app)',
+  admin: 'Admin (can edit + manage people)',
+  owner: 'Owner (full control)',
+};
+
+/**
+ * Put an existing account straight into this app.
+ *
+ * Invites assume someone starts from the link and finishes in one sitting.
+ * When that breaks down — a general share-anyone link, or a sign-up interrupted
+ * by email confirmation — they end up with a real account belonging to no app,
+ * and sending another invite is the one thing that cannot help: the sign-up
+ * form just tells them they already have an account. This is the way out.
+ */
+function AddPersonPanel({ app, onError }: { app: PlatformApp; onError: (m: string | null) => void }) {
+  const addMember = usePlatformAddMember();
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('viewer');
+  const [done, setDone] = useState<string | null>(null);
+
+  async function run() {
+    onError(null);
+    setDone(null);
+    if (!email.trim()) return onError('Enter the email they signed up with.');
+    try {
+      const res = await addMember.mutateAsync({ orgId: app.orgId, email, role });
+      setDone(res.existed
+        ? `${res.email} was already in this app — their role is now ${role}.`
+        : `${res.email} has been added as ${role}.`);
+      setEmail('');
+    } catch (e) { onError(errorMessage(e)); }
+  }
+
+  return (
+    <div className="mt-3 flex flex-col gap-2 border-t pt-3" style={{ borderColor: 'var(--th-hairline)' }}>
+      <p className="text-xs text-gray-500">
+        Adds someone who <strong>already has an account</strong> straight into {app.appName} — no invite link, no email.
+        Use it when a sign-up didn&apos;t attach them to the right app. It can&apos;t create accounts: they have to have signed up first.
+      </p>
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium">Their email</span>
+        <input
+          type="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          className="rounded-md border px-3 py-2 text-sm"
+          style={{ borderColor: 'var(--th-hairline-strong)' }}
+          placeholder="name@example.com"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setDone(null); }}
+        />
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <select className="rounded-md border px-2 py-2 text-sm" style={{ borderColor: 'var(--th-hairline-strong)' }} value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="viewer">{ROLE_LABEL.viewer}</option>
+          <option value="editor">{ROLE_LABEL.editor}</option>
+          <option value="admin">{ROLE_LABEL.admin}</option>
+          <option value="owner">{ROLE_LABEL.owner}</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => void run()}
+          disabled={addMember.isPending}
+          className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+        >
+          {addMember.isPending ? 'Adding…' : 'Add to this app'}
+        </button>
+      </div>
+      {done && <p className="text-sm font-medium text-green-700">{done}</p>}
+    </div>
   );
 }
 
