@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useInviteInfo, useRedeemInvite } from '@/data/inviteHooks';
 import { errorMessage } from '@/lib/errors';
+import { clearPendingInvite, rememberInvite } from '@/lib/pendingInvite';
 import { useAuth } from './AuthProvider';
 
 /**
@@ -41,9 +42,16 @@ export function JoinPage() {
     if (info?.phone && !phone) setPhone(info.phone);
   }, [info?.phone]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Stash the code immediately. Creating an account here doesn't necessarily
+  // sign you in — with email confirmation on, the person leaves for their inbox
+  // and comes back through a plain sign-in, by which point the code is only in
+  // the URL of a page they've closed. Remembering it lets the join finish later.
+  useEffect(() => { if (code) rememberInvite(code); }, [code]);
+
   // If already signed in, join with one tap (handled by the button below).
   async function doRedeem() {
     const slug = await redeem.mutateAsync(code);
+    clearPendingInvite();
     navigate(`/o/${slug}`, { replace: true });
   }
 
@@ -61,7 +69,21 @@ export function JoinPage() {
         mode === 'signup'
           ? await signUp(email.trim(), password, { name, birthday, phone })
           : await signIn(email.trim(), password);
-      if (err) { setError(err); setBusy(false); return; }
+      if (err) {
+        // "You already have an account" is a dead end when the page is sitting
+        // on the sign-up form: the fix is to sign in instead, and the person
+        // has no way of knowing that. Do it for them rather than reporting it.
+        if (mode === 'signup' && /already (registered|exists)|already been registered|User already/i.test(err)) {
+          setMode('signin');
+          setError(null);
+          setNotice('You already have an account — enter your password to sign in and join.');
+          setBusy(false);
+          return;
+        }
+        setError(err);
+        setBusy(false);
+        return;
+      }
       // signUp may or may not create an immediate session (depends on whether
       // email confirmation is on). If we're signed in now, redeem right away.
       if (mode === 'signup') {
@@ -73,7 +95,7 @@ export function JoinPage() {
           if (data.session) {
             try { await doRedeem(); } catch (er) { setError(errorMessage(er)); setBusy(false); }
           } else {
-            setNotice('Account created! Check your email to confirm it, then open this invite link again to finish joining.');
+            setNotice('Account created! Check your email to confirm it, then sign in — you’ll be added to the app automatically.');
             setBusy(false);
           }
         }, 400);

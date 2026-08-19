@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { applyHubMetadata } from '@/lib/appMetadata';
 import { setAppBadge } from '@/lib/badge';
 import { errorMessage } from '@/lib/errors';
+import { clearPendingInvite, getPendingInvite } from '@/lib/pendingInvite';
 import { useWorkspaceUnread } from '@/data/chatHooks';
+import { useRedeemInvite } from '@/data/inviteHooks';
 import { useIsPlatformAdmin } from '@/data/platformHooks';
 import { slugify, useDeleteWorkspace, useDuplicateWorkspace, useMyWorkspaces, useRenameWorkspace, type WorkspaceMembership } from '@/data/workspaceHooks';
 import { BrandHeader } from './BrandHeader';
@@ -20,6 +23,9 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
   const { data: workspaces, isLoading } = useMyWorkspaces();
   const { data: isPlatformAdmin } = useIsPlatformAdmin(Boolean(user));
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const redeem = useRedeemInvite();
+  const [joinError, setJoinError] = useState<string | null>(null);
   useEffect(() => { applyHubMetadata(); }, []);
 
   // Only when this hub is the app's initial landing (root route) do we skip it
@@ -50,6 +56,22 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
   const { byOrg, total } = useWorkspaceUnread(list.map((w) => w.org.id));
   useEffect(() => { setAppBadge(total); }, [total]);
 
+  // Finish a join that got interrupted by email confirmation. Signing up from
+  // an invite link doesn't sign you in when confirmation is on, so people
+  // confirm, sign in normally, and land here belonging to nothing — which is
+  // exactly the moment to cash in the code they arrived with. Cleared whatever
+  // the outcome: a dead code retried on every load is a worse dead end than the
+  // one it replaced.
+  useEffect(() => {
+    if (!user) return;
+    const code = getPendingInvite();
+    if (!code) return;
+    clearPendingInvite();
+    redeem.mutateAsync(code)
+      .then((slug) => { void qc.invalidateQueries({ queryKey: ['my-workspaces'] }); navigate(`/o/${slug}`, { replace: true }); })
+      .catch((e) => setJoinError(errorMessage(e)));
+  }, [user, redeem, qc, navigate]);
+
   // While we redirect a single-app user, don't flash the hub.
   if (isLoading || skipToSingle) {
     return <div className="mx-auto max-w-2xl px-4 pb-8 text-sm text-gray-500" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.75rem)' }}>Opening your app…</div>;
@@ -66,6 +88,15 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
         <button type="button" onClick={() => void signOut()} className="underline" style={{ color: 'var(--th-text)' }}>Sign out</button>
       </div>
       <p className="mb-6 mt-3 text-sm" style={{ color: 'var(--th-text)', opacity: 0.6 }}>Signed in as {user?.email}</p>
+
+      {/* Why the invite they arrived with didn't work — expired, or addressed
+          to a different email. Without this the automatic join just silently
+          does nothing, which is how they got stranded in the first place. */}
+      {joinError && (
+        <p className="mb-6 rounded-lg p-3 text-sm" style={{ backgroundColor: 'rgba(220,38,38,0.08)', color: '#b91c1c' }}>
+          We couldn&apos;t finish adding you to that app: {joinError}
+        </p>
+      )}
 
       {hasApps ? (
         <ul className="mb-6 flex flex-col gap-3">
