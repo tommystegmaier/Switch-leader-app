@@ -206,7 +206,7 @@ export function JoinPage() {
 
           {/* People are handing over a phone number and birthday on this screen;
               the policy saying what happens to them belongs on it. */}
-          <Link to="/privacy" className="mt-2 self-start text-xs text-gray-400 underline">Privacy Policy</Link>
+          <Link to="/privacy" className="mt-4 self-start text-xs text-gray-400 underline">Privacy Policy</Link>
         </form>
       )}
     </Shell>

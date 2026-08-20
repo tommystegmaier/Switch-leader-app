@@ -337,7 +337,7 @@ export function ViewerLayout() {
               {user ? (
                 <button type="button" onClick={() => { setMenuOpen(false); void signOut(); }} className="underline">Sign out ({user.email})</button>
               ) : (
-                <Link to={`/login?next=${encodeURIComponent(location.pathname)}`} onClick={() => setMenuOpen(false)} className="underline">Admin sign in</Link>
+                <Link to={`/login?next=${encodeURIComponent(location.pathname)}`} onClick={() => setMenuOpen(false)} className="underline">Sign in</Link>
               )}
             </div>
 
