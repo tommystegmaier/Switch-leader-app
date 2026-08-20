@@ -9,6 +9,8 @@ import { useOrganization, usePageBlocks, usePublishedPages } from '@/data/hooks'
 import { useLivePageBlocks } from '@/data/liveContent';
 import { useAllPages } from '@/data/pageHooks';
 import { useEditMode } from '@/editor/EditModeProvider';
+import { colorIsDark } from '@/lib/colors';
+import { useDark } from '@/lib/darkMode';
 import { readableTextOn } from '@/lib/theme';
 
 // The whole editing surface (Tiptap, dnd-kit, property drawer) is loaded only
@@ -126,18 +128,34 @@ export function ViewerPage() {
 
 /**
  * "Only admins can see this page" strip, in the workspace's accent color.
- * The label color is computed from the accent at runtime so it stays legible
- * whatever accent someone picks.
+ *
+ * Being legible isn't enough — it has to stand out from the PAGE. A near-black
+ * accent gives a black strip with white text, which reads perfectly well in
+ * light mode and then all but vanishes against a dark background: the whole
+ * point of the strip is that you notice it without looking for it. So when the
+ * accent is itself dark and the page has gone dark, the two colours swap and it
+ * becomes a light strip with dark text. A light or bright accent already
+ * contrasts on either background and is left as it is.
+ *
+ * Sized to match a level-1 heading, so it reads as a statement about the page
+ * rather than a caption on it.
  */
 function AdminOnlyBanner() {
+  const dark = useDark();
   const accent = typeof window !== 'undefined'
     ? getComputedStyle(document.documentElement).getPropertyValue('--th-accent').trim()
     : '';
-  const bg = accent || '#e23b2e';
+  const base = accent || '#e23b2e';
+  const label = readableTextOn(base);
+  const swap = dark && colorIsDark(base);
   return (
     <div
-      className="w-full rounded-xl px-4 py-3 text-center text-base font-bold tracking-wide"
-      style={{ backgroundColor: bg, color: readableTextOn(bg), boxShadow: '0 1px 4px rgba(0,0,0,0.14)' }}
+      className="w-full rounded-xl px-4 py-3 text-center text-3xl font-bold tracking-wide"
+      style={{
+        backgroundColor: swap ? label : base,
+        color: swap ? base : label,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.14)',
+      }}
       role="note"
     >
       This page is only viewable to admins

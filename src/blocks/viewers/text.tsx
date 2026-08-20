@@ -39,7 +39,15 @@ export function HeadingView({ props }: { props: HeadingProps }) {
   const cls = `font-bold ${alignClass(props.align)} ${
     props.underline ? 'underline underline-offset-4' : ''
   } ${props.level === 1 ? 'text-3xl' : props.level === 2 ? 'text-2xl' : 'text-xl'}`;
-  const style = { color: props.color || 'var(--th-heading)' };
+  // A heading colour picked while in light mode is stored on the block, so it
+  // stays dark when the page turns dark and the text all but disappears. Same
+  // problem the divider below already solves: a dark custom colour gives way to
+  // the theme's heading colour, which does follow the mode. A light or bright
+  // choice is deliberate contrast and is left alone.
+  const dark = useDark();
+  const style = {
+    color: !props.color || (dark && colorIsDark(props.color)) ? 'var(--th-heading)' : props.color,
+  };
   if (props.level === 1) return <h1 className={cls} style={style}>{props.text}</h1>;
   if (props.level === 2) return <h2 className={cls} style={style}>{props.text}</h2>;
   return <h3 className={cls} style={style}>{props.text}</h3>;
