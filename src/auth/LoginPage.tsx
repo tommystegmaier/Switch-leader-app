@@ -57,19 +57,20 @@ export function LoginPage() {
       return;
     }
 
-    const { error: err } =
+    const { error: err, signedIn } =
       mode === 'signin'
-        ? await signIn(email.trim(), password)
+        ? { ...(await signIn(email.trim(), password)), signedIn: true }
         : await signUp(email.trim(), password, { name, birthday, phone });
     setBusy(false);
     if (err) {
       setError(err);
       return;
     }
-    if (mode === 'signup') {
-      setNotice(
-        'Account created. If email confirmation is enabled, check your inbox, then sign in.',
-      );
+    // Only ask them to sign in if they actually aren't. Sign-up returns a
+    // session when email confirmation is off, and telling someone who is
+    // already logged in to log in reads as the account not having worked.
+    if (mode === 'signup' && !signedIn) {
+      setNotice('Account created. Check your inbox to confirm it, then sign in.');
       setMode('signin');
       return;
     }

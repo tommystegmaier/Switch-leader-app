@@ -65,10 +65,10 @@ export function JoinPage() {
     }
     setBusy(true);
     try {
-      const { error: err } =
+      const { error: err, signedIn } =
         mode === 'signup'
           ? await signUp(email.trim(), password, { name, birthday, phone })
-          : await signIn(email.trim(), password);
+          : { ...(await signIn(email.trim(), password)), signedIn: true };
       if (err) {
         // "You already have an account" is a dead end when the page is sitting
         // on the sign-up form: the fix is to sign in instead, and the person
@@ -84,21 +84,15 @@ export function JoinPage() {
         setBusy(false);
         return;
       }
-      // signUp may or may not create an immediate session (depends on whether
-      // email confirmation is on). If we're signed in now, redeem right away.
-      if (mode === 'signup') {
-        // Give the auth state a beat to settle, then check.
-        setTimeout(async () => {
-          const { getSupabase } = await import('@/lib/supabase');
-          const s = getSupabase();
-          const { data } = (await s?.auth.getSession()) ?? { data: { session: null } };
-          if (data.session) {
-            try { await doRedeem(); } catch (er) { setError(errorMessage(er)); setBusy(false); }
-          } else {
-            setNotice('Account created! Check your email to confirm it, then sign in — you’ll be added to the app automatically.');
-            setBusy(false);
-          }
-        }, 400);
+      // Sign-up only signs you in when email confirmation is off, so whether we
+      // can join right now comes straight from the sign-up response. This used
+      // to be a guess: wait 400ms, then look for a session. On a slow phone the
+      // session wasn't visible yet, so it took the "check your email" branch,
+      // never redeemed the code, and left the person with an account belonging
+      // to no app — intermittently, which is the worst kind.
+      if (mode === 'signup' && !signedIn) {
+        setNotice('Account created! Check your email to confirm it, then sign in — you’ll be added to the app automatically.');
+        setBusy(false);
         return;
       }
       await doRedeem();
