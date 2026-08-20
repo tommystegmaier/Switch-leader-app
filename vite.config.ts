@@ -28,15 +28,42 @@ const injectAppTitle = {
   },
 };
 
+// Identifies this build. Baked into the bundle AND written to /version.json, so
+// a running copy can compare the two and know it's out of date.
+const BUILD_ID = new Date().toISOString();
+
+/**
+ * Emit /version.json — the whole update mechanism turns on this file.
+ *
+ * index.html is precached and navigateFallback points at it, which means the
+ * service worker answers every navigation from its cache. Reloading the page
+ * therefore CANNOT fetch new HTML: the only way to get new code is for the
+ * worker itself to update, and browsers decide when to check for that on their
+ * own schedule. That is why a deploy could sit unnoticed for hours and why
+ * "just reload" didn't help.
+ *
+ * A version file sidesteps all of it. It's a few dozen bytes, served
+ * uncached, fetched directly rather than as a navigation — so it always
+ * reflects what's actually deployed, whatever the worker believes.
+ */
+const emitVersion = {
+  name: 'emit-version',
+  generateBundle() {
+    // @ts-expect-error — rollup plugin context, not typed here
+    this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_ID }) });
+  },
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
   // Surfaced in the menu so a user can read back which build they're on —
   // an installed PWA can silently serve a cached version for a long time.
-  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
+  define: { __BUILD_TIME__: JSON.stringify(BUILD_ID) },
   plugins: [
     react(),
     tailwindcss(),
     injectAppTitle,
+    emitVersion,
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],

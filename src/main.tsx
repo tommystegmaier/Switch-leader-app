@@ -7,6 +7,7 @@ import { AuthProvider } from '@/auth/AuthProvider';
 import { EditModeProvider } from '@/editor/EditModeProvider';
 import { queryClient } from '@/lib/queryClient';
 import { router } from '@/router';
+import { UpdateGate } from './UpdateGate';
 import './index.css';
 
 const rootEl = document.getElementById('root');
@@ -20,6 +21,9 @@ createRoot(rootEl).render(
       <AuthProvider>
         <EditModeProvider>
           <RouterProvider router={router} />
+          {/* Outside the router on purpose: a stale build has to be caught on
+              every screen, including the sign-in page nobody is logged in on. */}
+          <UpdateGate />
         </EditModeProvider>
       </AuthProvider>
     </QueryClientProvider>

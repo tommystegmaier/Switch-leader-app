@@ -14,3 +14,7 @@
   Cache-Control: public, max-age=0, must-revalidate
 /manifest.webmanifest
   Cache-Control: public, max-age=0, must-revalidate
+# The file every running copy polls to find out whether it's stale. A cached
+# copy of THIS would defeat the entire mechanism, so it is never stored.
+/version.json
+  Cache-Control: no-store

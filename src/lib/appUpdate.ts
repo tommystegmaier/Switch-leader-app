@@ -13,6 +13,29 @@
  * caches holding the app shell, then reload with nothing left to serve a stale
  * copy. The page re-registers the worker on the way back up.
  */
+/** The build this running copy came from. */
+export const CURRENT_BUILD = __BUILD_TIME__;
+
+/**
+ * Which build is actually deployed, or null if we couldn't find out.
+ *
+ * Fetched with `cache: 'no-store'` and as a plain request rather than a
+ * navigation, so neither the browser cache nor the service worker's precached
+ * app shell can answer it with something stale — which is the entire point.
+ * Null on any failure: offline is not the same as out of date, and treating it
+ * that way would reload people's phones every time they lost signal.
+ */
+export async function fetchDeployedBuild(): Promise<string | null> {
+  try {
+    const res = await fetch('/version.json', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const body = await res.json();
+    return typeof body?.build === 'string' ? body.build : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function forceAppUpdate(): Promise<void> {
   try {
     if ('serviceWorker' in navigator) {
