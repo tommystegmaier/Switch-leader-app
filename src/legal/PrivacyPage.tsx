@@ -16,7 +16,13 @@ import { PLATFORM_NAME } from '@/lib/appMetadata';
  */
 
 const UPDATED = 'August 2026';
-const CONTACT = 'tommy.stegmaier@life.church';
+/**
+ * The address people write to about their own data. Deliberately a role address
+ * on our own domain rather than an individual's work email: it outlives whoever
+ * currently runs the platform, and a privacy policy that names a person stops
+ * being true the day that person changes jobs.
+ */
+const CONTACT = 'admin@switchleaderapp.com';
 
 export function PrivacyPage() {
   return (
