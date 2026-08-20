@@ -8,6 +8,7 @@ import { HomeRoute, WorkspacesRoute } from '@/creator/HomeRoute';
 import { PlatformPage } from '@/creator/PlatformPage';
 import { SettingsPage } from '@/editor/SettingsPage';
 import { PrivacyPage } from '@/legal/PrivacyPage';
+import { InstallPage } from '@/onboarding/InstallPage';
 import { ViewerLayout } from '@/viewer/ViewerLayout';
 import { ViewerPage } from '@/viewer/ViewerPage';
 
@@ -54,6 +55,12 @@ export const router = createBrowserRouter([
     // at a URL their reviewers can open cold, with no account.
     path: '/privacy',
     element: <PrivacyPage />,
+  },
+  {
+    // Public so a leader can text it to somebody who is stuck. The guidance
+    // used to exist only inside the app they hadn't managed to install.
+    path: '/install',
+    element: <InstallPage />,
   },
   {
     path: '/o/:slug',
