@@ -55,7 +55,30 @@ export async function forceAppUpdate(): Promise<void> {
       );
     }
   } catch {
-    // Whatever went wrong, the reload below is still the best move available.
+    // Whatever went wrong, the navigation below is still the best move left.
   }
-  window.location.reload();
+
+  // Navigate to a URL this device has never requested, rather than calling
+  // reload(). A reload can legitimately be answered from cache — which is
+  // exactly what kept happening — whereas a URL with an unseen query string
+  // has nothing to be answered from and must go to the network. The parameter
+  // is stripped again on the way back up, so nobody ever sees it.
+  const url = new URL(window.location.href);
+  url.searchParams.set(BUST_PARAM, String(Date.now()));
+  window.location.replace(url.toString());
+}
+
+const BUST_PARAM = 'fresh';
+
+/**
+ * Remove the cache-busting parameter after a forced update, so it doesn't end
+ * up bookmarked, shared, or sitting in the address bar looking like a mistake.
+ */
+export function tidyUpdateParam(): void {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(BUST_PARAM)) return;
+    url.searchParams.delete(BUST_PARAM);
+    window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+  } catch { /* history unavailable — a visible query param is harmless */ }
 }

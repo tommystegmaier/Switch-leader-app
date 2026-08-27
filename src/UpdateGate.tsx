@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { CURRENT_BUILD, fetchDeployedBuild, forceAppUpdate } from '@/lib/appUpdate';
+import { CURRENT_BUILD, fetchDeployedBuild, forceAppUpdate, tidyUpdateParam } from '@/lib/appUpdate';
 
 /**
  * Keeps every device on the current build without anyone being asked to do
@@ -25,6 +25,8 @@ export function UpdateGate() {
   const [stale, setStale] = useState(false);
 
   useEffect(() => {
+    // Arriving here after a forced update — drop the cache-busting parameter.
+    tidyUpdateParam();
     let cancelled = false;
 
     async function check(auto: boolean) {

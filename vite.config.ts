@@ -35,16 +35,13 @@ const BUILD_ID = new Date().toISOString();
 /**
  * Emit /version.json — the whole update mechanism turns on this file.
  *
- * index.html is precached and navigateFallback points at it, which means the
- * service worker answers every navigation from its cache. Reloading the page
- * therefore CANNOT fetch new HTML: the only way to get new code is for the
- * worker itself to update, and browsers decide when to check for that on their
- * own schedule. That is why a deploy could sit unnoticed for hours and why
- * "just reload" didn't help.
+ * Navigations are network-first now, so a device that reopens the app while
+ * online lands on the current build by itself. This is the belt to that
+ * braces: it catches the copy that has been sitting open for hours, and it
+ * answers "am I current?" without depending on the service worker at all.
  *
- * A version file sidesteps all of it. It's a few dozen bytes, served
- * uncached, fetched directly rather than as a navigation — so it always
- * reflects what's actually deployed, whatever the worker believes.
+ * A few dozen bytes, served uncached, fetched as a plain request rather than a
+ * navigation — so it always reflects what is actually deployed.
  */
 const emitVersion = {
   name: 'emit-version',
@@ -94,12 +91,43 @@ export default defineConfig({
       workbox: {
         // Cache the built app shell for offline use; runtime-cache published
         // content (Supabase reads) so a viewer can reopen the app offline.
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // HTML is deliberately NOT precached — see the navigation rule below.
+        globPatterns: ['**/*.{js,css,svg,png,woff2}'],
         // Web Push handlers (push + notificationclick) folded into the SW.
         importScripts: ['/push-sw.js'],
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/o\/[^/]+\/settings/],
+        // Explicitly off, and it must stay that way.
+        //
+        // A navigateFallback serves the PRECACHED index.html for every
+        // navigation, which is what made stale builds so hard to shift: opening
+        // the app could not fetch new HTML — and therefore never new JavaScript
+        // — however many times someone reloaded. The only way out was the
+        // service worker updating itself, which an installed iOS app does not
+        // do reliably, so devices sat on old code for days.
+        //
+        // Left unset the plugin supplies index.html as its own default, and
+        // because Workbox matches routes in registration order that fallback
+        // wins over the network-first rule below. Undefined is load-bearing.
+        //
+        // Nothing is lost: Cloudflare rewrites every unknown path to index.html
+        // (see _redirects), so a navigation to any deep link returns the shell
+        // from the server regardless.
+        navigateFallback: undefined,
         runtimeCaching: [
+          {
+            // The app shell, network-first. Online, every launch gets the
+            // current HTML and therefore the current build — no service-worker
+            // update required, which is the whole point. Offline (or on a dead
+            // connection, after 4s) it falls back to the last copy, so the app
+            // still opens on a plane or in a basement.
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'app-shell',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 32 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: ({ url }) => url.pathname.includes('/rest/v1/'),
             handler: 'NetworkFirst',
