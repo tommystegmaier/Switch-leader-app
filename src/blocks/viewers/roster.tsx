@@ -58,10 +58,73 @@ function Avatar({ person, size = 48 }: { person: { name: string; photoUrl: strin
 function isCoach(p: { role: string | null }): boolean {
   return (p.role ?? '').trim().toLowerCase() === 'coach';
 }
-/** Coaches to the top, everyone else after — each keeps its added/sorted order
- *  (JS sort is stable), so multiple coaches stay in the order they were added. */
+
+/**
+ * The grades a small-group leader can be assigned to, in the order they should
+ * appear on a roster — youngest first.
+ *
+ * The two catch-alls sit at the end of the band they cover rather than at the
+ * end of the list, so a leader who takes "Upperclassmen" lands beside the
+ * juniors and seniors instead of below everybody.
+ *
+ * This array IS the ordering. To change how the roster sorts, or to add a grade
+ * a campus runs, reorder or extend it here — nothing else needs to know.
+ */
+export const GRADE_OPTIONS = [
+  '6th Grade',
+  '7th Grade',
+  '8th Grade',
+  '9th Grade',
+  'Freshman',
+  'Sophomore',
+  'Lowerclassmen',
+  'Junior',
+  'Senior',
+  'Upperclassmen',
+] as const;
+
+/** Position in GRADE_OPTIONS; anything unrecognised (or blank) sorts last. */
+function gradeRank(p: { grade: string | null }): number {
+  const g = (p.grade ?? '').trim().toLowerCase();
+  if (!g) return Number.MAX_SAFE_INTEGER;
+  const i = GRADE_OPTIONS.findIndex((o) => o.toLowerCase() === g);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}
+
+/**
+ * Coaches first, then everyone else youngest grade to oldest.
+ *
+ * Coaches keep the top whatever grade they're tagged with — they lead the
+ * group rather than sitting inside its age order. People with no grade fall to
+ * the bottom of their section rather than the top, so an untagged person can't
+ * split a run of tagged ones. Ties keep their existing order, because the sort
+ * is stable and the list arrives already ordered by the manager's own sort.
+ */
 function coachFirst(list: RosterPerson[]): RosterPerson[] {
-  return [...list].sort((a, b) => (isCoach(a) ? 0 : 1) - (isCoach(b) ? 0 : 1));
+  return [...list].sort((a, b) => {
+    const coach = (isCoach(a) ? 0 : 1) - (isCoach(b) ? 0 : 1);
+    if (coach !== 0) return coach;
+    if (isCoach(a)) return 0; // coaches among themselves: leave as-is
+    return gradeRank(a) - gradeRank(b);
+  });
+}
+
+/**
+ * The grade a leader is assigned to, as a small pill.
+ *
+ * Deliberately distinct from the role text next to it — one says what they do,
+ * the other says who they have — so a glance down the list picks out grades
+ * without reading every card.
+ */
+function GradeTag({ grade }: { grade: string }) {
+  return (
+    <span
+      className="inline-block rounded-full px-2 py-0.5 text-[0.7rem] font-semibold"
+      style={{ backgroundColor: 'color-mix(in srgb, var(--th-primary) 14%, transparent)', color: 'var(--th-heading)' }}
+    >
+      {grade}
+    </span>
+  );
 }
 
 /** A person's title: Coaches get bold ALL-CAPS text so they stand out;
@@ -173,7 +236,12 @@ function PersonModal({ person, onClose }: { person: RosterPerson; onClose: () =>
         <button type="button" onClick={onClose} aria-label="Close" className="absolute right-3 top-3 rounded-full px-2 text-2xl leading-none text-gray-400 hover:bg-black/5">×</button>
         <div className="flex justify-center"><Avatar person={person} size={144} /></div>
         <p className="mt-4 text-xl font-bold" style={{ color: 'var(--th-heading)' }}>{person.name}</p>
-        {person.role && <div className="mt-1 flex justify-center"><RoleTag role={person.role} /></div>}
+        {(person.role || person.grade) && (
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5">
+            {person.role && <RoleTag role={person.role} />}
+            {person.grade && <GradeTag grade={person.grade} />}
+          </div>
+        )}
         {person.phone && (
           <div className="mt-4 flex flex-col items-center gap-2">
             <p className="text-sm text-gray-500">{person.phone}</p>
@@ -309,7 +377,12 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds, onOpen }: {
       <Avatar person={person} />
       <div className="min-w-0 flex-1 text-left">
         <p className="truncate font-medium">{person.name}{mine && <span className="text-gray-400"> (you)</span>}</p>
-        {person.role && <div className="mt-1"><RoleTag role={person.role} /></div>}
+        {(person.role || person.grade) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {person.role && <RoleTag role={person.role} />}
+            {person.grade && <GradeTag grade={person.grade} />}
+          </div>
+        )}
         {person.phone && (
           <div className="mt-1 text-xs text-gray-500">{manage ? <a href={`sms:${person.phone}`} className="underline">{person.phone}</a> : person.phone}</div>
         )}
@@ -424,6 +497,7 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
   const [name, setName] = useState(person?.name ?? '');
   const [role, setRole] = useState(person?.role ?? '');
   const [phone, setPhone] = useState(person?.phone ?? '');
+  const [grade, setGrade] = useState(person?.grade ?? '');
   const [photoUrl, setPhotoUrl] = useState<string | null>(person?.photoUrl ?? null);
   const [userId, setUserId] = useState<string | null>(person?.userId ?? null);
   const [uploading, setUploading] = useState(false);
@@ -449,7 +523,7 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
   async function save() {
     if (!name.trim()) { setError('Please enter a name.'); return; }
     setError(null);
-    const payload: PersonInput = { name, role, phone, photoUrl, userId };
+    const payload: PersonInput = { name, role, phone, grade, photoUrl, userId };
     try {
       if (person) await update.mutateAsync({ id: person.id, person: payload });
       else if (groupId) await add.mutateAsync({ groupId, person: payload });
@@ -485,6 +559,17 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
           {(roles ?? []).map((r) => <option key={r.id} value={r.name}>{r.name}</option>)}
           {role && !(roles ?? []).some((r) => r.name === role) && <option value={role}>{role}</option>}
         </select>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">Grade they lead <span className="font-normal text-gray-500">(optional)</span></span>
+          <select className={input} value={grade} onChange={(e) => setGrade(e.target.value)}>
+            <option value="">No grade</option>
+            {GRADE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
+            {/* A value saved before this list changed stays selectable, so
+                editing someone's phone number can't silently clear it. */}
+            {grade && !GRADE_OPTIONS.some((g) => g === grade) && <option value={grade}>{grade}</option>}
+          </select>
+          <span className="text-xs text-gray-500">Tagged leaders are listed youngest grade first, under the coach.</span>
+        </label>
         <input className={input} type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} />
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
