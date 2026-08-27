@@ -67,26 +67,47 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
 
   const { data: subs, error: subErr } = await admin
     .from('push_subscriptions')
-    .select('endpoint, p256dh, auth')
+    .select('endpoint, p256dh, auth, user_id')
     .eq('org_id', orgId);
   if (subErr) return json({ error: subErr.message }, 500);
+
+  // Work out the number to put on each person's app icon.
+  //
+  // This announcement has to be ADDED to whatever they already had unread,
+  // not replace it: someone sitting on three unread messages who then gets a
+  // broadcast should see four, not one. Sending no number at all — which is
+  // what this did before — left the service worker calling setAppBadge() with
+  // no argument, and iOS doesn't render that dot form, so a broadcast produced
+  // no badge whatsoever while a chat message produced one.
+  const recipients = [...new Set((subs || []).map((s: { user_id: string | null }) => s.user_id).filter(Boolean))] as string[];
+  const badges = new Map<string, number>();
+  await Promise.all(recipients.map(async (uid) => {
+    try {
+      const { data: n } = await admin.rpc('chat_unread_total_for', { p_org: orgId, p_user: uid });
+      badges.set(uid, (typeof n === 'number' ? n : 0) + 1);
+    } catch { /* fall back to the announcement on its own */ }
+  }));
 
   const vapid = {
     subject: env.VAPID_SUBJECT || 'mailto:notify@example.com',
     publicKey: env.VAPID_PUBLIC_KEY,
     privateKey: env.VAPID_PRIVATE_KEY,
   };
-  const data = { title, body: message || '', url: url || '/' };
+  const base = { title, body: message || '', url: url || '/' };
 
   let sent = 0;
   let removed = 0;
   await Promise.all(
-    (subs || []).map(async (s: { endpoint: string; p256dh: string; auth: string }) => {
+    (subs || []).map(async (s: { endpoint: string; p256dh: string; auth: string; user_id: string | null }) => {
       const subscription = {
         endpoint: s.endpoint,
         expirationTime: null,
         keys: { p256dh: s.p256dh, auth: s.auth },
       };
+      // A device we never linked to an account (an old subscription) still
+      // gets a badge — just the announcement's own 1, since there's no unread
+      // count to add it to.
+      const data = { ...base, badge: (s.user_id && badges.get(s.user_id)) || 1 };
       try {
         const req = await buildPushPayload({ data, options: { ttl: 3600 } }, subscription, vapid);
         const res = await fetch(s.endpoint, { method: req.method, headers: req.headers, body: req.body });
