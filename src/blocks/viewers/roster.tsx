@@ -60,35 +60,40 @@ function isCoach(p: { role: string | null }): boolean {
 }
 
 /**
- * The grades a small-group leader can be assigned to, in the order they should
- * appear on a roster — youngest first.
+ * The grades a small-group leader can be assigned to.
  *
- * The two catch-alls sit at the end of the band they cover rather than at the
- * end of the list, so a leader who takes "Upperclassmen" lands beside the
- * juniors and seniors instead of below everybody.
+ * Two different orders are needed here, which is why each entry carries its own
+ * rank rather than the array position doing double duty:
  *
- * This array IS the ordering. To change how the roster sorts, or to add a grade
- * a campus runs, reorder or extend it here — nothing else needs to know.
+ *  • ARRAY ORDER is what the dropdown shows. The specific grades come first,
+ *    then the two catch-all bands at the bottom, so the common choices are the
+ *    ones nearest the top when a manager opens the list.
+ *  • RANK is how the roster sorts, youngest to oldest. Lowerclassmen sits
+ *    between Sophomore and Junior, so those leaders group with the younger
+ *    students they actually have, even though the dropdown lists them last.
+ *
+ * Keeping both on one object means a grade cannot exist in one ordering and be
+ * missing from the other. To add a grade a campus runs, add it once, here.
  */
-export const GRADE_OPTIONS = [
-  '6th Grade',
-  '7th Grade',
-  '8th Grade',
-  '9th Grade',
-  'Freshman',
-  'Sophomore',
-  'Lowerclassmen',
-  'Junior',
-  'Senior',
-  'Upperclassmen',
+export const GRADES = [
+  { name: '6th Grade', rank: 1 },
+  { name: '7th Grade', rank: 2 },
+  { name: '8th Grade', rank: 3 },
+  { name: '9th Grade', rank: 4 },
+  { name: 'Freshman', rank: 5 },
+  { name: 'Sophomore', rank: 6 },
+  { name: 'Junior', rank: 8 },
+  { name: 'Senior', rank: 9 },
+  // Listed after Senior, but ranked before Junior — see above.
+  { name: 'Lowerclassmen', rank: 7 },
+  { name: 'Upperclassmen', rank: 10 },
 ] as const;
 
-/** Position in GRADE_OPTIONS; anything unrecognised (or blank) sorts last. */
+/** Sort rank for a person's grade; anything unrecognised (or blank) sorts last. */
 function gradeRank(p: { grade: string | null }): number {
   const g = (p.grade ?? '').trim().toLowerCase();
   if (!g) return Number.MAX_SAFE_INTEGER;
-  const i = GRADE_OPTIONS.findIndex((o) => o.toLowerCase() === g);
-  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  return GRADES.find((o) => o.name.toLowerCase() === g)?.rank ?? Number.MAX_SAFE_INTEGER;
 }
 
 /**
@@ -563,10 +568,10 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
           <span className="font-medium">Grade they lead <span className="font-normal text-gray-500">(optional)</span></span>
           <select className={input} value={grade} onChange={(e) => setGrade(e.target.value)}>
             <option value="">No grade</option>
-            {GRADE_OPTIONS.map((g) => <option key={g} value={g}>{g}</option>)}
+            {GRADES.map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
             {/* A value saved before this list changed stays selectable, so
                 editing someone's phone number can't silently clear it. */}
-            {grade && !GRADE_OPTIONS.some((g) => g === grade) && <option value={grade}>{grade}</option>}
+            {grade && !GRADES.some((g) => g.name === grade) && <option value={grade}>{grade}</option>}
           </select>
           <span className="text-xs text-gray-500">Tagged leaders are listed youngest grade first, under the coach.</span>
         </label>
