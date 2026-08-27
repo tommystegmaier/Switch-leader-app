@@ -65,14 +65,19 @@ function isCoach(p: { role: string | null }): boolean {
  * Two different orders are needed here, which is why each entry carries its own
  * rank rather than the array position doing double duty:
  *
- *  • ARRAY ORDER is what the dropdown shows. The specific grades come first,
+ *  • ARRAY ORDER is what the dropdown shows. The numbered grades come first,
  *    then the two catch-all bands at the bottom, so the common choices are the
  *    ones nearest the top when a manager opens the list.
  *  • RANK is how the roster sorts, youngest to oldest. Lowerclassmen sits
- *    between Sophomore and Junior, so those leaders group with the younger
- *    students they actually have, even though the dropdown lists them last.
+ *    between 10th and 11th, so those leaders group with the younger students
+ *    they actually have, even though the dropdown lists them last.
  *
- * Keeping both on one object means a grade cannot exist in one ordering and be
+ * Every grade is numbered rather than named: Freshman and 9th Grade are the
+ * same year, and offering both meant two leaders with identical assignments
+ * could be tagged differently and never group together. One vocabulary, no
+ * synonyms to keep straight.
+ *
+ * Keeping both orders on one object means a grade cannot exist in one and be
  * missing from the other. To add a grade a campus runs, add it once, here.
  */
 export const GRADES = [
@@ -80,13 +85,12 @@ export const GRADES = [
   { name: '7th Grade', rank: 2 },
   { name: '8th Grade', rank: 3 },
   { name: '9th Grade', rank: 4 },
-  { name: 'Freshman', rank: 5 },
-  { name: 'Sophomore', rank: 6 },
-  { name: 'Junior', rank: 8 },
-  { name: 'Senior', rank: 9 },
-  // Listed after Senior, but ranked before Junior — see above.
-  { name: 'Lowerclassmen', rank: 7 },
-  { name: 'Upperclassmen', rank: 10 },
+  { name: '10th Grade', rank: 5 },
+  { name: '11th Grade', rank: 7 },
+  { name: '12th Grade', rank: 8 },
+  // Listed after 12th Grade, but ranked before 11th — see above.
+  { name: 'Lowerclassmen', rank: 6 },
+  { name: 'Upperclassmen', rank: 9 },
 ] as const;
 
 /** Sort rank for a person's grade; anything unrecognised (or blank) sorts last. */
