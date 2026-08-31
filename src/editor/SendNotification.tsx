@@ -31,14 +31,46 @@ export function SendNotification({
       const { data: sessionRes } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
       const token = sessionRes?.session?.access_token;
       if (!token) throw new Error('Please sign in again.');
-      const res = await fetch('/api/send-push', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ orgId, title, message, url: `/o/${orgSlug}` }),
-      });
-      const body = (await res.json().catch(() => ({}))) as { sent?: number; total?: number; error?: string };
-      if (!res.ok) throw new Error(body.error || `Server error (${res.status})`);
-      setResult(`Sent to ${body.sent ?? 0} of ${body.total ?? 0} device(s).`);
+
+      // The server handles a slice of the devices per call, because a single
+      // Cloudflare Function may only make so many outbound requests and every
+      // device is one of them. Walking the slices from here is what lets a
+      // broadcast reach a hundred people instead of silently reaching none.
+      let offset: number | null = 0;
+      let sent = 0;
+      let removed = 0;
+      let total = 0;
+      const failures: Record<string, number> = {};
+      let guard = 0;
+
+      while (offset !== null && guard < 100) {
+        guard += 1;
+        const res = await fetch('/api/send-push', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ orgId, title, message, url: `/o/${orgSlug}`, offset }),
+        });
+        const body = (await res.json().catch(() => ({}))) as {
+          sent?: number; removed?: number; total?: number;
+          failures?: Record<string, number>; nextOffset?: number | null; error?: string;
+        };
+        if (!res.ok) throw new Error(body.error || `Server error (${res.status})`);
+        sent += body.sent ?? 0;
+        removed += body.removed ?? 0;
+        total = body.total ?? total;
+        for (const [k, v] of Object.entries(body.failures ?? {})) failures[k] = (failures[k] ?? 0) + v;
+        offset = body.nextOffset ?? null;
+        setResult(`Sending… ${sent} of ${total}`);
+      }
+
+      // Say what went wrong when something did. "Sent to 0 of 104" with no
+      // reason is impossible to act on — for whoever sent it or for us.
+      const reasons = Object.entries(failures).map(([k, v]) => `${v}× ${k}`).join(', ');
+      setResult(
+        `Sent to ${sent} of ${total} device(s).`
+        + (removed ? ` ${removed} expired subscription(s) cleaned up.` : '')
+        + (reasons ? ` Failed: ${reasons}.` : ''),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

@@ -39,13 +39,14 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (!token) return json({ error: 'Not signed in.' }, 401);
 
-  let payload: { orgId?: string; title?: string; message?: string; url?: string };
+  let payload: { orgId?: string; title?: string; message?: string; url?: string; offset?: number };
   try {
     payload = await request.json();
   } catch {
     return json({ error: 'Bad request.' }, 400);
   }
   const { orgId, title, message, url } = payload;
+  const offset = Math.max(0, Number(payload.offset) || 0);
   if (!orgId || !title) return json({ error: 'Missing workspace or title.' }, 400);
 
   const admin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
@@ -65,10 +66,27 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     return json({ error: 'You do not have permission to send notifications for this workspace.' }, 403);
   }
 
+  // How many devices this invocation will handle.
+  //
+  // A Cloudflare Function is capped on how many outbound requests it may make,
+  // and every device is one. Sending to 104 people in a single call blew
+  // straight through that ceiling, which is why a broadcast reported reaching
+  // nobody: the sends weren't refused by Apple or Google, they never left. So
+  // the work is sliced, and the browser walks through the slices.
+  const BATCH = 30;
+
+  const { count: total, error: countErr } = await admin
+    .from('push_subscriptions')
+    .select('endpoint', { count: 'exact', head: true })
+    .eq('org_id', orgId);
+  if (countErr) return json({ error: countErr.message }, 500);
+
   const { data: subs, error: subErr } = await admin
     .from('push_subscriptions')
     .select('endpoint, p256dh, auth, user_id')
-    .eq('org_id', orgId);
+    .eq('org_id', orgId)
+    .order('endpoint')          // stable order, so slices don't overlap or skip
+    .range(offset, offset + BATCH - 1);
   if (subErr) return json({ error: subErr.message }, 500);
 
   // Work out the number to put on each person's app icon.
@@ -79,14 +97,19 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   // what this did before — left the service worker calling setAppBadge() with
   // no argument, and iOS doesn't render that dot form, so a broadcast produced
   // no badge whatsoever while a chat message produced one.
+  // ONE call for the whole batch. Asking per-person cost a round trip each,
+  // which on its own could exhaust the request budget before any notification
+  // was sent.
   const recipients = [...new Set((subs || []).map((s: { user_id: string | null }) => s.user_id).filter(Boolean))] as string[];
   const badges = new Map<string, number>();
-  await Promise.all(recipients.map(async (uid) => {
+  if (recipients.length > 0) {
     try {
-      const { data: n } = await admin.rpc('chat_unread_total_for', { p_org: orgId, p_user: uid });
-      badges.set(uid, (typeof n === 'number' ? n : 0) + 1);
+      const { data: rows } = await admin.rpc('chat_unread_totals_for', { p_org: orgId, p_users: recipients });
+      for (const r of (rows ?? []) as { user_id: string; total: number }[]) {
+        badges.set(r.user_id, (r.total ?? 0) + 1);
+      }
     } catch { /* fall back to the announcement on its own */ }
-  }));
+  }
 
   const vapid = {
     subject: env.VAPID_SUBJECT || 'mailto:notify@example.com',
@@ -97,6 +120,12 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
 
   let sent = 0;
   let removed = 0;
+  // Why sends failed, counted by reason. Without this a broadcast could report
+  // reaching nobody and give no clue whether that was bad keys, a rejection
+  // upstream, or requests that never got made — which is exactly the hole this
+  // was debugged in.
+  const failures: Record<string, number> = {};
+  const note = (reason: string) => { failures[reason] = (failures[reason] ?? 0) + 1; };
   await Promise.all(
     (subs || []).map(async (s: { endpoint: string; p256dh: string; auth: string; user_id: string | null }) => {
       const subscription = {
@@ -117,12 +146,23 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
           removed += 1;
         } else if (res.ok) {
           sent += 1;
+        } else {
+          note(`http_${res.status}`);
         }
-      } catch {
-        /* skip a single failed endpoint */
+      } catch (e) {
+        note(e instanceof Error ? e.message.slice(0, 80) : 'unknown');
       }
     }),
   );
 
-  return json({ sent, removed, total: (subs || []).length });
+  const done = offset + (subs || []).length;
+  return json({
+    sent,
+    removed,
+    failures,
+    batch: (subs || []).length,
+    total: total ?? done,
+    // Present until every device has been attempted; the caller keeps going.
+    nextOffset: done < (total ?? done) ? done : null,
+  });
 };
