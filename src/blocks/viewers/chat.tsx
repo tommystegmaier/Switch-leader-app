@@ -5,7 +5,7 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import {
   useChatChannels, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useDeleteChatMessage,
-  useChatBlocks, useMarkChatRead, useReportChatMessage, useSendChatMessage, useSetChatBlock,
+  useChatBlocks, useEditChatMessage, useMarkChatRead, useReportChatMessage, useSendChatMessage, useSetChatBlock,
   useSetChatMute, useSetChatPostPolicy, useToggleReaction, useVoteChatPoll,
   type ChatMessage, type ChatPostPolicy,
 } from '@/data/chatHooks';
@@ -280,10 +280,13 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
   const toggle = useToggleReaction(orgId);
   const vote = useVoteChatPoll(orgId);
   const del = useDeleteChatMessage(orgId);
+  const edit = useEditChatMessage(orgId);
 
   const [text, setText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<ChatMessage | null>(null);
   const [confirmReport, setConfirmReport] = useState<ChatMessage | null>(null);
+  // Which message is currently open for editing, iMessage-style, in place.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [photoMenu, setPhotoMenu] = useState<ChatMessage | null>(null);
   const [reactingId, setReactingId] = useState<string | null>(null);
@@ -493,6 +496,14 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
             onReact={(emoji, wasMine) => react(m.id, emoji, wasMine)}
             onRequestDelete={() => { setReactingId(null); setConfirmDelete(m); }}
             onRequestReport={() => { setReactingId(null); setConfirmReport(m); }}
+            editing={editingId === m.id}
+            onRequestEdit={() => { setReactingId(null); setEditingId(m.id); }}
+            onCancelEdit={() => setEditingId(null)}
+            savingEdit={edit.isPending}
+            onSaveEdit={async (body) => {
+              try { await edit.mutateAsync({ groupId, messageId: m.id, body }); setEditingId(null); }
+              catch (e) { setError(errorMessage(e)); }
+            }}
             onOpenImage={(url) => setLightbox(url)}
             onHoldImage={() => setPhotoMenu(m)}
           />
@@ -1251,7 +1262,7 @@ function DeleteDot({ side, onClick }: { side: 'left' | 'right'; onClick: () => v
   );
 }
 
-function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete, onRequestReport, onOpenImage, onHoldImage }: {
+function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggleBar, onReact, onRequestDelete, onRequestReport, onOpenImage, onHoldImage, editing, onRequestEdit, onCancelEdit, onSaveEdit, savingEdit }: {
   m: ChatMessage;
   mine: boolean;
   canDelete: boolean;
@@ -1265,6 +1276,11 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
   onRequestReport: () => void;
   onOpenImage: (url: string) => void;
   onHoldImage: () => void;
+  editing: boolean;
+  onRequestEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (body: string) => void | Promise<void>;
+  savingEdit: boolean;
 }) {
   // Long-press on a photo opens reactions; a plain tap opens it full screen.
   const imgPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1364,14 +1380,16 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
           )}
           {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
           {m.audioUrl && <VoicePlayer url={m.audioUrl} mine={mine} />}
-          {m.body && (
-            <span
-              className="select-text"
-              style={{ WebkitUserSelect: 'text', userSelect: 'text', WebkitTouchCallout: 'default' }}
-            >
-              {linkify(m.body)}
-            </span>
-          )}
+          {m.body && (editing
+            ? <MessageEditor body={m.body} busy={savingEdit} onCancel={onCancelEdit} onSave={onSaveEdit} />
+            : (
+              <span
+                className="select-text"
+                style={{ WebkitUserSelect: 'text', userSelect: 'text', WebkitTouchCallout: 'default' }}
+              >
+                {linkify(m.body)}
+              </span>
+            ))}
         </div>
 
         {open && (
@@ -1383,6 +1401,18 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
                 message itself: it has to be there, but a flag sitting next to
                 every message all day would set a tone this app doesn't want.
                 Not shown on your own messages — you can just delete those. */}
+            {mine && m.body && !m.poll && (
+              <button
+                type="button"
+                onClick={onRequestEdit}
+                aria-label="Edit this message"
+                title="Edit this message"
+                className="ml-0.5 border-l pl-1.5 text-sm leading-none text-gray-400"
+                style={{ borderColor: 'var(--th-hairline)' }}
+              >
+                ✏️
+              </button>
+            )}
             {!mine && (
               <button
                 type="button"
@@ -1415,8 +1445,63 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
         </div>
       )}
 
-      <span className="mt-0.5 px-1 text-[0.65rem] text-gray-400">{fmtTime(m.createdAt)}</span>
+      <span className="mt-0.5 px-1 text-[0.65rem] text-gray-400">
+        {fmtTime(m.createdAt)}{m.editedAt ? ' · Edited' : ''}
+      </span>
     </div>
+  );
+}
+
+/**
+ * Edit a message in place.
+ *
+ * The bubble becomes the input, so the message stays where it is in the
+ * conversation rather than jumping to the composer at the bottom and losing
+ * the context of what's around it. Enter saves and Escape cancels, which is
+ * what anyone who edits text anywhere else will already try.
+ */
+function MessageEditor({ body, busy, onCancel, onSave }: {
+  body: string;
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (body: string) => void | Promise<void>;
+}) {
+  const [text, setText] = useState(body);
+  const changed = text.trim() !== body.trim();
+  const valid = text.trim().length > 0;
+
+  return (
+    <span className="block">
+      <textarea
+        autoFocus
+        rows={Math.min(6, text.split('\n').length + 1)}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+          // Shift+Enter still adds a line, so multi-line messages stay editable.
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (valid && changed) void onSave(text);
+            else onCancel();
+          }
+        }}
+        disabled={busy}
+        className="block w-full resize-none rounded-lg border-0 bg-black/10 p-2 text-sm focus:outline-none"
+        style={{ color: 'inherit', minWidth: '12rem' }}
+      />
+      <span className="mt-1 flex items-center justify-end gap-3 text-xs">
+        <button type="button" onClick={onCancel} disabled={busy} className="opacity-70">Cancel</button>
+        <button
+          type="button"
+          onClick={() => void onSave(text)}
+          disabled={busy || !valid || !changed}
+          className="font-semibold disabled:opacity-40"
+        >
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+      </span>
+    </span>
   );
 }
 

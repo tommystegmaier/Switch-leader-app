@@ -13,7 +13,7 @@ export type ChatPostPolicy = 'all' | 'managers' | 'managers_coaches';
 export interface ChatChannel { groupId: string; name: string; parentId: string | null; parentName: string | null; sort: number; unread: number; isAll: boolean; postPolicy: ChatPostPolicy; canPost: boolean }
 export interface ChatPoll { options: string[] }
 export type ChatMediaKind = 'photo' | 'gif' | 'video' | 'audio';
-export interface ChatMessage { id: string; groupId: string; userId: string; authorName: string | null; body: string | null; imageUrl: string | null; videoUrl: string | null; audioUrl: string | null; mediaKind: ChatMediaKind | null; poll: ChatPoll | null; createdAt: string }
+export interface ChatMessage { id: string; groupId: string; userId: string; authorName: string | null; body: string | null; imageUrl: string | null; videoUrl: string | null; audioUrl: string | null; mediaKind: ChatMediaKind | null; poll: ChatPoll | null; createdAt: string; editedAt: string | null }
 export interface ChatReaction { messageId: string; userId: string; emoji: string }
 export interface ChatPollVote { messageId: string; userId: string; optionIndex: number }
 
@@ -35,9 +35,9 @@ export function useChatChannels(orgId: string | undefined, enabled = true) {
   });
 }
 
-const MSG_COLS = 'id, group_id, user_id, author_name, body, image_url, video_url, audio_url, media_kind, poll, created_at';
+const MSG_COLS = 'id, group_id, user_id, author_name, body, image_url, video_url, audio_url, media_kind, poll, created_at, edited_at';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const toMessage = (r: any): ChatMessage => ({ id: r.id, groupId: r.group_id, userId: r.user_id, authorName: r.author_name ?? null, body: r.body ?? null, imageUrl: r.image_url ?? null, videoUrl: r.video_url ?? null, audioUrl: r.audio_url ?? null, mediaKind: (r.media_kind ?? null) as ChatMediaKind | null, poll: r.poll && Array.isArray(r.poll.options) ? { options: r.poll.options as string[] } : null, createdAt: r.created_at });
+const toMessage = (r: any): ChatMessage => ({ id: r.id, groupId: r.group_id, userId: r.user_id, authorName: r.author_name ?? null, body: r.body ?? null, imageUrl: r.image_url ?? null, videoUrl: r.video_url ?? null, audioUrl: r.audio_url ?? null, mediaKind: (r.media_kind ?? null) as ChatMediaKind | null, poll: r.poll && Array.isArray(r.poll.options) ? { options: r.poll.options as string[] } : null, createdAt: r.created_at, editedAt: r.edited_at ?? null });
 
 /**
  * Incremental polling state, per channel.
@@ -78,10 +78,37 @@ export function useChatMessages(orgId: string | undefined, groupId: string | und
       const now = Date.now();
       let prev = messageSync.get(groupId);
 
-      // No backlog yet (or an empty channel, which has no watermark to read
-      // forward from): read it once. Newest first, then flipped back into
-      // chronological order — ascending would have pinned a channel past 500
-      // messages to its oldest ones and never shown anything recent.
+      // Slow beat, BEFORE anything else: reconcile the two things a "what's new
+      // since" read cannot see — messages that have gone, and messages whose
+      // text has changed. Neither moves created_at, so neither can be noticed
+      // by reading forward. Ids and edit stamps are a fraction of the row size.
+      if (prev && prev.last && now - prev.checkedAt > RECONCILE_MS) {
+        const { data, error } = await s.from('chat_messages')
+          .select('id, edited_at').eq('group_id', groupId).gte('created_at', prev.list[0].createdAt);
+        if (error) throw error;
+        const live = new Map<string, string | null>();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const r of (data ?? []) as any[]) live.set(r.id as string, (r.edited_at as string | null) ?? null);
+
+        if (prev.list.some((m) => live.has(m.id) && live.get(m.id) !== m.editedAt)) {
+          // Somebody edited something we're holding. We have ids, not text, so
+          // the only way to get the new wording is to read the window again —
+          // which the branch below then does.
+          messageSync.delete(groupId);
+          prev = undefined;
+        } else {
+          const kept = prev.list.filter((m) => live.has(m.id));
+          // If every message went, keep the old watermark so the next read still
+          // moves forward rather than re-fetching the channel from scratch.
+          prev = { last: kept.length ? kept[kept.length - 1].createdAt : prev.last, list: kept, checkedAt: now };
+          messageSync.set(groupId, prev);
+        }
+      }
+
+      // No backlog yet, an empty channel with no watermark to read forward
+      // from, or an edit that forced a re-read. Newest first, then flipped back
+      // into chronological order — ascending would have pinned a channel past
+      // 500 messages to its oldest ones and never shown anything recent.
       if (!prev || !prev.last) {
         const { data, error } = await s.from('chat_messages')
           .select(MSG_COLS).eq('group_id', groupId).order('created_at', { ascending: false }).limit(BACKLOG);
@@ -89,20 +116,6 @@ export function useChatMessages(orgId: string | undefined, groupId: string | und
         const list = (data ?? []).map(toMessage).reverse();
         messageSync.set(groupId, { last: list.length ? list[list.length - 1].createdAt : null, list, checkedAt: now });
         return list;
-      }
-
-      // Slow beat: reconcile deletions across the window we hold.
-      if (now - prev.checkedAt > RECONCILE_MS) {
-        const { data, error } = await s.from('chat_messages')
-          .select('id').eq('group_id', groupId).gte('created_at', prev.list[0].createdAt);
-        if (error) throw error;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const live = new Set((data ?? []).map((r: any) => r.id as string));
-        const kept = prev.list.filter((m) => live.has(m.id));
-        // If every message went, keep the old watermark so the next read still
-        // moves forward rather than re-fetching the channel from scratch.
-        prev = { last: kept.length ? kept[kept.length - 1].createdAt : prev.last, list: kept, checkedAt: now };
-        messageSync.set(groupId, prev);
       }
 
       const { data, error } = await s.from('chat_messages')
@@ -429,5 +442,28 @@ export function useSetChatBlock(orgId: string) {
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY(orgId, 'blocks') }),
+  });
+}
+
+/**
+ * Change the wording of a message you already sent.
+ *
+ * An edit doesn't move created_at, so the incremental "what's new since" poll
+ * can't see it — the local backlog is dropped so the next read fetches the
+ * window again and picks up the new text. Other people's copies notice it on
+ * their next reconcile.
+ */
+export function useEditChatMessage(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ messageId, body }: { groupId: string; messageId: string; body: string }) => {
+      const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('edit_chat_message', { p_message: messageId, p_body: body });
+      if (error) throw error;
+    },
+    onSuccess: (_r, v) => {
+      resetChatMessageSync(v.groupId);
+      qc.invalidateQueries({ queryKey: KEY(orgId, 'messages', v.groupId) });
+    },
   });
 }
