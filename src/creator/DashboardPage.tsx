@@ -53,8 +53,9 @@ export function DashboardPage({ redirectSingle = false }: { redirectSingle?: boo
   // Unread chat totals per app → the red badge on each card. Also mirror the
   // grand total onto the Home Screen app icon while sitting on the hub, so the
   // icon badge stays right even before you open a specific app.
-  const { byOrg, total } = useWorkspaceUnread(list.map((w) => w.org.id));
-  useEffect(() => { setAppBadge(total); }, [total]);
+  const { byOrg, total, ready: unreadReady } = useWorkspaceUnread(list.map((w) => w.org.id));
+  // Wait for every app's count before touching the badge — see useWorkspaceUnread.
+  useEffect(() => { if (unreadReady) setAppBadge(total); }, [total, unreadReady]);
 
   // Finish a join that got interrupted by email confirmation. Signing up from
   // an invite link doesn't sign you in when confirmation is on, so people

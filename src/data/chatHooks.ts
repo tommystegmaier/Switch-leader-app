@@ -341,7 +341,11 @@ export function useWorkspaceUnread(orgIds: string[]) {
   const byOrg: Record<string, number> = {};
   orgIds.forEach((id, i) => { byOrg[id] = results[i]?.data ?? 0; });
   const total = Object.values(byOrg).reduce((a, b) => a + b, 0);
-  return { byOrg, total };
+  // Whether every count has actually come back. Callers that write the total to
+  // the app-icon badge must wait for this: a partial total is a wrong number,
+  // and writing it clears or understates a badge a push has just set.
+  const ready = results.every((r) => r.data !== undefined);
+  return { byOrg, total, ready };
 }
 
 /** The slug of a page that contains a chat block (for the bottom-bar badge). */

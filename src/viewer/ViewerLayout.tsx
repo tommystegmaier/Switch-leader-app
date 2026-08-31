@@ -59,7 +59,8 @@ export function ViewerLayout() {
   const { data: liveSettings } = useLiveAppSettings(org?.id, liveMode);
   const { data: schedulePageId } = useSchedulePageId(org?.id);
   const { data: chatPageSlug } = useChatPageSlug(org?.id);
-  const { data: chatUnread = 0 } = useChatUnreadTotal(org?.id, Boolean(user));
+  const unreadQuery = useChatUnreadTotal(org?.id, Boolean(user));
+  const chatUnread = unreadQuery.data ?? 0;
   const { data: blockedPeople } = useChatBlocks(org?.id);
   const blockedCount = blockedPeople?.length ?? 0;
 
@@ -106,9 +107,16 @@ export function ViewerLayout() {
   }, [canEdit, editing, setEditing]);
 
   // Mirror the unread chat count onto the Home Screen app icon (PWA badge).
+  //
+  // Only once the count is actually KNOWN. React Query reports undefined until
+  // the first fetch lands, and treating that as zero cleared the badge on every
+  // open before immediately restoring it a moment later — a visible flicker,
+  // and worse, it briefly told the phone something untrue. The badge the push
+  // set stays put until we can replace it with the real number.
   useEffect(() => {
-    setAppBadge(chatUnread);
-  }, [chatUnread]);
+    if (unreadQuery.data === undefined) return;
+    setAppBadge(unreadQuery.data);
+  }, [unreadQuery.data]);
 
   // When the app comes back to the foreground (reopened from the Home Screen),
   // refresh the unread count so the icon badge and tab dot are immediately
