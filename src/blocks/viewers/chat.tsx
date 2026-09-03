@@ -66,46 +66,94 @@ function repairEscapedUrl(u: string): string {
   return head.replace(/%3A/gi, ':').replace(/%2F/gi, '/') + tail;
 }
 
-function linkify(text: string): ReactNode[] {
-  const out: ReactNode[] = [];
+/**
+ * Unescape the prose a share sheet hands over, so a pasted product name reads
+ * as "Dear Person Behind Me" rather than "Dear%20Person%20Behind%20Me".
+ *
+ * Runs of escapes are decoded together because one character can span several
+ * of them — %E2%80%99 is a single apostrophe — and decoding them one at a time
+ * would produce mojibake.
+ *
+ * Gated on an escaped space being present, which is the fingerprint of a share
+ * sheet paste. Without that gate an ordinary message ("up 90%ABove last year")
+ * contains what looks like a valid escape and would get mangled.
+ *
+ * Only ever applied to text OUTSIDE a link, so a URL's own escapes are safe.
+ */
+const ESCAPE_RUN = /(?:%[0-9A-Fa-f]{2})+/g;
+function unescapePastedProse(text: string): string {
+  if (!text.includes('%20')) return text;
+  return text.replace(ESCAPE_RUN, (run) => {
+    try {
+      // Strip control characters a paste has no business introducing. Tab and
+      // newline are the two that mean something in a chat message.
+      return decodeURIComponent(run).replace(/[\0-\x08\x0B-\x1F\x7F]/g, '');
+    } catch {
+      return run; // malformed escape — leave it exactly as it was typed
+    }
+  });
+}
+
+type Token = { text: string } | { link: string; href: string };
+
+/**
+ * Split a message into plain-text runs and links.
+ *
+ * Shared by the bubble and the edit box so the two can't disagree: what a
+ * message looks like on screen is what you get when you tap edit.
+ */
+function tokenizeBody(text: string): Token[] {
+  const out: Token[] = [];
+  const pushText = (s: string) => {
+    if (!s) return;
+    const tidy = unescapePastedProse(s);
+    const prev = out[out.length - 1];
+    if (prev && 'text' in prev) prev.text += tidy;
+    else out.push({ text: tidy });
+  };
   let last = 0;
-  let key = 0;
   let m: RegExpExecArray | null;
   URL_RE.lastIndex = 0;
   while ((m = URL_RE.exec(text)) !== null) {
     const raw = m[0];
+    pushText(text.slice(last, m.index));
+    last = m.index + raw.length;
     // A bare domain has to stand on its own. Mid-word it's part of something
     // else — an email address, a filename — not a link someone meant to share.
     const scheme = /^(?:https?(?::|%3[Aa])|www\.)/i.test(raw);
     if (!scheme && m.index > 0 && /[A-Za-z0-9@%.-]/.test(text[m.index - 1])) {
-      if (m.index > last) out.push(text.slice(last, m.index));
-      out.push(raw);
-      last = m.index + raw.length;
+      pushText(raw);
       continue;
     }
-    if (m.index > last) out.push(text.slice(last, m.index));
     // Don't swallow trailing punctuation (e.g. "see foo.com." or "(bar.com)").
     const trail = raw.match(/[.,!?;:)\]]+$/)?.[0] ?? '';
     const link = repairEscapedUrl(trail ? raw.slice(0, -trail.length) : raw);
-    const href = /^https?:\/\//i.test(link) ? link : `https://${link}`;
-    out.push(
-      <a
-        key={key++}
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline"
-        style={{ wordBreak: 'break-word' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {link}
-      </a>,
-    );
-    if (trail) out.push(trail);
-    last = m.index + raw.length;
+    out.push({ link, href: /^https?:\/\//i.test(link) ? link : `https://${link}` });
+    pushText(trail);
   }
-  if (last < text.length) out.push(text.slice(last));
+  pushText(text.slice(last));
   return out;
+}
+
+/** The message as it should read — links repaired, pasted prose unescaped. */
+function tidyBody(text: string): string {
+  return tokenizeBody(text).map((t) => ('link' in t ? t.link : t.text)).join('');
+}
+
+function linkify(text: string): ReactNode[] {
+  return tokenizeBody(text).map((t, i) => ('link' in t ? (
+    <a
+      key={i}
+      href={t.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="underline"
+      style={{ wordBreak: 'break-word' }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {t.link}
+    </a>
+  ) : t.text));
 }
 
 export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
@@ -1420,7 +1468,7 @@ function MessageRow({ m, mine, canDelete, reactions, poll, onVote, open, onToggl
           {m.videoUrl && <video src={m.videoUrl} controls playsInline onClick={(e) => e.stopPropagation()} className="mb-1 max-h-64 w-full rounded-lg" />}
           {m.audioUrl && <VoicePlayer url={m.audioUrl} mine={mine} />}
           {m.body && (editing
-            ? <MessageEditor body={m.body} busy={savingEdit} onCancel={onCancelEdit} onSave={onSaveEdit} />
+            ? <MessageEditor body={tidyBody(m.body)} busy={savingEdit} onCancel={onCancelEdit} onSave={onSaveEdit} />
             : (
               <span
                 className="select-text"
