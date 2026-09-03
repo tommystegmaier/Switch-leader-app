@@ -35,7 +35,37 @@ function fmtTime(iso: string): string {
 // Turn URLs inside a message into clickable links (opens in a new tab). Keeps
 // the plain text between links intact. Underlined + inherits the bubble's text
 // color so it stays readable on both the sent (colored) and received bubbles.
-const URL_RE = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+//
+// Three shapes are recognised, in this order:
+//  1. A normal link, and the same link with its punctuation percent-escaped.
+//     Phone share sheets do this — Amazon's is the one people hit — handing
+//     over "https%3A//a.co/d/ABC" instead of "https://a.co/d/ABC". Nothing
+//     treats that as a link, so it used to land in chat as dead text.
+//  2. A "www." link with the scheme left off.
+//  3. A bare domain with a path, like "a.co/d/ABC" typed without the https://.
+//     A path is required here on purpose: without it, a missing space after a
+//     sentence ("the schedule.Co-leaders meet at 6") reads as a domain.
+const SCHEME = String.raw`https?(?::|%3[Aa])(?:\/\/|%2[Ff]%2[Ff])[^\s<]+`;
+const TLD = 'com|org|net|co|edu|gov|io|app|me|us|ly|gl|tv|info';
+const URL_RE = new RegExp(
+  `(${SCHEME}|www\\.[^\\s<]+|[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9-]+)*\\.(?:${TLD})\\/[^\\s<]*)`,
+  'gi',
+);
+
+/**
+ * Put percent-escaped punctuation back into a link.
+ *
+ * Only the part before any "?" or "#" is touched. A query string is the one
+ * place where %2F and %3A can be meaningful — decoding them there would change
+ * where the link goes — so it is left exactly as pasted.
+ */
+function repairEscapedUrl(u: string): string {
+  const cut = u.search(/[?#]/);
+  const head = cut === -1 ? u : u.slice(0, cut);
+  const tail = cut === -1 ? '' : u.slice(cut);
+  return head.replace(/%3A/gi, ':').replace(/%2F/gi, '/') + tail;
+}
+
 function linkify(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
@@ -44,11 +74,20 @@ function linkify(text: string): ReactNode[] {
   URL_RE.lastIndex = 0;
   while ((m = URL_RE.exec(text)) !== null) {
     const raw = m[0];
+    // A bare domain has to stand on its own. Mid-word it's part of something
+    // else — an email address, a filename — not a link someone meant to share.
+    const scheme = /^(?:https?(?::|%3[Aa])|www\.)/i.test(raw);
+    if (!scheme && m.index > 0 && /[A-Za-z0-9@%.-]/.test(text[m.index - 1])) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      out.push(raw);
+      last = m.index + raw.length;
+      continue;
+    }
     if (m.index > last) out.push(text.slice(last, m.index));
     // Don't swallow trailing punctuation (e.g. "see foo.com." or "(bar.com)").
     const trail = raw.match(/[.,!?;:)\]]+$/)?.[0] ?? '';
-    const link = trail ? raw.slice(0, -trail.length) : raw;
-    const href = link.startsWith('http') ? link : `https://${link}`;
+    const link = repairEscapedUrl(trail ? raw.slice(0, -trail.length) : raw);
+    const href = /^https?:\/\//i.test(link) ? link : `https://${link}`;
     out.push(
       <a
         key={key++}
