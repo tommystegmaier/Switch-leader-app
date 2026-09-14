@@ -9,6 +9,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js';
 
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
+import { signInIdentifier } from '@/lib/studentAuth';
 
 /**
  * Auth context — email + password sign-in via Supabase Auth.
@@ -89,7 +90,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const supabase = getSupabase();
         if (!supabase) return { error: 'Authentication is not configured.' };
         try {
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          // Leaders type an email; students type their phone number, because
+          // they never had an email on this app to begin with. A phone number
+          // is turned into the address their account actually hangs on — see
+          // src/lib/studentAuth.ts. Anything else is passed through untouched.
+          const identifier = signInIdentifier(email);
+          const { error } = await supabase.auth.signInWithPassword({ email: identifier, password });
+          if (error && identifier !== email) {
+            // Don't echo back a derived address nobody has ever seen.
+            return { error: 'That phone number and password don’t match. Ask your leader to reset it if you’re stuck.' };
+          }
           return { error: error?.message ?? null };
         } catch (e) {
           console.error('signIn failed', e);

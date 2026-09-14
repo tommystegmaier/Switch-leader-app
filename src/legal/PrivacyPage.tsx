@@ -42,6 +42,7 @@ export function PrivacyPage() {
       <Section title="What we collect">
         <List items={[
           <><B>Your account.</B> Your name, email address, phone number, and birthday — you enter these when you sign up. Your password is stored encrypted and we can never see it.</>,
+          <><B>If you&apos;re a student.</B> Your name, graduation year, birthday, and phone number. Students don&apos;t give an email address and don&apos;t need one — the phone number is how you sign in.</>,
           <><B>What you post.</B> Messages, photos, voice messages, and poll votes you send in the app&apos;s group chats, and answers you submit to forms.</>,
           <><B>Your team details.</B> The groups you&apos;re part of and the times you&apos;re scheduled to serve, entered by you or by a leader.</>,
           <><B>Basic usage.</B> The date you last opened the app, so leaders can tell who has it working. We do not track your location, your browsing, or anything you do outside this app.</>,
@@ -112,11 +113,28 @@ export function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="Children">
+      <Section title="Students and parents">
         <p>
-          This app is for ministry leaders and volunteers, and accounts are only created by invitation.
-          It isn&apos;t intended for children, and we don&apos;t knowingly collect information from anyone under
-          13. If you believe a child has an account, contact us and we&apos;ll remove it.
+          This app has two kinds of account. Leaders and volunteers sign in with an email address.
+          Students sign up from a link their youth pastor gives them, using their phone number
+          instead of an email, and give their name, graduation year, birthday, and phone number.
+        </p>
+        <p className="mt-2">
+          Student accounts are created only from a link the ministry hands out, and the ministry
+          decides who receives it. A student sees only the pages marked for students and only the
+          group chats a leader has added them to. Leaders of that ministry can see a student&apos;s
+          name, grade, birthday, and phone number; other students cannot.
+        </p>
+        <p className="mt-2">
+          <B>If you are a parent or guardian:</B> you can ask your ministry&apos;s youth pastor — or us,
+          at the address below — to show you everything we hold about your child, correct it, or
+          delete the account entirely. We will do it. We do not sell student information, use it for
+          advertising, or share it outside the ministry the student joined.
+        </p>
+        <p className="mt-2">
+          We do not knowingly create accounts for children under 13 without a parent or guardian&apos;s
+          consent. If you believe a child under 13 has an account that a parent didn&apos;t agree to,
+          contact us and we will remove it.
         </p>
       </Section>
 

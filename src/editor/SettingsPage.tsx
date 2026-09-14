@@ -24,6 +24,7 @@ import { NavIcon, NAV_ICON_NAMES, isNavIconName } from '@/blocks/navIcons';
 import { ROLE_LABEL, ROLE_LABEL_LONG, ROLE_ORDER, roleLabel } from '@/lib/roles';
 import type { AppSettings, NavStyle, NavTab, Role, ThemeColors, ViewerAccess } from '@/types';
 import { useSettingsMutations } from './useSettingsMutations';
+import { StudentsSection } from './StudentsSection';
 
 /**
  * Workspace settings (editor+ only): theme with live preview + presets, font,
@@ -211,6 +212,10 @@ export function SettingsPage() {
 
       {/* Team & access — who can edit / view (owner & admin only) */}
       {isAdmin && <TeamAccessSection orgId={org.id} currentRole={role} />}
+
+      {/* Students — sign-up link and the roll. Separate from Team & access
+          because students join a different way and have no email. */}
+      {isAdmin && <StudentsSection orgId={org.id} />}
 
       {/* Draft status. Was a hard-coded white bar, which rendered as a bright
           slab in dark mode; use the theme surface/text so it adapts. */}

@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 
+import { StudentJoinPage } from '@/auth/StudentJoinPage';
 import { JoinPage } from '@/auth/JoinPage';
 import { LoginPage } from '@/auth/LoginPage';
 import { ResetPasswordPage } from '@/auth/ResetPasswordPage';
@@ -49,6 +50,13 @@ export const router = createBrowserRouter([
   {
     path: '/join',
     element: <JoinPage />,
+  },
+  {
+    // Students get their own address. They have no email to give, so the
+    // leader invite form would ask them for one and then explain why it's
+    // optional — worse than not asking.
+    path: '/student',
+    element: <StudentJoinPage />,
   },
   {
     // Deliberately outside every sign-in guard: the app stores require a policy

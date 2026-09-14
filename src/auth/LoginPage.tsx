@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { applyHubMetadata, PLATFORM_NAME } from '@/lib/appMetadata';
+import { looksLikePhone } from '@/lib/studentAuth';
 import { useAuth } from './AuthProvider';
 import { PasswordField } from './PasswordField';
 
@@ -43,6 +44,17 @@ export function LoginPage() {
     setBusy(true);
 
     if (mode === 'reset') {
+      // A student account has no real inbox behind it, so there is nowhere to
+      // send a link. Say so plainly instead of claiming one is "on its way" to
+      // an address that doesn't exist — a Coach has to do this one.
+      if (looksLikePhone(email)) {
+        setBusy(false);
+        setError(
+          'Student accounts don’t use email, so we can’t send a reset link. '
+          + 'Ask your Youth Pastor or a Coach to set you a new password.',
+        );
+        return;
+      }
       const { error: err } = await sendPasswordReset(email.trim());
       setBusy(false);
       if (err) { setError(err); return; }
@@ -81,16 +93,22 @@ export function LoginPage() {
 
         <form onSubmit={onSubmit} className="mt-8 flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Email</span>
+            <span className="font-medium">Email or phone number</span>
             <input
-              type="email"
+              // Not type="email": students sign in with a phone number, and the
+              // browser's own validation would reject it before we ever see it.
+              type="text"
+              inputMode="email"
               required
-              autoComplete="email"
+              autoComplete="username"
               autoCapitalize="none"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="rounded-md border border-gray-300 px-3 py-2.5 text-base focus:outline-none focus-visible:ring-2"
             />
+            <span className="text-xs text-gray-500">
+              Leaders use their email. Students use their phone number.
+            </span>
           </label>
 
           {mode === 'signin' && (
