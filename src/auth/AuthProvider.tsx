@@ -8,6 +8,7 @@ import {
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 
+import { queryClient } from '@/lib/queryClient';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { signInIdentifier } from '@/lib/studentAuth';
 
@@ -63,7 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let active = true;
+    // Who the cache currently belongs to. Seeded from the restored session so
+    // reopening the app doesn't look like a change of person and wipe it.
+    let lastUserId: string | null = null;
     supabase.auth.getSession().then(({ data }) => {
+      lastUserId = data.session?.user?.id ?? null;
       if (active) {
         setSession(data.session);
         setLoading(false);
@@ -71,6 +76,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+      // Throw away everything cached for the previous person when a DIFFERENT
+      // one signs in — or when somebody signs out.
+      //
+      // Almost every read is filtered by who is asking: which pages you can
+      // see, which channels, the roster, the student list. On a shared phone —
+      // a leader handing it to a student to sign up, which is exactly how
+      // student accounts get made — the next person would otherwise be served
+      // the last person's answers until each query happened to refetch.
+      //
+      // A token refresh keeps the same id and must NOT clear anything, or the
+      // whole app would empty itself roughly once an hour.
+      const nextId = next?.user?.id ?? null;
+      if (nextId !== lastUserId) {
+        lastUserId = nextId;
+        queryClient.clear();
+      }
       setSession(next);
     });
 
