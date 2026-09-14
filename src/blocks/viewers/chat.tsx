@@ -4,7 +4,8 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import {
-  useChatChannels, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useDeleteChatMessage,
+  useCanManageGroup, useChatChannels, useChatGroupCandidates, useChatGroupMembers,
+  useChatGroupMembership, useChatMessages, useChatMutes, useChatPollVotes, useChatReactions, useDeleteChatMessage,
   useChatBlocks, useEditChatMessage, useMarkChatRead, useReportChatMessage, useSendChatMessage, useSetChatBlock,
   useSetChatMute, useSetChatPostPolicy, useToggleReaction, useVoteChatPoll,
   type ChatMessage, type ChatPostPolicy,
@@ -173,6 +174,15 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
   // delete policy in migration 0076.
   const canModerate = role === 'owner' || role === 'admin' || role === 'editor'
     || (kind === 'student' && role === 'viewer');
+  // A student sends text, GIFs and polls — no photos, no video, no voice. A
+  // GIF is a GIPHY link that is stored nowhere; a photo or a voice message is
+  // a file a child has made of themselves, which is a different thing to put
+  // into a group chat. Leaders in the same channel are unaffected: the limit
+  // is on who is posting, not which channel it is.
+  //
+  // Enforced for real by the insert policy in migration 0079 — this only stops
+  // the app offering something the database would refuse.
+  const isStudent = role === 'student';
   // Only owners/admins can change a channel's posting policy.
   const canConfigure = role === 'owner' || role === 'admin';
 
@@ -201,7 +211,7 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
     );
   }
 
-  return <ChatInner orgId={org.id} kind={kind} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} canConfigure={canConfigure} mediaEnabled={org.chatMediaEnabled !== false} />;
+  return <ChatInner orgId={org.id} kind={kind} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} canConfigure={canConfigure} mediaEnabled={org.chatMediaEnabled !== false && !isStudent} />;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -217,6 +227,11 @@ function ChatInner({ orgId, kind, title, userId, authorName, canModerate, canCon
   const setPolicy = useSetChatPostPolicy(orgId);
   const [active, setActive] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  // Managers anywhere; a leader who has been put into a student group, for that
+  // group only. Asked of the database rather than guessed at, so the button is
+  // never offered where the action would be refused.
+  const { data: canManageActive } = useCanManageGroup(active ?? undefined);
   const [policyOpen, setPolicyOpen] = useState(false);
   const markRead = useMarkChatRead(orgId);
   const mutedSet = new Set(mutes ?? []);
@@ -280,6 +295,18 @@ function ChatInner({ orgId, kind, title, userId, authorName, canModerate, canCon
             🗑️
           </button>
         )}
+        {active && canManageActive && (
+          <button
+            type="button"
+            onClick={() => setPeopleOpen(true)}
+            className="shrink-0 rounded-full px-2 py-1 text-lg"
+            style={{ opacity: 0.6 }}
+            title="Who's in this group"
+            aria-label="Manage who is in this group"
+          >
+            👥
+          </button>
+        )}
         {active && (
           <button
             type="button"
@@ -314,6 +341,7 @@ function ChatInner({ orgId, kind, title, userId, authorName, canModerate, canCon
         })}
       </div>
 
+      {peopleOpen && active && <GroupPeople groupId={active} onClose={() => setPeopleOpen(false)} />}
       {active && <ChannelPane orgId={orgId} groupId={active} userId={userId} authorName={authorName} canModerate={canModerate} deleteMode={deleteMode} mediaEnabled={mediaEnabled} canPost={activeCh?.canPost ?? true} onSeen={() => markRead.mutate(active)} />}
 
       {policyOpen && activeCh && (
@@ -1944,6 +1972,126 @@ function PhotoHoldMenu({ url, reactions, canDelete, onReact, onView, onDelete, o
       <button type="button" onClick={onClose} className="relative z-10 mt-3 rounded-full px-6 py-2.5 text-sm font-semibold" style={{ backgroundColor: 'var(--th-surface)', color: 'var(--th-text)' }}>
         Cancel
       </button>
+    </div>
+  );
+}
+
+/**
+ * Who is in this group — for the leader who runs it.
+ *
+ * A group leader could already delete messages in their student group but not
+ * add the student sitting in front of them, so every change still had to go
+ * through the Youth Pastor. That is the bottleneck this app exists to remove.
+ *
+ * Only shown where can_manage_chat_group() says yes: managers anywhere, and a
+ * leader in a student group for that group alone.
+ */
+function GroupPeople({ groupId, onClose }: { groupId: string; onClose: () => void }) {
+  const { data: members } = useChatGroupMembers(groupId, true);
+  const { data: candidates } = useChatGroupCandidates(groupId, true);
+  const { add, remove } = useChatGroupMembership(groupId);
+  const [adding, setAdding] = useState(false);
+  const [q, setQ] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const matches = (candidates ?? []).filter((c) =>
+    !q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase()));
+
+  async function run(fn: () => Promise<unknown>) {
+    setError(null);
+    try { await fn(); } catch (e) { setError(errorMessage(e)); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative flex max-h-[85vh] w-full max-w-sm flex-col rounded-t-2xl p-4 shadow-xl sm:rounded-2xl" style={{ backgroundColor: 'var(--th-surface)' }}>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-lg font-bold" style={{ color: 'var(--th-heading)' }}>
+            {adding ? 'Add to this group' : 'Who’s in this group'}
+          </h3>
+          <button type="button" onClick={onClose} className="rounded px-2 text-2xl leading-none" aria-label="Close">×</button>
+        </div>
+
+        {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+
+        {adding ? (
+          <>
+            <input
+              className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-base"
+              placeholder="Search by name…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              autoFocus
+            />
+            <ul className="mb-3 flex-1 overflow-y-auto">
+              {matches.length === 0 && (
+                <li className="py-4 text-center text-sm text-gray-500">
+                  {(candidates ?? []).length === 0 ? 'Everyone is already in this group.' : 'Nobody matches that.'}
+                </li>
+              )}
+              {matches.map((c) => (
+                <li key={c.userId}>
+                  <button
+                    type="button"
+                    disabled={c.needsConsent || add.isPending}
+                    onClick={() => run(() => add.mutateAsync(c.userId))}
+                    className="flex w-full items-center gap-2 border-b px-1 py-2.5 text-left text-sm disabled:opacity-50"
+                    style={{ borderColor: 'var(--th-hairline)' }}
+                  >
+                    <span className="flex-1">
+                      {c.name}
+                      {c.grade && <span className="ml-2 text-xs text-gray-500">{c.grade}</span>}
+                      {!c.isStudent && <span className="ml-2 text-xs text-gray-500">leader</span>}
+                      {c.needsConsent && (
+                        <span className="mt-0.5 block text-xs" style={{ color: '#b45309' }}>
+                          Waiting on a parent&rsquo;s permission
+                        </span>
+                      )}
+                    </span>
+                    {!c.needsConsent && <span aria-hidden className="text-lg">＋</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => { setAdding(false); setQ(''); }} className="rounded-full border border-gray-300 px-4 py-3 font-semibold">
+              Done adding
+            </button>
+          </>
+        ) : (
+          <>
+            <ul className="mb-3 flex-1 overflow-y-auto">
+              {(members ?? []).length === 0 && (
+                <li className="py-4 text-center text-sm text-gray-500">Nobody is in this group yet.</li>
+              )}
+              {(members ?? []).map((m) => (
+                <li key={m.personId} className="flex items-center gap-2 border-b px-1 py-2.5 text-sm" style={{ borderColor: 'var(--th-hairline)' }}>
+                  <span className="flex-1">
+                    {m.name}
+                    {!m.isStudent && <span className="ml-2 text-xs text-gray-500">leader</span>}
+                    {m.role && <span className="ml-2 text-xs text-gray-500">{m.role}</span>}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { if (confirm(`Remove ${m.name} from this group? They'll lose access to this chat.`)) void run(() => remove.mutateAsync(m.personId)); }}
+                    className="rounded px-2 py-1 text-xs text-red-600 underline"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="rounded-full px-6 py-3 font-semibold"
+              style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+            >
+              Add someone
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

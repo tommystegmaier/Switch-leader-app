@@ -502,3 +502,91 @@ export function useEditChatMessage(orgId: string) {
     },
   });
 }
+
+// --- running a group from inside its chat ----------------------------------
+
+export interface ChatGroupMember { personId: string; userId: string | null; name: string; role: string | null; isStudent: boolean }
+export interface ChatGroupCandidate { userId: string; name: string; grade: string | null; isStudent: boolean; needsConsent: boolean }
+
+/**
+ * Can the current user add and remove people in this channel?
+ *
+ * True for managers anywhere, and for a leader who has been put into a STUDENT
+ * group — that group only. The database decides (can_manage_chat_group); this
+ * just asks, so the button isn't offered where the answer would be no.
+ */
+export function useCanManageGroup(groupId: string | undefined) {
+  return useQuery({
+    queryKey: KEY(undefined, 'can-manage', groupId ?? ''),
+    enabled: Boolean(groupId) && isSupabaseConfigured,
+    queryFn: async (): Promise<boolean> => {
+      const s = getSupabase(); if (!s || !groupId) return false;
+      const { data, error } = await s.rpc('can_manage_chat_group', { p_group: groupId });
+      // Before migration 0079 nobody has this; fall back to "no" rather than
+      // showing a button that would fail.
+      if (error) return false;
+      return Boolean(data);
+    },
+  });
+}
+
+export function useChatGroupMembers(groupId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: KEY(undefined, 'members', groupId ?? ''),
+    enabled: Boolean(groupId) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<ChatGroupMember[]> => {
+      const s = getSupabase(); if (!s || !groupId) return [];
+      const { data, error } = await s.rpc('chat_group_members', { p_group: groupId });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[]).map((r) => ({
+        personId: r.person_id, userId: r.user_id ?? null, name: r.name,
+        role: r.role ?? null, isStudent: Boolean(r.is_student),
+      }));
+    },
+  });
+}
+
+export function useChatGroupCandidates(groupId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: KEY(undefined, 'candidates', groupId ?? ''),
+    enabled: Boolean(groupId) && enabled && isSupabaseConfigured,
+    queryFn: async (): Promise<ChatGroupCandidate[]> => {
+      const s = getSupabase(); if (!s || !groupId) return [];
+      const { data, error } = await s.rpc('chat_group_candidates', { p_group: groupId });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return ((data ?? []) as any[]).map((r) => ({
+        userId: r.user_id, name: r.name, grade: r.grade ?? null,
+        isStudent: Boolean(r.is_student), needsConsent: Boolean(r.needs_consent),
+      }));
+    },
+  });
+}
+
+export function useChatGroupMembership(groupId: string | undefined) {
+  const qc = useQueryClient();
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: KEY(undefined, 'members', groupId ?? '') });
+    void qc.invalidateQueries({ queryKey: KEY(undefined, 'candidates', groupId ?? '') });
+    // The roster board shows the same rows.
+    void qc.invalidateQueries({ queryKey: ['roster'] });
+  };
+  const add = useMutation({
+    mutationFn: async (userId: string) => {
+      const s = getSupabase(); if (!s || !groupId) throw new Error('Not configured');
+      const { error } = await s.rpc('add_to_chat_group', { p_group: groupId, p_user: userId });
+      if (error) throw error;
+    },
+    onSuccess: refresh,
+  });
+  const remove = useMutation({
+    mutationFn: async (personId: string) => {
+      const s = getSupabase(); if (!s || !groupId) throw new Error('Not configured');
+      const { error } = await s.rpc('remove_from_chat_group', { p_group: groupId, p_person: personId });
+      if (error) throw error;
+    },
+    onSuccess: refresh,
+  });
+  return { add, remove };
+}
