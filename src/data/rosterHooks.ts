@@ -9,6 +9,24 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
  * to owner/admin/editor (see migration 0025).
  */
 
+/**
+ * Did this query fail only because a column isn't there yet?
+ *
+ * Code is deployed the moment it's pushed; migrations are run by hand
+ * afterwards. Anything that reads a brand-new column therefore has to survive
+ * the gap between the two, or the screen goes blank and looks like data loss.
+ *
+ * Deliberately narrow: it matches the "undefined column" code and the column
+ * name, so a real failure — permissions, network, a genuine bug — still throws
+ * and is still visible rather than being silently swallowed.
+ */
+function isMissingColumn(error: { code?: string; message?: string }, column: string): boolean {
+  const code = error?.code ?? '';
+  const message = (error?.message ?? '').toLowerCase();
+  return (code === '42703' || message.includes('does not exist'))
+    && message.includes(column.toLowerCase());
+}
+
 export interface RosterGroup { id: string; name: string; sort: number; parentId: string | null }
 export interface RosterPerson {
   id: string;
@@ -36,7 +54,24 @@ export function useRosterGroups(orgId: string | undefined, kind: RosterKind = 'l
       const s = getSupabase(); if (!s || !orgId) return [];
       // Exclude auto groups (e.g. Coaches) and the "All Leaders" group — they're
       // chat-only, computed from the roster, not editable here.
-      const { data, error } = await s.from('roster_groups').select('id, name, sort, parent_id').eq('org_id', orgId).eq('kind', kind).is('auto_role', null).not('is_all', 'is', true).order('sort').order('name');
+      const base = () => s.from('roster_groups').select('id, name, sort, parent_id')
+        .eq('org_id', orgId).is('auto_role', null).not('is_all', 'is', true)
+        .order('sort').order('name');
+
+      let { data, error } = await base().eq('kind', kind);
+
+      // The `kind` column arrives with migration 0076, and this app deploys the
+      // moment code is pushed while migrations are run by hand — so there is a
+      // window where the new build is live and the column isn't there yet.
+      // Without this the roster renders EMPTY, which looks exactly like the
+      // data having been deleted. It hasn't been; the query just failed.
+      //
+      // Before the column exists every group is a leader group, so that's what
+      // we fall back to, and a student roster correctly shows nothing.
+      if (error && isMissingColumn(error, 'kind')) {
+        if (kind === 'student') return [];
+        ({ data, error } = await base());
+      }
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => ({ id: r.id, name: r.name, sort: r.sort, parentId: r.parent_id ?? null }));
@@ -168,7 +203,16 @@ export function useCreateRosterGroup(orgId: string, kind: RosterKind = 'leader')
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
       // A group is created on the side of the app the block belongs to. Getting
       // this wrong would put a student group in Leader Messaging.
-      const { error } = await s.from('roster_groups').insert({ org_id: orgId, name: name.trim(), parent_id: parentId ?? null, kind });
+      const row = { org_id: orgId, name: name.trim(), parent_id: parentId ?? null };
+      let { error } = await s.from('roster_groups').insert({ ...row, kind });
+      if (error && isMissingColumn(error, 'kind')) {
+        // Migration 0076 hasn't run yet. A leader group is still creatable —
+        // that's what every group is before the column exists.
+        if (kind === 'student') {
+          throw new Error('Student groups need the Phase 3 database update to be run first.');
+        }
+        ({ error } = await s.from('roster_groups').insert(row));
+      }
       if (error) throw error;
     },
     onSuccess: () => invalidate(qc, orgId, 'groups'),

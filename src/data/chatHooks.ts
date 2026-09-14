@@ -9,6 +9,23 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
  * without the extra moving parts of a realtime socket.
  */
 
+/**
+ * Did this RPC fail only because the function signature isn't there yet?
+ *
+ * PostgREST answers PGRST202 when no function matches the arguments given.
+ * Code deploys on push and migrations are run by hand afterwards, so a call
+ * that uses a new argument has to survive the gap — otherwise the channel list
+ * comes back empty and looks like every conversation was deleted.
+ *
+ * Narrow on purpose: a real error still throws and is still visible.
+ */
+function isMissingFunction(error: { code?: string; message?: string }): boolean {
+  const code = error?.code ?? '';
+  const message = (error?.message ?? '').toLowerCase();
+  return code === 'PGRST202'
+    || (message.includes('function') && message.includes('does not exist'));
+}
+
 export type ChatPostPolicy = 'all' | 'managers' | 'managers_coaches';
 export interface ChatChannel { groupId: string; name: string; parentId: string | null; parentName: string | null; sort: number; unread: number; isAll: boolean; postPolicy: ChatPostPolicy; canPost: boolean }
 export interface ChatPoll { options: string[] }
@@ -34,7 +51,18 @@ export function useChatChannels(orgId: string | undefined, enabled = true, kind:
     refetchInterval: 15_000,
     queryFn: async (): Promise<ChatChannel[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const { data, error } = await s.rpc('my_chat_groups', { p_org: orgId, p_kind: kind });
+      let { data, error } = await s.rpc('my_chat_groups', { p_org: orgId, p_kind: kind });
+
+      // p_kind arrives with migration 0076. Code deploys on push, migrations
+      // are run by hand afterwards, so there is a window where this build is
+      // live and the new function signature isn't there yet. Falling back to
+      // the old one keeps Leader Messaging working through that gap instead of
+      // showing an empty channel list that looks like everything was deleted.
+      if (error && isMissingFunction(error)) {
+        // Before 0076 every channel is a leader channel.
+        if (kind === 'student') return [];
+        ({ data, error } = await s.rpc('my_chat_groups', { p_org: orgId }));
+      }
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => ({ groupId: r.group_id, name: r.name, parentId: r.parent_id ?? null, parentName: r.parent_name ?? null, sort: r.sort, unread: r.unread ?? 0, isAll: Boolean(r.is_all), postPolicy: (r.post_policy ?? 'all') as ChatPostPolicy, canPost: r.can_post !== false }));
