@@ -21,7 +21,7 @@ import {
   useRosterStatus, useSaveNotifyDefaults, useScheduleMembers, useScheduleMute,
   useScheduleRoles, useScheduleTeams, useServeWeekday, useSetScheduleMute,
   useSetServeWeekday, useSkips, useSyncScheduleFromRoster,
-  type MyOccurrence,
+  type BirthdayAudience, type MyOccurrence,
 } from '@/data/scheduleHooks';
 import type { ViewerCtx } from '../actions';
 
@@ -782,7 +782,7 @@ function accentLabel(): string {
 // shouldn't change colour with the workspace's branding.
 const BIRTHDAY_GREEN = '#16a34a';
 
-function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | null; email: string; phone: string | null; md: string; days: number }; highlight?: boolean }) {
+function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | null; email: string; phone: string | null; md: string; days: number; isStudent?: boolean }; highlight?: boolean }) {
   const today = b.days === 0;
   return (
     <li
@@ -793,7 +793,19 @@ function BirthdayRow({ b, highlight }: { b: { userId: string; name: string | nul
       }}
     >
       <span className="min-w-0">
-        <span className="block truncate font-medium">🎂 {b.name || b.email}</span>
+        <span className="block truncate font-medium">
+          🎂 {b.name || b.email}
+          {/* Which side of the app they're on. A list mixing a volunteer and a
+              12-year-old is hard to read without it. */}
+          <span
+            className="ml-2 rounded-full px-1.5 py-0.5 align-middle text-[0.65rem] font-semibold"
+            style={b.isStudent
+              ? { backgroundColor: 'rgba(37,99,235,0.14)', color: '#1d4ed8' }
+              : { backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--th-text)', opacity: 0.75 }}
+          >
+            {b.isStudent ? 'Student' : 'Leader'}
+          </span>
+        </span>
         {b.phone && <a href={`tel:${b.phone}`} className="text-xs text-gray-500 underline">{b.phone}</a>}
       </span>
       {b.days <= 1 ? (
@@ -826,14 +838,16 @@ function BirthdayAlertSettings({ orgId }: { orgId: string }) {
   const save = useSaveBirthdayConfig(orgId);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [time, setTime] = useState<string | null>(null);
+  const [audience, setAudience] = useState<BirthdayAudience | null>(null);
   const [saved, setSaved] = useState(false);
 
   const enabledVal = enabled ?? cfg?.enabled ?? false;
   const timeVal = time ?? cfg?.notifyTime ?? '08:00';
+  const audienceVal: BirthdayAudience = audience ?? cfg?.audience ?? 'everyone';
   const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
 
-  function persist(next: { enabled: boolean; notifyTime: string }) {
-    save.mutate({ enabled: next.enabled, notifyTime: next.notifyTime, timezone: tz });
+  function persist(next: { enabled: boolean; notifyTime: string; audience: BirthdayAudience }) {
+    save.mutate({ enabled: next.enabled, notifyTime: next.notifyTime, timezone: tz, audience: next.audience });
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   }
 
@@ -844,15 +858,37 @@ function BirthdayAlertSettings({ orgId }: { orgId: string }) {
           <span className="block font-medium">🔔 Daily birthday alerts (feature)</span>
           <span className="block text-xs text-gray-500">Turns the feature on and sets the time. Each person chooses to receive it above.</span>
         </span>
-        <input type="checkbox" className="h-5 w-5" checked={enabledVal} onChange={(e) => { setEnabled(e.target.checked); persist({ enabled: e.target.checked, notifyTime: timeVal }); }} />
+        <input type="checkbox" className="h-5 w-5" checked={enabledVal} onChange={(e) => { setEnabled(e.target.checked); persist({ enabled: e.target.checked, notifyTime: timeVal, audience: audienceVal }); }} />
       </label>
       {enabledVal && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="font-medium">Send at</span>
-          <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={timeVal} onChange={(e) => { setTime(e.target.value); persist({ enabled: enabledVal, notifyTime: e.target.value }); }} />
+          <input type="time" className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" value={timeVal} onChange={(e) => { setTime(e.target.value); persist({ enabled: enabledVal, notifyTime: e.target.value, audience: audienceVal }); }} />
           <span className="text-xs text-gray-500">your time ({tz.split('/').pop()})</span>
         </div>
       )}
+      {/* Whose birthdays. Applies to the card AND the daily notification —
+          one switch, so the two can't disagree about who is included. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium">Whose birthdays</span>
+        <select
+          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          value={audienceVal}
+          onChange={(e) => {
+            const a = e.target.value as BirthdayAudience;
+            setAudience(a);
+            persist({ enabled: enabledVal, notifyTime: timeVal, audience: a });
+          }}
+          aria-label="Whose birthdays to show"
+        >
+          <option value="everyone">Leaders and students</option>
+          <option value="leaders">Leaders only</option>
+          <option value="students">Students only</option>
+        </select>
+      </div>
+      <p className="mt-1 text-xs text-gray-500">
+        Covers both the birthday list and the daily reminder.
+      </p>
       {saved && <p className="mt-1 text-xs text-green-700">Saved ✓</p>}
     </div>
   );

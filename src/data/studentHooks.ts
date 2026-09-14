@@ -137,3 +137,35 @@ export function useSetStudentConsent(orgId: string | undefined) {
     },
   });
 }
+
+/**
+ * Delete a student's account for good.
+ *
+ * The re-add half of "remove and re-add" needs no code: a student account is
+ * keyed to their phone number, so deleting frees that number and they simply
+ * use the student sign-up link again. Leaving the account in place would mean
+ * the number stayed taken and they could never sign up a second time.
+ */
+export function useDeleteStudent(orgId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const s = getSupabase();
+      const { data: sessionRes } = s ? await s.auth.getSession() : { data: { session: null } };
+      const token = sessionRes?.session?.access_token;
+      if (!token) throw new Error('Please sign in again.');
+      const res = await fetch('/api/delete-student', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ userId }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; name?: string };
+      if (!res.ok) throw new Error(body.error || `Server error (${res.status})`);
+      return body.name ?? '';
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['students', orgId] });
+      void qc.invalidateQueries({ queryKey: ['roster', orgId] });
+    },
+  });
+}

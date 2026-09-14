@@ -5,7 +5,7 @@ import {
   useAddRosterPerson, useDeleteRosterPerson, useRosterGroups, useRosterPeople,
 } from '@/data/rosterHooks';
 import {
-  useResetStudentPassword, useSetStudentConsent, useStudentConsentLink,
+  useDeleteStudent, useResetStudentPassword, useSetStudentConsent, useStudentConsentLink,
   useStudents, type Student,
 } from '@/data/studentHooks';
 import { errorMessage } from '@/lib/errors';
@@ -25,6 +25,7 @@ export function StudentsSection({ orgId }: { orgId: string }) {
   const { data: invites } = useInvites(orgId, true);
   const createInvite = useCreateInvite(orgId);
   const revokeInvite = useRevokeInvite(orgId);
+  const removeStudent = useDeleteStudent(orgId);
 
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -189,6 +190,22 @@ export function StudentsSection({ orgId }: { orgId: string }) {
                 )}
                 <button type="button" onClick={() => setResetting(s)} className="rounded px-2 py-1 text-xs underline">
                   Reset password
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!confirm(
+                      `Remove ${s.fullName}'s account?\n\n`
+                      + 'Their messages and everything else about them is deleted for good. '
+                      + 'Their phone number is freed, so if they come back they can sign up '
+                      + 'again with the same student link.'
+                    )) return;
+                    setError(null);
+                    removeStudent.mutate(s.userId, { onError: (e) => setError(errorMessage(e)) });
+                  }}
+                  className="rounded px-2 py-1 text-xs text-red-600 underline"
+                >
+                  Remove
                 </button>
               </span>
             </li>

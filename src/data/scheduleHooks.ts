@@ -15,7 +15,23 @@ export interface ScheduleMember { userId: string; name: string | null; email: st
 export interface RosterEntry { roleId: string; userId: string; name: string | null; email: string }
 export interface StatusEntry { roleId: string; userId: string; status: 'confirmed' | 'declined'; note: string | null }
 export interface MyOccurrence { roleId: string; teamName: string; roleName: string; serveDate: string; status: 'pending' | 'confirmed' | 'declined' }
-export interface Birthday { userId: string; name: string | null; email: string; phone: string | null; birthday: string }
+/** Whose birthdays the feature covers. Applies to the card and the daily push. */
+export type BirthdayAudience = 'everyone' | 'leaders' | 'students';
+
+export interface Birthday {
+  userId: string; name: string | null; email: string; phone: string | null; birthday: string;
+  /** Stored role, so the card can say Leader or Student. */
+  role: string | null;
+  isStudent: boolean;
+}
+
+/** See the note in rosterHooks: code deploys before migrations are run. */
+function isMissingColumn(error: { code?: string; message?: string }, column: string): boolean {
+  const code = error?.code ?? '';
+  const message = (error?.message ?? '').toLowerCase();
+  return (code === '42703' || code === 'PGRST204' || message.includes('does not exist'))
+    && message.includes(column.toLowerCase());
+}
 
 const KEY = (orgId: string | undefined, ...rest: string[]) => ['schedule', orgId, ...rest];
 
@@ -132,17 +148,32 @@ export function useServeWeekday(orgId: string | undefined, enabled = true) {
   });
 }
 
-export interface BirthdayConfig { enabled: boolean; notifyTime: string; timezone: string }
+export interface BirthdayConfig { enabled: boolean; notifyTime: string; timezone: string; audience?: BirthdayAudience }
 
 export function useBirthdayConfig(orgId: string | undefined, enabled: boolean) {
   return useQuery({
     queryKey: KEY(orgId, 'birthday-config'),
     enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
     queryFn: async (): Promise<BirthdayConfig> => {
-      const s = getSupabase(); if (!s || !orgId) return { enabled: false, notifyTime: '08:00', timezone: 'UTC' };
-      const { data, error } = await s.from('birthday_config').select('enabled, notify_time, timezone').eq('org_id', orgId).maybeSingle();
+      const s = getSupabase(); if (!s || !orgId) return { enabled: false, notifyTime: '08:00', timezone: 'UTC', audience: 'everyone' };
+      const cols = 'enabled, notify_time, timezone, audience';
+      let { data, error } = await s.from('birthday_config').select(cols).eq('org_id', orgId).maybeSingle();
+      // `audience` arrives with migration 0081. Code deploys on push and
+      // migrations run by hand, so read without it rather than showing an
+      // empty birthday card in between.
+      if (error && isMissingColumn(error, 'audience')) {
+        ({ data, error } = await s.from('birthday_config')
+          .select('enabled, notify_time, timezone').eq('org_id', orgId).maybeSingle());
+      }
       if (error) throw error;
-      return { enabled: data?.enabled ?? false, notifyTime: data?.notify_time ?? '08:00', timezone: data?.timezone ?? 'UTC' };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const row = data as any;
+      return {
+        enabled: row?.enabled ?? false,
+        notifyTime: row?.notify_time ?? '08:00',
+        timezone: row?.timezone ?? 'UTC',
+        audience: (row?.audience ?? 'everyone') as BirthdayAudience,
+      };
     },
   });
 }
@@ -152,7 +183,11 @@ export function useSaveBirthdayConfig(orgId: string) {
   return useMutation({
     mutationFn: async (cfg: BirthdayConfig) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const { error } = await s.from('birthday_config').upsert({ org_id: orgId, enabled: cfg.enabled, notify_time: cfg.notifyTime, timezone: cfg.timezone });
+      const row = { org_id: orgId, enabled: cfg.enabled, notify_time: cfg.notifyTime, timezone: cfg.timezone };
+      let { error } = await s.from('birthday_config').upsert({ ...row, audience: cfg.audience ?? 'everyone' });
+      if (error && isMissingColumn(error, 'audience')) {
+        ({ error } = await s.from('birthday_config').upsert(row));
+      }
       if (error) throw error;
     },
     onSuccess: () => invalidate(qc, orgId, 'birthday-config'),
@@ -268,7 +303,7 @@ export function useOrgBirthdays(orgId: string | undefined, enabled: boolean) {
       const { data, error } = await s.rpc('org_birthdays', { p_org: orgId });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ userId: r.user_id, name: r.name ?? null, email: r.email, phone: r.phone ?? null, birthday: r.birthday }));
+      return (data ?? []).map((r: any) => ({ userId: r.user_id, name: r.name ?? null, email: r.email, phone: r.phone ?? null, birthday: r.birthday, role: r.role ?? null, isStudent: Boolean(r.is_student) }));
     },
   });
 }
