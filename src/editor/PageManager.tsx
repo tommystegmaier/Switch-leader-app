@@ -15,13 +15,14 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+import { AUDIENCE_LABEL, audienceToRule, ruleToAudience, type Audience } from '@/lib/roles';
 import type { Page, VisibilityRule } from '@/types';
 import { usePageMutations } from './usePageMutations';
 
 /**
  * Page management modal (Edit Mode): add, rename, set emoji icon, reorder
- * (drag), toggle published, set visibility (Everyone / Admins only), duplicate,
- * and delete pages. Templated team pages duplicate cleanly (page + all blocks).
+ * (drag), toggle published, choose who the page is for, duplicate, and delete
+ * pages. Templated team pages duplicate cleanly (page + all blocks).
  */
 export function PageManager({
   orgId,
@@ -121,7 +122,7 @@ function PageRow({
   const [icon, setIcon] = useState(page.icon ?? '');
 
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
-  const visKind = page.visibility?.kind ?? 'everyone';
+  const audience = ruleToAudience(page.visibility);
 
   return (
     <div ref={setNodeRef} style={style} className={`rounded-lg border p-2 ${isCurrent ? 'ring-2 ring-black/10' : ''}`} >
@@ -148,13 +149,14 @@ function PageRow({
           <input type="checkbox" checked={page.isPublished} onChange={onTogglePublished} /> Published
         </label>
         <select
-          value={visKind}
-          onChange={(e) => onVisibility(e.target.value === 'admins' ? { kind: 'admins' } : { kind: 'everyone' })}
+          value={audience}
+          onChange={(e) => onVisibility(audienceToRule(e.target.value as Audience))}
           className="rounded border border-gray-200 px-1 py-1"
-          aria-label="Visibility"
+          aria-label="Who can see this page"
         >
-          <option value="everyone">Everyone</option>
-          <option value="admins">Managers only</option>
+          {(Object.keys(AUDIENCE_LABEL) as Audience[]).map((a) => (
+            <option key={a} value={a}>{AUDIENCE_LABEL[a]}</option>
+          ))}
         </select>
         <button type="button" onClick={onOpen} className="rounded px-2 py-1 underline">Open</button>
         <button type="button" onClick={onDuplicate} className="rounded px-2 py-1 hover:bg-black/10" title="Duplicate">⧉</button>

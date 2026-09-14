@@ -1,5 +1,6 @@
 import { useEffect, type CSSProperties } from 'react';
 
+import { canEdit } from '@/lib/roles';
 import type { Block, Role, VisibilityRule } from '@/types';
 import type { ViewerCtx } from './actions';
 import { getBlockDef } from './registry';
@@ -75,18 +76,25 @@ function StaleBlockNotice() {
 }
 
 /**
- * Visibility check used by the read-only Viewer. Phase 1 audiences:
- * "everyone" (default) and "admins" (staging). Forward-compatible with named
- * roles. NOTE: this is a display rule layered on top of RLS, which already
- * guarantees a viewer can't *write* anything.
+ * Who a page or block is for.
+ *
+ * This is the second of two copies of the same decision. The one that enforces
+ * it is can_see_visibility() in migration 0074 — the database no longer sends
+ * a page to someone who isn't allowed it, so a student's phone never receives
+ * leader content in the first place. This copy exists so the app doesn't offer
+ * a tab it would then fail to load, and so edit mode can preview.
+ *
+ * The two must agree. If you change a rule here, change it there too.
  */
 export function isVisibleTo(rule: VisibilityRule | undefined, role: Role | null): boolean {
   if (!rule || rule.kind === 'everyone') return true;
-  const isEditor = role === 'owner' || role === 'admin' || role === 'editor';
-  if (rule.kind === 'admins') return isEditor;
-  if (rule.kind === 'roles') {
-    // Named-role gating (future): editors always see; otherwise role must match.
-    return isEditor || (role !== null && rule.roles.includes(role));
-  }
-  return true;
+  if (role === null) return false;
+  // Anyone who can edit the app sees all of it — they are the ones building
+  // the pages, and hiding a page from its author only makes it uneditable.
+  if (canEdit(role)) return true;
+  if (rule.kind === 'admins') return false;
+  if (rule.kind === 'roles') return rule.roles.includes(role);
+  // An unrecognised rule is private, not public: a typo in a rule name should
+  // cost a leader a page, not expose one to a student.
+  return false;
 }

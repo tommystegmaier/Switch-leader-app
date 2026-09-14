@@ -8,21 +8,27 @@
  * shapes.
  */
 
-export type Role = 'owner' | 'admin' | 'editor' | 'viewer';
+/**
+ * Stored values, not display names. See `src/lib/roles.ts` for what each one
+ * is called on screen — 'viewer' is shown as "Leader", 'admin' as "Coach".
+ */
+export type Role = 'owner' | 'admin' | 'editor' | 'viewer' | 'student';
 
 export type ViewerAccess = 'public' | 'invite_only';
 
 export type NavStyle = 'top' | 'bottom' | 'both';
 
 /**
- * Visibility rule attached to pages and blocks. Phase 1 supports the two
- * baseline audiences; the JSON shape is intentionally open so named team
- * roles (e.g. "Safety Team") can be added later without a schema change.
+ * Who a page or block is for.
+ *
+ * 'everyone' means every signed-in member, students included — so it is NOT
+ * the right default once a page carries anything leaders discuss about
+ * students. 'roles' names the audiences explicitly and is what the Leaders /
+ * Students choice in the page manager writes.
  */
 export type VisibilityRule =
   | { kind: 'everyone' }
   | { kind: 'admins' }
-  // Forward-compatible: gate by named roles added in a later phase.
   | { kind: 'roles'; roles: string[] };
 
 export interface Organization {

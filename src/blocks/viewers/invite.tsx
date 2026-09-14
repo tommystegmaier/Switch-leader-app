@@ -4,17 +4,11 @@ import { useMembershipRole } from '@/auth/useMembership';
 import { useOrganization } from '@/data/hooks';
 import { useCreateInvite, useInvites, useRevokeInvite } from '@/data/inviteHooks';
 import { errorMessage } from '@/lib/errors';
+import { ROLE_LABEL_LONG, roleLabel } from '@/lib/roles';
 import type { Role } from '@/types';
 import type { ViewerCtx } from '../actions';
 
 interface InviteProps { title?: string }
-
-const ROLE_LABEL: Record<string, string> = {
-  owner: 'Owner (full control)',
-  admin: 'Admin (can edit + manage people)',
-  editor: 'Editor (can edit the app)',
-  viewer: 'Viewer (can only look)',
-};
 
 const card = 'rounded-xl border p-4';
 const cardStyle = { borderColor: 'var(--th-hairline)' } as const;
@@ -99,10 +93,10 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
           {/* Viewer first as well as default — the list reads least-access-first,
               so the safe choice is the one under your thumb. */}
           <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
-            <option value="viewer">{ROLE_LABEL.viewer}</option>
-            <option value="editor">{ROLE_LABEL.editor}</option>
-            <option value="admin">{ROLE_LABEL.admin}</option>
-            {isOwner && <option value="owner">{ROLE_LABEL.owner}</option>}
+            <option value="viewer">{ROLE_LABEL_LONG.viewer}</option>
+            <option value="editor">{ROLE_LABEL_LONG.editor}</option>
+            <option value="admin">{ROLE_LABEL_LONG.admin}</option>
+            {isOwner && <option value="owner">{ROLE_LABEL_LONG.owner}</option>}
           </select>
           <button type="button" onClick={onCreate} disabled={createInvite.isPending} className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
             {createInvite.isPending ? 'Creating…' : 'Create invite link'}
@@ -118,7 +112,7 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
             return (
               <li key={inv.id} className="flex items-center justify-between gap-2">
                 <span className="min-w-0 flex-1 truncate rounded bg-black/5 px-2 py-1 text-xs">
-                  {ROLE_LABEL[inv.role] ?? inv.role}
+                  {roleLabel(inv.role)}
                   {inv.email && <span className="text-gray-500"> · {inv.email}</span>}
                   {inv.phone && <span className="text-gray-500"> · {inv.phone}</span>}
                 </span>

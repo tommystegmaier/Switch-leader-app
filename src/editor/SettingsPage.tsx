@@ -21,6 +21,7 @@ import { applyTheme } from '@/lib/theme';
 import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
 import { useAllPages } from '@/data/pageHooks';
 import { NavIcon, NAV_ICON_NAMES, isNavIconName } from '@/blocks/navIcons';
+import { ROLE_LABEL, ROLE_LABEL_LONG, ROLE_ORDER, roleLabel } from '@/lib/roles';
 import type { AppSettings, NavStyle, NavTab, Role, ThemeColors, ViewerAccess } from '@/types';
 import { useSettingsMutations } from './useSettingsMutations';
 
@@ -317,13 +318,6 @@ function SortableTab({ id, children }: { id: string; children: ReactNode }) {
   );
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: 'Owner (full control)',
-  admin: 'Admin (can edit + manage people)',
-  editor: 'Editor (can edit the app)',
-  viewer: 'Viewer (can only look)',
-};
-
 /**
  * Team & access: an owner/admin invites teammates by generating a join link
  * (pick the role), sees everyone who currently has access, and can change a
@@ -450,10 +444,9 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
                       disabled={isSelf || (m.role === 'owner' && !isOwner)}
                       onChange={(e) => run(() => setRole.mutateAsync({ userId: m.userId, role: e.target.value as Role }))}
                     >
-                      <option value="owner">Owner</option>
-                      <option value="admin">Admin</option>
-                      <option value="editor">Editor</option>
-                      <option value="viewer">Viewer</option>
+                      {ROLE_ORDER.map((r) => (
+                        <option key={r} value={r}>{ROLE_LABEL[r]}</option>
+                      ))}
                     </select>
                     <button
                       type="button"
@@ -506,10 +499,10 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
           />
           <div className="flex flex-wrap items-center gap-2">
             <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
-              <option value="viewer">{ROLE_LABEL.viewer}</option>
-              <option value="editor">{ROLE_LABEL.editor}</option>
-              <option value="admin">{ROLE_LABEL.admin}</option>
-              {isOwner && <option value="owner">{ROLE_LABEL.owner}</option>}
+              <option value="viewer">{ROLE_LABEL_LONG.viewer}</option>
+              <option value="editor">{ROLE_LABEL_LONG.editor}</option>
+              <option value="admin">{ROLE_LABEL_LONG.admin}</option>
+              {isOwner && <option value="owner">{ROLE_LABEL_LONG.owner}</option>}
             </select>
             <button
               type="button"
@@ -531,7 +524,7 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
               return (
                 <li key={inv.id} className="flex items-center justify-between gap-2">
                   <span className="min-w-0 flex-1 truncate rounded bg-black/5 px-2 py-1 text-xs">
-                    {ROLE_LABEL[inv.role] ?? inv.role}
+                    {roleLabel(inv.role)}
                     {inv.email && <span className="text-gray-500"> · {inv.email}</span>}
                     {inv.phone && <span className="text-gray-500"> · {inv.phone}</span>}
                   </span>

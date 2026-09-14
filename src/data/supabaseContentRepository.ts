@@ -94,28 +94,26 @@ export const supabaseContentRepository: ContentRepository = {
     return data ? mapOrg(data) : null;
   },
 
-  // The following three read the PUBLISHED SNAPSHOT (published_content), not the
-  // live tables — so viewers only ever see content that has been published.
-  // Editors use the separate "live" hooks while editing the draft.
+  // The following three read the PUBLISHED SNAPSHOT, not the live tables — so
+  // viewers only ever see content that has been published. Editors use the
+  // separate "live" hooks while editing the draft.
+  //
+  // They go through RPCs rather than reading published_content directly. The
+  // snapshot is one row holding every page and block, so row-level security
+  // can only hand over all of it or none of it; the functions return just the
+  // slice this person is allowed to see. A leader-only page is therefore never
+  // sent to a student's phone at all, rather than being sent and then hidden.
   async getAppSettings(orgId) {
-    const { data, error } = await client()
-      .from('published_content')
-      .select('settings')
-      .eq('org_id', orgId)
-      .maybeSingle();
+    const { data, error } = await client().rpc('published_settings', { p_org: orgId });
     if (error) throw error;
-    return data?.settings ? mapSettings(data.settings) : null;
+    return data ? mapSettings(data) : null;
   },
 
   async getPublishedPages(orgId) {
-    const { data, error } = await client()
-      .from('published_content')
-      .select('pages')
-      .eq('org_id', orgId)
-      .maybeSingle();
+    const { data, error } = await client().rpc('published_pages_for_me', { p_org: orgId });
     if (error) throw error;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pages = (data?.pages ?? []) as any[];
+    const pages = (data ?? []) as any[];
     return pages
       .map(mapPage)
       .filter((p) => p.isPublished)
@@ -124,16 +122,12 @@ export const supabaseContentRepository: ContentRepository = {
 
   async getPageBlocks(orgId, pageId) {
     const { data, error } = await client()
-      .from('published_content')
-      .select('blocks')
-      .eq('org_id', orgId)
-      .maybeSingle();
+      .rpc('published_blocks_for_me', { p_org: orgId, p_page: pageId });
     if (error) throw error;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const blocks = (data?.blocks ?? []) as any[];
+    const blocks = (data ?? []) as any[];
     return blocks
       .map(mapBlock)
-      .filter((b) => b.pageId === pageId)
       .sort((a, b) => a.sortOrder - b.sortOrder);
   },
 };
