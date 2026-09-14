@@ -95,13 +95,24 @@ export function useRosterPeople(orgId: string | undefined) {
 
 export interface RosterRole { id: string; name: string; sort: number }
 
-export function useRosterRoles(orgId: string | undefined) {
+export function useRosterRoles(orgId: string | undefined, kind: RosterKind = 'leader') {
   return useQuery({
-    queryKey: KEY(orgId, 'roles'),
+    // kind is part of the key: the leader list and the student list are
+    // different lists and must not share a cache entry.
+    queryKey: KEY(orgId, 'roles', kind),
     enabled: Boolean(orgId) && isSupabaseConfigured,
     queryFn: async (): Promise<RosterRole[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const { data, error } = await s.from('roster_roles').select('id, name, sort').eq('org_id', orgId).order('sort').order('name');
+      const base = () => s.from('roster_roles').select('id, name, sort')
+        .eq('org_id', orgId).order('sort').order('name');
+      let { data, error } = await base().eq('kind', kind);
+      // `kind` arrives with 0078; tolerate the window between deploy and
+      // migration rather than showing an empty dropdown. See the note on
+      // isMissingColumn.
+      if (error && isMissingColumn(error, 'kind')) {
+        if (kind === 'student') return [];
+        ({ data, error } = await base());
+      }
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => ({ id: r.id, name: r.name, sort: r.sort }));
@@ -109,12 +120,16 @@ export function useRosterRoles(orgId: string | undefined) {
   });
 }
 
-export function useCreateRosterRole(orgId: string) {
+export function useCreateRosterRole(orgId: string, kind: RosterKind = 'leader') {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (name: string) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const { error } = await s.from('roster_roles').insert({ org_id: orgId, name: name.trim() });
+      let { error } = await s.from('roster_roles').insert({ org_id: orgId, name: name.trim(), kind });
+      if (error && isMissingColumn(error, 'kind')) {
+        if (kind === 'student') throw new Error('Student titles need the latest database update to be run first.');
+        ({ error } = await s.from('roster_roles').insert({ org_id: orgId, name: name.trim() }));
+      }
       if (error && !/duplicate|unique/i.test(error.message)) throw error;
     },
     onSuccess: () => invalidate(qc, orgId, 'roles'),
@@ -160,14 +175,17 @@ export function useReorderRosterRoles(orgId: string) {
 }
 
 const DEFAULT_ROLE_NAMES = ['Coach', 'Group Leader', 'Hospitality', 'Check-In', 'Admin', 'Greeter', 'Safety Team', 'Photography', 'ProPresenter', 'Social Media'];
+// A student group only ever needs to say who's leading it and who's in it.
+const DEFAULT_STUDENT_ROLE_NAMES = ['Coach', 'Group Leader', 'Student'];
 
 /** One-tap starter list for a workspace whose titles are still empty. */
-export function useSeedRosterRoles(orgId: string) {
+export function useSeedRosterRoles(orgId: string, kind: RosterKind = 'leader') {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const rows = DEFAULT_ROLE_NAMES.map((name, i) => ({ org_id: orgId, name, sort: i }));
+      const names = kind === 'student' ? DEFAULT_STUDENT_ROLE_NAMES : DEFAULT_ROLE_NAMES;
+      const rows = names.map((name, i) => ({ org_id: orgId, name, sort: i, kind }));
       const { error } = await s.from('roster_roles').insert(rows);
       if (error && !/duplicate|unique/i.test(error.message)) throw error;
     },

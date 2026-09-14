@@ -238,7 +238,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
       </div>
 
       {showManage && <AddGroup orgId={org.id} kind={kind} />}
-      {showManage && isAdmin && <RoleListEditor orgId={org.id} />}
+      {showManage && isAdmin && <RoleListEditor orgId={org.id} kind={kind} />}
 
       {viewing && <PersonModal person={viewing} onClose={() => setViewing(null)} />}
     </div>
@@ -342,9 +342,9 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
       {open && (
         <div className="flex flex-col gap-2 px-3 pb-3">
           {directPeople.map((p, pi) => (
-            <PersonRow key={p.id} orgId={orgId} person={p} manage={showManage} index={pi} total={directPeople.length} peopleIds={directPeople.map((x) => x.id)} onOpen={onOpen} />
+            <PersonRow kind={kind} key={p.id} orgId={orgId} person={p} manage={showManage} index={pi} total={directPeople.length} peopleIds={directPeople.map((x) => x.id)} onOpen={onOpen} />
           ))}
-          {showManage && <AddPerson orgId={orgId} groupId={group.id} />}
+          {showManage && <AddPerson orgId={orgId} kind={kind} groupId={group.id} />}
 
           {subs.length > 0 && (
             <div className="mt-1 flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: 'var(--th-hairline)' }}>
@@ -380,7 +380,7 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
 }
 
 // --- read-only + manage person row ----------------------------------------
-function PersonRow({ orgId, person, manage, index, total, peopleIds, onOpen }: { orgId: string; person: RosterPerson; manage: boolean; index: number; total: number; peopleIds: string[]; onOpen: (p: RosterPerson) => void }) {
+function PersonRow({ orgId, kind, person, manage, index, total, peopleIds, onOpen }: { orgId: string; kind: RosterKind; person: RosterPerson; manage: boolean; index: number; total: number; peopleIds: string[]; onOpen: (p: RosterPerson) => void }) {
   const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const del = useDeleteRosterPerson(orgId);
@@ -388,7 +388,7 @@ function PersonRow({ orgId, person, manage, index, total, peopleIds, onOpen }: {
   const mine = Boolean(user && person.userId && person.userId === user.id);
 
   if (editing) {
-    return <PersonForm orgId={orgId} person={person} onDone={() => setEditing(false)} />;
+    return <PersonForm orgId={orgId} kind={kind} person={person} onDone={() => setEditing(false)} />;
   }
 
   // In the normal view, tapping the person opens a large, readable card.
@@ -509,11 +509,13 @@ function MemberPicker({ members, value, onPick }: { members: RosterAccountOption
 }
 
 // --- add / edit person form ------------------------------------------------
-function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?: RosterPerson; groupId?: string; onDone: () => void }) {
+function PersonForm({ orgId, kind, person, groupId, onDone }: { orgId: string; kind: RosterKind; person?: RosterPerson; groupId?: string; onDone: () => void }) {
   const add = useAddRosterPerson(orgId);
   const update = useUpdateRosterPerson(orgId);
   const { data: members } = useRosterAccountOptions(orgId, true);
-  const { data: roles } = useRosterRoles(orgId);
+  // Titles are per side: a leader roster needs a long, varied list and a
+  // student roster needs about three entries.
+  const { data: roles } = useRosterRoles(orgId, kind);
   const [name, setName] = useState(person?.name ?? '');
   const [role, setRole] = useState(person?.role ?? '');
   const [phone, setPhone] = useState(person?.phone ?? '');
@@ -603,9 +605,9 @@ function PersonForm({ orgId, person, groupId, onDone }: { orgId: string; person?
   );
 }
 
-function AddPerson({ orgId, groupId }: { orgId: string; groupId: string }) {
+function AddPerson({ orgId, kind, groupId }: { orgId: string; kind: RosterKind; groupId: string }) {
   const [open, setOpen] = useState(false);
-  if (open) return <PersonForm orgId={orgId} groupId={groupId} onDone={() => setOpen(false)} />;
+  if (open) return <PersonForm orgId={orgId} kind={kind} groupId={groupId} onDone={() => setOpen(false)} />;
   return (
     <button type="button" onClick={() => setOpen(true)} className="self-start rounded-full border px-3 py-1 text-xs font-semibold hover:bg-black/5" style={{ borderColor: 'var(--th-hairline-strong)' }}>+ Add person</button>
   );
@@ -660,10 +662,10 @@ function AddGroup({ orgId, parentId, kind }: { orgId: string; parentId?: string 
 }
 
 // --- owner/admin: edit the list of titles/roles ---------------------------
-function RoleListEditor({ orgId }: { orgId: string }) {
-  const { data: roles } = useRosterRoles(orgId);
-  const create = useCreateRosterRole(orgId);
-  const seed = useSeedRosterRoles(orgId);
+function RoleListEditor({ orgId, kind }: { orgId: string; kind: RosterKind }) {
+  const { data: roles } = useRosterRoles(orgId, kind);
+  const create = useCreateRosterRole(orgId, kind);
+  const seed = useSeedRosterRoles(orgId, kind);
   const [open, setOpen] = useState(false);
   const [newRole, setNewRole] = useState('');
   const list = roles ?? [];

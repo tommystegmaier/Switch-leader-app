@@ -2,6 +2,9 @@ import { useState } from 'react';
 
 import { useCreateInvite, useInvites, useRevokeInvite } from '@/data/inviteHooks';
 import {
+  useAddRosterPerson, useDeleteRosterPerson, useRosterGroups, useRosterPeople,
+} from '@/data/rosterHooks';
+import {
   useResetStudentPassword, useSetStudentConsent, useStudentConsentLink,
   useStudents, type Student,
 } from '@/data/studentHooks';
@@ -27,8 +30,20 @@ export function StudentsSection({ orgId }: { orgId: string }) {
   const [copied, setCopied] = useState(false);
   const [resetting, setResetting] = useState<Student | null>(null);
   const [consenting, setConsenting] = useState<Student | null>(null);
+  const [grouping, setGrouping] = useState<Student | null>(null);
+
+  // Student groups double as the Student Messaging channels, so putting
+  // someone in a group here is the same act as putting them in the chat.
+  const { data: studentGroups } = useRosterGroups(orgId, 'student');
+  const { data: rosterPeople } = useRosterPeople(orgId);
+
+  const groupNames = new Map((studentGroups ?? []).map((g) => [g.id, g.name]));
+  const groupsFor = (userId: string) => (rosterPeople ?? [])
+    .filter((p) => p.userId === userId && groupNames.has(p.groupId))
+    .map((p) => ({ rowId: p.id, groupId: p.groupId, name: groupNames.get(p.groupId)! }));
 
   const waiting = (students ?? []).filter((s) => s.needsConsent);
+  const inNoGroup = (students ?? []).filter((s) => !s.needsConsent && groupsFor(s.userId).length === 0);
 
   // One link for everyone. A student link is meant to be read out from the
   // front or dropped in a group text, so a fresh code per student would be
@@ -116,6 +131,18 @@ export function StudentsSection({ orgId }: { orgId: string }) {
         </div>
       )}
 
+      {inNoGroup.length > 0 && (
+        <div className="mt-3 rounded-lg border p-3" style={{ borderColor: 'var(--th-hairline)' }}>
+          <p className="text-sm font-semibold">
+            {inNoGroup.length} student{inNoGroup.length === 1 ? ' isn\u2019t' : 's aren\u2019t'} in a group yet
+          </p>
+          <p className="mt-1 text-xs text-gray-600">
+            A student sees no group chat at all until they&rsquo;re in one. Tap
+            <span className="font-medium"> Groups </span> on their row below to put them in.
+          </p>
+        </div>
+      )}
+
       {/* --- who has joined --- */}
       <div className="mt-4">
         <p className="mb-2 text-sm font-medium">
@@ -146,7 +173,15 @@ export function StudentsSection({ orgId }: { orgId: string }) {
                 </span>
               )}
               {s.phone && <span className="text-xs text-gray-500">{s.phone}</span>}
+              {!s.needsConsent && groupsFor(s.userId).map((g) => (
+                <span key={g.rowId} className="rounded-full bg-black/5 px-2 py-0.5 text-xs">{g.name}</span>
+              ))}
               <span className="ml-auto flex items-center gap-2">
+                {!s.needsConsent && (
+                  <button type="button" onClick={() => setGrouping(s)} className="rounded px-2 py-1 text-xs underline">
+                    Groups
+                  </button>
+                )}
                 {s.under13 && (
                   <button type="button" onClick={() => setConsenting(s)} className="rounded px-2 py-1 text-xs underline">
                     Permission
@@ -163,6 +198,7 @@ export function StudentsSection({ orgId }: { orgId: string }) {
 
       {resetting && <ResetPasswordDialog student={resetting} onClose={() => setResetting(null)} />}
       {consenting && <ConsentDialog orgId={orgId} student={consenting} onClose={() => setConsenting(null)} />}
+      {grouping && <GroupsDialog orgId={orgId} student={grouping} onClose={() => setGrouping(null)} />}
     </section>
   );
 }
@@ -371,6 +407,110 @@ function ConsentDialog({ orgId, student, onClose }: { orgId: string; student: St
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
         <button type="button" onClick={onClose} className="mt-3 w-full rounded-full px-4 py-2 text-sm underline">
           Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Which group chats a student is in.
+ *
+ * This exists because the honest answer to "how do I get a student into a
+ * chat?" was "leave here, find the page with the student roster on it, add a
+ * person, then link them to their account" — four steps, in a different part
+ * of the app from where you just signed them up. A student group IS the chat
+ * channel, so ticking a box here is the same act, done where you already are.
+ *
+ * The roster board still works and is still the place to arrange groups. This
+ * is the shortcut for the thing you do every week.
+ */
+function GroupsDialog({ orgId, student, onClose }: { orgId: string; student: Student; onClose: () => void }) {
+  const { data: groups } = useRosterGroups(orgId, 'student');
+  const { data: people } = useRosterPeople(orgId);
+  const add = useAddRosterPerson(orgId);
+  const remove = useDeleteRosterPerson(orgId);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  // Their existing row in each group, so untick can delete the right one.
+  const rowFor = (groupId: string) =>
+    (people ?? []).find((p) => p.userId === student.userId && p.groupId === groupId);
+
+  async function toggle(groupId: string) {
+    setError(null);
+    setBusy(groupId);
+    try {
+      const existing = rowFor(groupId);
+      if (existing) {
+        await remove.mutateAsync(existing.id);
+      } else {
+        await add.mutateAsync({
+          groupId,
+          person: {
+            name: student.fullName,
+            phone: student.phone,
+            grade: student.grade,
+            userId: student.userId,
+          },
+        });
+      }
+    } catch (e) {
+      // The parental-permission trigger speaks in full sentences on purpose —
+      // show what it said rather than a generic failure.
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-t-2xl bg-white p-4 shadow-xl sm:rounded-2xl">
+        <h3 className="mb-1 text-lg font-bold">Group chats</h3>
+        <p className="mb-3 text-sm text-gray-500">{student.fullName}</p>
+
+        {(groups ?? []).length === 0 ? (
+          <p className="mb-3 text-sm text-gray-600">
+            There are no student groups yet. Add a <span className="font-medium">Roster</span> block
+            set to <span className="font-medium">Student roster</span> on a page, and make your
+            groups there first.
+          </p>
+        ) : (
+          <ul className="mb-3 flex flex-col gap-1">
+            {(groups ?? []).map((g) => {
+              const inIt = Boolean(rowFor(g.id));
+              return (
+                <li key={g.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(g.id)}
+                    disabled={busy !== null}
+                    className="flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm disabled:opacity-50"
+                    style={{ borderColor: inIt ? 'var(--th-primary)' : 'var(--th-hairline)' }}
+                  >
+                    <span aria-hidden className="text-base">{inIt ? '☑' : '☐'}</span>
+                    <span className="flex-1">{g.name}</span>
+                    {busy === g.id && <span className="text-xs text-gray-400">…</span>}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+        <p className="mb-3 text-xs text-gray-500">
+          They&rsquo;ll see a group&rsquo;s chat as soon as it&rsquo;s ticked, and lose it when unticked.
+        </p>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full rounded-full px-6 py-3 font-semibold"
+          style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
+        >
+          Done
         </button>
       </div>
     </div>
