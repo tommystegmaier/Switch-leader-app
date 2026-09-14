@@ -54,6 +54,26 @@ export function gradYearOptions(now = new Date()): number[] {
   return [0, 1, 2, 3, 4, 5, 6].map((i) => seniorYear + i);
 }
 
+/**
+ * Under 13 on the day you ask.
+ *
+ * Switch takes 6th graders, so this is a real population, and it decides
+ * whether a parent has to agree before the student can be put in a group chat.
+ * A missing birthday counts as under 13: not knowing someone's age should cost
+ * a leader a phone call, not let a child straight into a conversation.
+ *
+ * Mirrors is_under_13() in migration 0077, which is the copy that enforces it.
+ */
+export function isUnder13(birthday: string | null | undefined, now = new Date()): boolean {
+  if (!birthday) return true;
+  const b = new Date(`${birthday}T00:00:00Z`);
+  if (Number.isNaN(b.getTime())) return true;
+  const thirteenth = new Date(Date.UTC(
+    b.getUTCFullYear() + 13, b.getUTCMonth(), b.getUTCDate(),
+  ));
+  return now.getTime() < thirteenth.getTime();
+}
+
 /** "12th Grade" for a graduation year, or null once they've graduated. */
 export function gradeFromGradYear(gradYear: number, now = new Date()): string | null {
   const y = now.getUTCFullYear();

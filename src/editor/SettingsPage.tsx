@@ -21,7 +21,10 @@ import { applyTheme } from '@/lib/theme';
 import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
 import { useAllPages } from '@/data/pageHooks';
 import { NavIcon, NAV_ICON_NAMES, isNavIconName } from '@/blocks/navIcons';
-import { ROLE_LABEL, ROLE_LABEL_LONG, ROLE_ORDER, roleLabel } from '@/lib/roles';
+import {
+  AUDIENCE_LABEL, ROLE_LABEL, ROLE_LABEL_LONG, ROLE_ORDER, roleLabel, tabAudience,
+  type Audience,
+} from '@/lib/roles';
 import type { AppSettings, NavStyle, NavTab, Role, ThemeColors, ViewerAccess } from '@/types';
 import { useSettingsMutations } from './useSettingsMutations';
 import { StudentsSection } from './StudentsSection';
@@ -248,7 +251,7 @@ function TabBarEditor({ orgId, tabs, onChange }: { orgId: string; tabs: NavTab[]
     [next[i], next[j]] = [next[j], next[i]];
     onChange(next);
   };
-  const add = () => onChange([...tabs, { icon: 'home', label: 'Tab', kind: 'page', target: pages?.[0]?.slug ?? '', adminOnly: false }]);
+  const add = () => onChange([...tabs, { icon: 'home', label: 'Tab', kind: 'page', target: pages?.[0]?.slug ?? '', audience: 'everyone', adminOnly: false }]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -295,8 +298,24 @@ function TabBarEditor({ orgId, tabs, onChange }: { orgId: string; tabs: NavTab[]
               <input className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm" placeholder="https://…" value={t.target} onChange={(e) => update(i, { target: e.target.value })} />
             )}
             <label className="flex items-center gap-1 text-xs text-gray-600">
-              <input type="checkbox" checked={Boolean(t.adminOnly)} onChange={(e) => update(i, { adminOnly: e.target.checked })} />
-              Managers only
+              <span className="text-gray-500">Show to</span>
+              <select
+                className="rounded border border-gray-300 px-1 py-1"
+                value={tabAudience(t)}
+                onChange={(e) => {
+                  const audience = e.target.value as Audience;
+                  // adminOnly is written alongside it so a phone still running
+                  // an older build doesn't start showing a manager tab to
+                  // everyone. Anything narrower than "everyone" reads as
+                  // restricted to a build that only understands the old switch.
+                  update(i, { audience, adminOnly: audience !== 'everyone' });
+                }}
+                aria-label="Who can see this tab"
+              >
+                {(Object.keys(AUDIENCE_LABEL) as Audience[]).map((a) => (
+                  <option key={a} value={a}>{AUDIENCE_LABEL[a]}</option>
+                ))}
+              </select>
             </label>
           </div>
         </SortableTab>

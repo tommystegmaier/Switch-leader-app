@@ -63,7 +63,17 @@ export interface NavTab {
   /** 'page' → page slug; 'url' → external link. */
   kind: 'page' | 'url';
   target: string;
-  /** Only show to owner/admin/editor (e.g. a manager Schedule tab). */
+  /**
+   * Who sees this tab: 'everyone' | 'leaders' | 'students' | 'managers'.
+   * Same four audiences as a page, so the tab and the page it points at are
+   * described in the same words.
+   */
+  audience?: import('@/lib/roles').Audience;
+  /**
+   * The old two-way switch, kept so tabs saved before audiences existed still
+   * behave. Written alongside `audience` on every save, so a phone running an
+   * older build doesn't suddenly show a manager tab to everyone.
+   */
   adminOnly?: boolean;
 }
 

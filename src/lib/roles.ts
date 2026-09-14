@@ -108,3 +108,27 @@ export function ruleToAudience(rule: VisibilityRule | undefined): Audience {
   }
   return 'managers';
 }
+
+/**
+ * A nav tab's audience, allowing for tabs saved before audiences existed.
+ *
+ * NOTE: a tab is a shortcut, not a lock. Hiding it does not protect the page
+ * it points at — that is the page's own audience, which the database enforces
+ * (can_see_visibility, migration 0074). Keep the two in step: a tab shown to
+ * students pointing at a leaders-only page just gives a student a dead end.
+ */
+export function tabAudience(tab: { audience?: Audience; adminOnly?: boolean }): Audience {
+  if (tab.audience) return tab.audience;
+  return tab.adminOnly ? 'managers' : 'everyone';
+}
+
+/** Should this person see this tab? */
+export function canSeeTab(tab: { audience?: Audience; adminOnly?: boolean }, role: Role | null): boolean {
+  const a = tabAudience(tab);
+  if (a === 'everyone') return true;
+  if (role === null) return false;
+  if (canEdit(role)) return true;
+  if (a === 'managers') return false;
+  if (a === 'students') return role === 'student';
+  return role !== 'student';
+}

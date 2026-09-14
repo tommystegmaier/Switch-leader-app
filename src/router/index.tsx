@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom';
 
+import { ConsentPage } from '@/auth/ConsentPage';
 import { StudentJoinPage } from '@/auth/StudentJoinPage';
 import { JoinPage } from '@/auth/JoinPage';
 import { LoginPage } from '@/auth/LoginPage';
@@ -50,6 +51,12 @@ export const router = createBrowserRouter([
   {
     path: '/join',
     element: <JoinPage />,
+  },
+  {
+    // Outside every sign-in guard: a parent has no account here and shouldn't
+    // need one to answer a question about their own child.
+    path: '/consent',
+    element: <ConsentPage />,
   },
   {
     // Students get their own address. They have no email to give, so the

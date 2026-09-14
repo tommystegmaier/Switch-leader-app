@@ -5,6 +5,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { isVisibleTo } from '@/blocks/BlockView';
+import { canSeeTab } from '@/lib/roles';
 import { NavIcon } from '@/blocks/navIcons';
 import { useAppSettings, useOrganization, usePublishedPages } from '@/data/hooks';
 import { useLiveAppSettings } from '@/data/liveContent';
@@ -198,7 +199,7 @@ export function ViewerLayout() {
     : (publishedPages ?? []).filter((p) => isVisibleTo(p.visibility, role));
   // Custom icon bar takes priority; otherwise a minimal default: Home + (if a
   // schedule block exists anywhere) Schedule. Both use simple line icons.
-  const customTabs = (settings?.tabs ?? []).filter((t) => canEdit || !t.adminOnly);
+  const customTabs = (settings?.tabs ?? []).filter((t) => canSeeTab(t, role));
   const firstPage = navPages[0];
   const schedulePage = (allPages ?? publishedPages ?? []).find((p) => p.id === schedulePageId);
   const autoTabs: NavTab[] = [];
