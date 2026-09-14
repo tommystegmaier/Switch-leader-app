@@ -19,15 +19,22 @@ export interface ChatPollVote { messageId: string; userId: string; optionIndex: 
 
 const KEY = (orgId: string | undefined, ...rest: string[]) => ['chat', orgId, ...rest];
 
-/** Channels the current user can see, with unread counts. */
-export function useChatChannels(orgId: string | undefined, enabled = true) {
+/**
+ * Channels the current user can see, with unread counts.
+ *
+ * `kind` picks the side of the app: leader channels or student channels. They
+ * are kept apart all the way down to the database, so this never returns a
+ * mix — a Student Messaging block cannot show a leaders' channel even by
+ * accident.
+ */
+export function useChatChannels(orgId: string | undefined, enabled = true, kind: 'leader' | 'student' = 'leader') {
   return useQuery({
-    queryKey: KEY(orgId, 'channels'),
+    queryKey: KEY(orgId, 'channels', kind),
     enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
     refetchInterval: 15_000,
     queryFn: async (): Promise<ChatChannel[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const { data, error } = await s.rpc('my_chat_groups', { p_org: orgId });
+      const { data, error } = await s.rpc('my_chat_groups', { p_org: orgId, p_kind: kind });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => ({ groupId: r.group_id, name: r.name, parentId: r.parent_id ?? null, parentName: r.parent_name ?? null, sort: r.sort, unread: r.unread ?? 0, isAll: Boolean(r.is_all), postPolicy: (r.post_policy ?? 'all') as ChatPostPolicy, canPost: r.can_post !== false }));

@@ -17,7 +17,9 @@ import {
 import type { ViewerCtx } from '../actions';
 
 type HeaderSize = 'sm' | 'md' | 'lg';
-interface RosterProps { title?: string; headerSize?: HeaderSize }
+/** 'leader' is the leader roster; 'student' is the student roster. */
+type RosterKind = 'leader' | 'student';
+interface RosterProps { title?: string; headerSize?: HeaderSize; kind?: RosterKind }
 
 // Roster keeps its own Small/Medium/Large control, but expressed as a multiple
 // of the workspace's feature-heading size — so Medium matches every other
@@ -149,10 +151,16 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   const { data: org } = useOrganization(ctx.orgSlug);
   const { role, canEdit, isLoading } = useMembershipRole(org?.id);
   const isAdmin = role === 'owner' || role === 'admin';
-  const { data: groups } = useRosterGroups(org?.id);
-  const { data: people } = useRosterPeople(org?.id);
+  const kind: RosterKind = props.kind === 'student' ? 'student' : 'leader';
+  const { data: groups } = useRosterGroups(org?.id, kind);
+  // People come back filtered by RLS, then narrowed to this roster's groups —
+  // a leader who is in both a leader group and a student group appears in
+  // each, which is the point of being able to add them to both.
+  const { data: allPeople } = useRosterPeople(org?.id);
+  const groupIdSet = new Set((groups ?? []).map((g) => g.id));
+  const people = (allPeople ?? []).filter((p) => groupIdSet.has(p.groupId));
 
-  const title = props.title || 'Roster';
+  const title = props.title || (kind === 'student' ? 'Student Roster' : 'Leader Roster');
   const size: HeaderSize = props.headerSize ?? 'md';
 
   // Managers can flip into an editing mode; default on when the app is in Edit mode.
@@ -213,6 +221,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
           <GroupBlock
             key={g.id}
             orgId={org.id}
+            kind={kind}
             group={g}
             level={0}
             allGroups={allGroups}
@@ -228,7 +237,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
         ))}
       </div>
 
-      {showManage && <AddGroup orgId={org.id} />}
+      {showManage && <AddGroup orgId={org.id} kind={kind} />}
       {showManage && isAdmin && <RoleListEditor orgId={org.id} />}
 
       {viewing && <PersonModal person={viewing} onClose={() => setViewing(null)} />}
@@ -270,8 +279,9 @@ function PersonModal({ person, onClose }: { person: RosterPerson; onClose: () =>
 }
 
 // --- one group: header, its people, and (top level only) its subgroups -----
-function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle, showManage, siblingIds, index, total, onOpen }: {
+function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, toggle, showManage, siblingIds, index, total, onOpen }: {
   orgId: string;
+  kind: RosterKind;
   group: RosterGroup;
   level: 0 | 1;
   allGroups: RosterGroup[];
@@ -342,6 +352,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
                 <GroupBlock
                   key={sub.id}
                   orgId={orgId}
+                  kind={kind}
                   group={sub}
                   level={1}
                   allGroups={allGroups}
@@ -358,7 +369,7 @@ function GroupBlock({ orgId, group, level, allGroups, people, collapsed, toggle,
             </div>
           )}
 
-          {showManage && level === 0 && <AddGroup orgId={orgId} parentId={group.id} />}
+          {showManage && level === 0 && <AddGroup orgId={orgId} parentId={group.id} kind={kind} />}
           {!showManage && directPeople.length === 0 && subs.length === 0 && (
             <p className="text-xs text-gray-400">No one in this group yet.</p>
           )}
@@ -635,8 +646,8 @@ function GroupControls({ orgId, group, index, total, groupIds, onDark }: { orgId
   );
 }
 
-function AddGroup({ orgId, parentId }: { orgId: string; parentId?: string | null }) {
-  const create = useCreateRosterGroup(orgId);
+function AddGroup({ orgId, parentId, kind }: { orgId: string; parentId?: string | null; kind: RosterKind }) {
+  const create = useCreateRosterGroup(orgId, kind);
   const [name, setName] = useState('');
   const sub = Boolean(parentId);
   const submit = () => { if (name.trim()) { create.mutate({ name, parentId: parentId ?? null }); setName(''); } };

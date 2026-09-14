@@ -14,7 +14,9 @@ import { tapHaptic } from '@/lib/haptics';
 import { audioDuration, compressImage, createAudioContext, startPcmRecorder, uploadMedia, type PcmRecorder } from '@/lib/media';
 import type { ViewerCtx } from '../actions';
 
-interface ChatProps { title?: string }
+/** 'leader' is Leader Messaging; 'student' is Student Messaging. */
+type ChatKind = 'leader' | 'student';
+interface ChatProps { title?: string; kind?: ChatKind }
 
 const REACTIONS = ['❤️', '👍', '👎', '😂', '‼️', '❓'];
 
@@ -160,10 +162,17 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
   const { data: org } = useOrganization(ctx.orgSlug);
   const { user } = useAuth();
   const { role, isLoading: roleLoading } = useMembershipRole(org?.id);
-  const title = props.title || 'Chat';
-  // Owners/admins/editors (managers) can delete ANY message (moderation);
-  // everyone else can delete only their own. Matches the RLS delete policy.
-  const canModerate = role === 'owner' || role === 'admin' || role === 'editor';
+  const kind: ChatKind = props.kind === 'student' ? 'student' : 'leader';
+  const title = props.title || (kind === 'student' ? 'Student Messaging' : 'Leader Messaging');
+  // Owners/admins/editors (managers) can delete ANY message (moderation).
+  //
+  // In a STUDENT channel a plain Leader can delete too — they were put in the
+  // group to look after it, and moderation that waits for a Coach to log in
+  // isn't moderation. The channel list only contains groups they're in, so
+  // this can't reach a student group they aren't part of. Matches the RLS
+  // delete policy in migration 0076.
+  const canModerate = role === 'owner' || role === 'admin' || role === 'editor'
+    || (kind === 'student' && role === 'viewer');
   // Only owners/admins can change a channel's posting policy.
   const canConfigure = role === 'owner' || role === 'admin';
 
@@ -171,7 +180,11 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
     return (
       <div className={`${card} p-4`} style={cardStyle}>
         <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>💬 {title}</p>
-        <p className="mt-1 text-sm text-gray-500">Group chat. Each channel is a Roster group — managers see all, everyone else sees only the groups they&apos;re assigned to. Add people to Roster groups to populate channels.</p>
+        <p className="mt-1 text-sm text-gray-500">
+          {kind === 'student'
+            ? 'Student messaging. Each channel is a student Roster group. The Youth Pastor and Coaches see every student channel; everyone else sees only the ones they\u2019ve been added to. Students see nothing here until a leader puts them in a group.'
+            : 'Leader messaging. Each channel is a leader Roster group — managers see all, everyone else sees only the groups they\u2019re assigned to. Students never see these channels.'}
+        </p>
       </div>
     );
   }
@@ -188,7 +201,7 @@ export function ChatView({ props, ctx }: { props: ChatProps; ctx: ViewerCtx }) {
     );
   }
 
-  return <ChatInner orgId={org.id} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} canConfigure={canConfigure} mediaEnabled={org.chatMediaEnabled !== false} />;
+  return <ChatInner orgId={org.id} kind={kind} title={title} userId={user.id} authorName={displayName(user)} canModerate={canModerate} canConfigure={canConfigure} mediaEnabled={org.chatMediaEnabled !== false} />;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -197,8 +210,8 @@ function displayName(user: any): string {
   return (m.full_name || m.name || user?.email || 'Someone') as string;
 }
 
-function ChatInner({ orgId, title, userId, authorName, canModerate, canConfigure, mediaEnabled }: { orgId: string; title: string; userId: string; authorName: string; canModerate: boolean; canConfigure: boolean; mediaEnabled: boolean }) {
-  const { data: channels } = useChatChannels(orgId);
+function ChatInner({ orgId, kind, title, userId, authorName, canModerate, canConfigure, mediaEnabled }: { orgId: string; kind: ChatKind; title: string; userId: string; authorName: string; canModerate: boolean; canConfigure: boolean; mediaEnabled: boolean }) {
+  const { data: channels } = useChatChannels(orgId, true, kind);
   const { data: mutes } = useChatMutes(orgId);
   const setMute = useSetChatMute(orgId);
   const setPolicy = useSetChatPostPolicy(orgId);

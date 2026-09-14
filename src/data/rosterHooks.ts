@@ -26,15 +26,17 @@ export interface RosterPerson {
 
 const KEY = (orgId: string | undefined, ...rest: string[]) => ['roster', orgId, ...rest];
 
-export function useRosterGroups(orgId: string | undefined) {
+export type RosterKind = 'leader' | 'student';
+
+export function useRosterGroups(orgId: string | undefined, kind: RosterKind = 'leader') {
   return useQuery({
-    queryKey: KEY(orgId, 'groups'),
+    queryKey: KEY(orgId, 'groups', kind),
     enabled: Boolean(orgId) && isSupabaseConfigured,
     queryFn: async (): Promise<RosterGroup[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
       // Exclude auto groups (e.g. Coaches) and the "All Leaders" group — they're
       // chat-only, computed from the roster, not editable here.
-      const { data, error } = await s.from('roster_groups').select('id, name, sort, parent_id').eq('org_id', orgId).is('auto_role', null).not('is_all', 'is', true).order('sort').order('name');
+      const { data, error } = await s.from('roster_groups').select('id, name, sort, parent_id').eq('org_id', orgId).eq('kind', kind).is('auto_role', null).not('is_all', 'is', true).order('sort').order('name');
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => ({ id: r.id, name: r.name, sort: r.sort, parentId: r.parent_id ?? null }));
@@ -159,12 +161,14 @@ function invalidate(qc: ReturnType<typeof useQueryClient>, orgId: string, ...suf
   for (const s of suffixes) qc.invalidateQueries({ queryKey: KEY(orgId, s) });
 }
 
-export function useCreateRosterGroup(orgId: string) {
+export function useCreateRosterGroup(orgId: string, kind: RosterKind = 'leader') {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, parentId }: { name: string; parentId?: string | null }) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
-      const { error } = await s.from('roster_groups').insert({ org_id: orgId, name: name.trim(), parent_id: parentId ?? null });
+      // A group is created on the side of the app the block belongs to. Getting
+      // this wrong would put a student group in Leader Messaging.
+      const { error } = await s.from('roster_groups').insert({ org_id: orgId, name: name.trim(), parent_id: parentId ?? null, kind });
       if (error) throw error;
     },
     onSuccess: () => invalidate(qc, orgId, 'groups'),

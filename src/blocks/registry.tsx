@@ -395,11 +395,15 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
     type: 'roster',
     label: 'Roster (org chart)',
     icon: '👥',
-    description: 'Groups of people with roles, photos, and contact info. Everyone can view; managers edit.',
+    description: 'Groups of people with roles, photos, and contact info. Leaders can view; managers edit.',
     category: 'advanced',
-    defaultProps: { title: 'Roster', headerSize: 'md' },
+    defaultProps: { title: 'Roster', headerSize: 'md', kind: 'leader' },
     fields: [
       { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Meet the team' },
+      { key: 'kind', label: 'Which roster', type: 'select', options: [
+        { value: 'leader', label: 'Leader roster' },
+        { value: 'student', label: 'Student roster' },
+      ] },
       { key: 'headerSize', label: 'Header size', type: 'select', options: [
         { value: 'sm', label: 'Small' }, { value: 'md', label: 'Medium' }, { value: 'lg', label: 'Large' },
       ] },
@@ -424,11 +428,15 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDef> = {
     type: 'chat',
     label: 'Group chat',
     icon: '💬',
-    description: 'Group messaging by Roster group — reactions, photos, and per-group notifications. Viewers see only their groups.',
+    description: 'Group messaging by Roster group — reactions, photos, and per-group notifications. People see only their own groups.',
     category: 'advanced',
-    defaultProps: { title: 'Chat' },
+    defaultProps: { title: 'Chat', kind: 'leader' },
     fields: [
       { key: 'title', label: 'Title', type: 'text', placeholder: 'e.g. Team Chat' },
+      { key: 'kind', label: 'Which messaging', type: 'select', options: [
+        { value: 'leader', label: 'Leader messaging' },
+        { value: 'student', label: 'Student messaging' },
+      ] },
     ],
     Viewer: ChatView,
   }),
