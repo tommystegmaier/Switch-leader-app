@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  DndContext, PointerSensor, closestCenter, useSensor, useSensors,
+  type DragEndEvent, type DraggableAttributes,
+} from '@dnd-kit/core';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
@@ -15,6 +22,60 @@ import {
   type PersonInput, type RosterAccountOption, type RosterGroup, type RosterPerson, type RosterRole,
 } from '@/data/rosterHooks';
 import type { ViewerCtx } from '../actions';
+
+/**
+ * Drag-to-reorder for a vertical list.
+ *
+ * Dragging only starts from the ⠿ handle, so everywhere else on a row still
+ * scrolls normally — on a phone a whole-row drag target makes the list feel
+ * stuck. The arrows stay: they're better for moving one place precisely, and
+ * they're the only way to do this without a pointer.
+ */
+function SortableList({ ids, onReorder, children }: {
+  ids: string[];
+  onReorder: (ids: string[]) => void;
+  children: ReactNode;
+}) {
+  // A few pixels of movement before a drag begins, so a tap on the handle is
+  // still a tap.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = ids.indexOf(String(active.id));
+    const to = ids.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    onReorder(arrayMove(ids, from, to));
+  };
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>{children}</SortableContext>
+    </DndContext>
+  );
+}
+
+/**
+ * The grip. touchAction 'none' is what stops the browser scrolling the page
+ * when a finger moves on it — without that, dragging on a phone just scrolls.
+ */
+function DragHandle({ attributes, listeners }: {
+  attributes: DraggableAttributes;
+  listeners: SyntheticListenerMap | undefined;
+}) {
+  return (
+    <button
+      type="button"
+      {...attributes}
+      {...listeners}
+      className="shrink-0 cursor-grab px-1 text-gray-400 active:cursor-grabbing"
+      style={{ touchAction: 'none' }}
+      aria-label="Drag to reorder"
+      title="Drag to reorder"
+    >
+      ⠿
+    </button>
+  );
+}
 
 type HeaderSize = 'sm' | 'md' | 'lg';
 /** 'leader' is the leader roster; 'student' is the student roster. */
@@ -152,6 +213,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   const { role, canEdit, isLoading } = useMembershipRole(org?.id);
   const isAdmin = role === 'owner' || role === 'admin';
   const kind: RosterKind = props.kind === 'student' ? 'student' : 'leader';
+  const reorderGroups = useReorderRosterGroups(org?.id ?? '', kind);
   const { data: groups } = useRosterGroups(org?.id, kind);
   // People come back filtered by RLS, then narrowed to this roster's groups —
   // a leader who is in both a leader group and a student group appears in
@@ -217,6 +279,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
       )}
 
       <div className="flex flex-col gap-3">
+        <SortableList ids={topGroups.map((g) => g.id)} onReorder={(ids) => reorderGroups.mutate(ids)}>
         {topGroups.map((g, gi) => (
           <GroupBlock
             key={g.id}
@@ -235,6 +298,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
             onOpen={setViewing}
           />
         ))}
+        </SortableList>
       </div>
 
       {showManage && <AddGroup orgId={org.id} kind={kind} />}
@@ -294,6 +358,16 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
   total: number;
   onOpen: (p: RosterPerson) => void;
 }) {
+  const reorderPeople = useReorderRosterPeople(orgId);
+  const reorderGroups = useReorderRosterGroups(orgId, kind);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: group.id });
+  const groupDragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+    position: isDragging ? ('relative' as const) : undefined,
+  };
   const directPeople = coachFirst(people.filter((p) => p.groupId === group.id));
   const subs = level === 0 ? allGroups.filter((g) => g.parentId === group.id) : [];
   const subPeople = subs.reduce((n, s) => n + people.filter((p) => p.groupId === s.id).length, 0);
@@ -313,8 +387,9 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
     : (dark ? '#c7cdd6' : 'var(--th-heading)');
 
   return (
-    <div className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(isTop ? { borderColor: 'var(--th-hairline-strong)' } : {}) }}>
+    <div ref={setNodeRef} className="overflow-hidden rounded-xl border" style={{ ...cardStyle, ...(isTop ? { borderColor: 'var(--th-hairline-strong)' } : {}), ...groupDragStyle }}>
       <div className="flex items-center gap-2 px-3 py-2.5" style={{ backgroundColor: headerBg }}>
+        {showManage && <DragHandle attributes={attributes} listeners={listeners} />}
         <button type="button" onClick={() => toggle(group.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
           <span className="shrink-0" aria-hidden style={{ color: headerFg, opacity: 0.85 }}>{open ? '▾' : '▸'}</span>
           <span
@@ -341,13 +416,19 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
 
       {open && (
         <div className="flex flex-col gap-2 px-3 pb-3">
-          {directPeople.map((p, pi) => (
-            <PersonRow kind={kind} key={p.id} orgId={orgId} person={p} manage={showManage} index={pi} total={directPeople.length} peopleIds={directPeople.map((x) => x.id)} onOpen={onOpen} />
-          ))}
+          <SortableList
+            ids={directPeople.map((x) => x.id)}
+            onReorder={(ids) => reorderPeople.mutate(ids)}
+          >
+            {directPeople.map((p, pi) => (
+              <PersonRow kind={kind} key={p.id} orgId={orgId} person={p} manage={showManage} index={pi} total={directPeople.length} peopleIds={directPeople.map((x) => x.id)} onOpen={onOpen} />
+            ))}
+          </SortableList>
           {showManage && <AddPerson orgId={orgId} kind={kind} groupId={group.id} />}
 
           {subs.length > 0 && (
             <div className="mt-1 flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: 'var(--th-hairline)' }}>
+              <SortableList ids={subs.map((x) => x.id)} onReorder={(ids) => reorderGroups.mutate(ids)}>
               {subs.map((sub, si) => (
                 <GroupBlock
                   key={sub.id}
@@ -366,6 +447,7 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
                   onOpen={onOpen}
                 />
               ))}
+              </SortableList>
             </div>
           )}
 
@@ -386,6 +468,15 @@ function PersonRow({ orgId, kind, person, manage, index, total, peopleIds, onOpe
   const del = useDeleteRosterPerson(orgId);
   const reorder = useReorderRosterPeople(orgId);
   const mine = Boolean(user && person.userId && person.userId === user.id);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: person.id });
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    // Lift the row being dragged above its neighbours.
+    zIndex: isDragging ? 10 : undefined,
+    position: isDragging ? ('relative' as const) : undefined,
+  };
 
   if (editing) {
     return <PersonForm orgId={orgId} kind={kind} person={person} onDone={() => setEditing(false)} />;
@@ -411,7 +502,8 @@ function PersonRow({ orgId, kind, person, manage, index, total, peopleIds, onOpe
   );
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border p-2" style={cardStyle}>
+    <div ref={setNodeRef} className="flex items-center gap-3 rounded-lg border p-2" style={{ ...cardStyle, ...dragStyle }}>
+      {manage && <DragHandle attributes={attributes} listeners={listeners} />}
       {manage ? (
         <div className="flex min-w-0 flex-1 items-center gap-3">{Info}</div>
       ) : (

@@ -20,6 +20,13 @@ import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
  * name, so a real failure — permissions, network, a genuine bug — still throws
  * and is still visible rather than being silently swallowed.
  */
+function isMissingFunction(error: { code?: string; message?: string }): boolean {
+  const code = error?.code ?? '';
+  const message = (error?.message ?? '').toLowerCase();
+  return code === 'PGRST202'
+    || (message.includes('function') && message.includes('does not exist'));
+}
+
 function isMissingColumn(error: { code?: string; message?: string }, column: string): boolean {
   const code = error?.code ?? '';
   const message = (error?.message ?? '').toLowerCase();
@@ -261,17 +268,35 @@ export function useDeleteRosterGroup(orgId: string) {
   });
 }
 
-export function useReorderRosterGroups(orgId: string) {
+/** Reorder groups. Same story as people: one request, moves on screen first. */
+export function useReorderRosterGroups(orgId: string, kind: RosterKind = 'leader') {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (ids: string[]) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('reorder_roster_groups', { p_ids: ids });
+      if (!error) return;
+      if (!isMissingFunction(error)) throw error;
       for (let i = 0; i < ids.length; i++) {
-        const { error } = await s.from('roster_groups').update({ sort: i }).eq('id', ids[i]);
-        if (error) throw error;
+        const { error: e } = await s.from('roster_groups').update({ sort: i }).eq('id', ids[i]);
+        if (e) throw e;
       }
     },
-    onSuccess: () => invalidate(qc, orgId, 'groups'),
+    onMutate: async (ids: string[]) => {
+      const key = KEY(orgId, 'groups', kind);
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<RosterGroup[]>(key);
+      if (previous) {
+        const rank = new Map(ids.map((id, i) => [id, i]));
+        qc.setQueryData<RosterGroup[]>(key, previous.map((g) =>
+          rank.has(g.id) ? { ...g, sort: rank.get(g.id)! } : g));
+      }
+      return { previous };
+    },
+    onError: (_e, _ids, ctx) => {
+      if (ctx?.previous) qc.setQueryData(KEY(orgId, 'groups', kind), ctx.previous);
+    },
+    onSettled: () => invalidate(qc, orgId, 'groups'),
   });
 }
 
@@ -335,16 +360,50 @@ export function useDeleteRosterPerson(orgId: string) {
   });
 }
 
+/**
+ * Reorder people within a group.
+ *
+ * One request, and the list on screen moves before it is even sent.
+ *
+ * This used to be one UPDATE per person, sent one after another, each waiting
+ * on the last — so a group of twenty took twenty round trips before anything
+ * moved. That is why the arrows felt broken, and it would have made dragging
+ * unusable.
+ */
 export function useReorderRosterPeople(orgId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (ids: string[]) => {
       const s = getSupabase(); if (!s) throw new Error('Backend not configured.');
+      const { error } = await s.rpc('reorder_roster_people', { p_ids: ids });
+      if (!error) return;
+      if (!isMissingFunction(error)) throw error;
+      // Migration 0080 hasn't run yet — fall back to the slow way rather than
+      // refusing to reorder at all.
       for (let i = 0; i < ids.length; i++) {
-        const { error } = await s.from('roster_people').update({ sort: i }).eq('id', ids[i]);
-        if (error) throw error;
+        const { error: e } = await s.from('roster_people').update({ sort: i }).eq('id', ids[i]);
+        if (e) throw e;
       }
     },
-    onSuccess: () => invalidate(qc, orgId, 'people'),
+    // Move it on screen immediately. Waiting for the server means a drag snaps
+    // back to where it started for a moment, which reads as "it didn't work"
+    // and gets tried again.
+    onMutate: async (ids: string[]) => {
+      const key = KEY(orgId, 'people');
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData<RosterPerson[]>(key);
+      if (previous) {
+        const rank = new Map(ids.map((id, i) => [id, i]));
+        qc.setQueryData<RosterPerson[]>(key, previous.map((p) =>
+          rank.has(p.id) ? { ...p, sort: rank.get(p.id)! } : p));
+      }
+      return { previous };
+    },
+    onError: (_e, _ids, ctx) => {
+      // Put it back where it was, so the screen never disagrees with the
+      // database about where somebody sits.
+      if (ctx?.previous) qc.setQueryData(KEY(orgId, 'people'), ctx.previous);
+    },
+    onSettled: () => invalidate(qc, orgId, 'people'),
   });
 }
