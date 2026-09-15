@@ -506,7 +506,7 @@ export function useEditChatMessage(orgId: string) {
 // --- running a group from inside its chat ----------------------------------
 
 export interface ChatGroupMember { personId: string; userId: string | null; name: string; role: string | null; isStudent: boolean }
-export interface ChatGroupCandidate { userId: string; name: string; grade: string | null; isStudent: boolean; needsConsent: boolean }
+export interface ChatGroupCandidate { userId: string; name: string; grade: string | null; isStudent: boolean }
 
 /**
  * Can the current user add and remove people in this channel?
@@ -558,7 +558,7 @@ export function useChatGroupCandidates(groupId: string | undefined, enabled: boo
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return ((data ?? []) as any[]).map((r) => ({
         userId: r.user_id, name: r.name, grade: r.grade ?? null,
-        isStudent: Boolean(r.is_student), needsConsent: Boolean(r.needs_consent),
+        isStudent: Boolean(r.is_student),
       }));
     },
   });

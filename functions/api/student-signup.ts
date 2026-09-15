@@ -98,9 +98,8 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   if (!Number.isInteger(gradYear) || gradYear < thisYear - 1 || gradYear > thisYear + 8) {
     return json({ error: 'Please choose your graduation year from the list.' }, 400);
   }
-  // Birthday is required, not optional as it was. It is the only thing that
-  // says whether this is an 11-year-old, and an 11-year-old cannot be put into
-  // a group chat until a parent or guardian has agreed to it.
+  // Required. It drives the birthday feature, and it is what decides whether
+  // to ask for a parent's contact details.
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
     return json({ error: 'Please enter your birthday.' }, 400);
   }
@@ -109,6 +108,9 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   const parentName = (body.parentName || '').trim();
   const parentPhone = (body.parentPhone || '').trim();
   const parentEmail = (body.parentEmail || '').trim();
+  // Collected for under-13s so a leader has a way to reach a parent. This is
+  // contact information, not permission — the in-app permission workflow was
+  // removed in migration 0082 and is handled outside the app.
   if (under13) {
     if (parentName.length < 2) {
       return json({ error: 'Please enter a parent or guardian’s name.' }, 400);
@@ -183,11 +185,6 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     .insert({ user_id: uid, org_id: orgId, role: 'student' });
   if (memErr) return undo('Could not finish setting up that account. Please try again.');
 
-  // An under-13 gets a permission link straight away, so they can hand the
-  // phone to a parent while they're standing next to them. Waiting for a
-  // leader to send one later is how it never gets done.
-  const consentToken = under13 ? crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '') : null;
-
   const { error: profErr } = await admin.from('student_profiles').insert({
     user_id: uid,
     org_id: orgId,
@@ -199,7 +196,6 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     parent_name: parentName || null,
     parent_phone: parentPhone || null,
     parent_email: parentEmail || null,
-    consent_token: consentToken,
   });
   if (profErr) {
     // The unique index on (org_id, phone_key) is the likely cause: this phone
@@ -213,8 +209,6 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     );
   }
 
-  // The app signs in with `email`; it is not something the student ever types.
-  // consentToken, when present, is what the parent has to open before this
-  // student can be added to any group chat.
-  return json({ email, consentToken });
+  // The app signs in with this; it is not something the student ever types.
+  return json({ email });
 };

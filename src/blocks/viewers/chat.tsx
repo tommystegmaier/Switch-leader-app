@@ -2034,7 +2034,7 @@ function GroupPeople({ groupId, onClose }: { groupId: string; onClose: () => voi
                 <li key={c.userId}>
                   <button
                     type="button"
-                    disabled={c.needsConsent || add.isPending}
+                    disabled={add.isPending}
                     onClick={() => run(() => add.mutateAsync(c.userId))}
                     className="flex w-full items-center gap-2 border-b px-1 py-2.5 text-left text-sm disabled:opacity-50"
                     style={{ borderColor: 'var(--th-hairline)' }}
@@ -2043,13 +2043,8 @@ function GroupPeople({ groupId, onClose }: { groupId: string; onClose: () => voi
                       {c.name}
                       {c.grade && <span className="ml-2 text-xs text-gray-500">{c.grade}</span>}
                       {!c.isStudent && <span className="ml-2 text-xs text-gray-500">leader</span>}
-                      {c.needsConsent && (
-                        <span className="mt-0.5 block text-xs" style={{ color: '#b45309' }}>
-                          Waiting on a parent&rsquo;s permission
-                        </span>
-                      )}
                     </span>
-                    {!c.needsConsent && <span aria-hidden className="text-lg">＋</span>}
+                    <span aria-hidden className="text-lg">＋</span>
                   </button>
                 </li>
               ))}

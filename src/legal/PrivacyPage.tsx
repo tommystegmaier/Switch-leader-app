@@ -123,18 +123,22 @@ export function PrivacyPage() {
           Student accounts are created only from a link the ministry hands out, and the ministry
           decides who receives it. A student sees only the pages marked for students and only the
           group chats a leader has added them to. Leaders of that ministry can see a student&apos;s
-          name, grade, birthday, and phone number; other students cannot.
+          name, grade, birthday, and phone number; other students cannot. Students under 13 are
+          also asked for a parent or guardian&apos;s name and phone number, so a leader has a way to
+          reach someone.
+        </p>
+        <p className="mt-2">
+          <B>Permission to take part is handled by the ministry, not by this app.</B> Signing up
+          here does not ask a parent for anything and does not record a parent&apos;s agreement —
+          whether your child takes part in Switch, and any permission that involves, is arranged
+          with your ministry directly.
         </p>
         <p className="mt-2">
           <B>If you are a parent or guardian:</B> you can ask your ministry&apos;s youth pastor — or us,
           at the address below — to show you everything we hold about your child, correct it, or
-          delete the account entirely. We will do it. We do not sell student information, use it for
-          advertising, or share it outside the ministry the student joined.
-        </p>
-        <p className="mt-2">
-          We do not knowingly create accounts for children under 13 without a parent or guardian&apos;s
-          consent. If you believe a child under 13 has an account that a parent didn&apos;t agree to,
-          contact us and we will remove it.
+          delete the account entirely. We will do it, and deleting removes their messages too. We do
+          not sell student information, use it for advertising, or share it outside the ministry the
+          student joined.
         </p>
       </Section>
 

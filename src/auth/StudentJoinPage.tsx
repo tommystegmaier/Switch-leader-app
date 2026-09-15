@@ -33,8 +33,6 @@ export function StudentJoinPage() {
   const [parentPhone, setParentPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Set once the account exists and a parent still has to agree.
-  const [consentToken, setConsentToken] = useState<string | null>(null);
 
   const years = gradYearOptions();
   const phoneKey = normalizePhone(phone);
@@ -61,9 +59,7 @@ export function StudentJoinPage() {
           parentName, parentPhone,
         }),
       });
-      const out = (await res.json().catch(() => ({}))) as {
-        email?: string; error?: string; consentToken?: string | null;
-      };
+      const out = (await res.json().catch(() => ({}))) as { email?: string; error?: string };
       if (!res.ok || !out.email) throw new Error(out.error || 'Could not create your account.');
 
       // Sign in with the address the server derived. The student never sees it
@@ -80,10 +76,6 @@ export function StudentJoinPage() {
         navigate('/login', { replace: true });
         return;
       }
-      // An under-13 is signed in, but can't be in a group chat until a parent
-      // agrees. Show them the link now, while a parent is most likely to be
-      // within arm's reach, instead of leaving it for a leader to chase.
-      if (out.consentToken) { setConsentToken(out.consentToken); return; }
       navigate(info?.orgSlug ? `/o/${info.orgSlug}` : '/workspaces', { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -138,49 +130,6 @@ export function StudentJoinPage() {
     );
   }
 
-  // Account made, waiting on a parent. Shown instead of dropping them into an
-  // app where every chat is missing with no explanation.
-  if (consentToken) {
-    const link = `${window.location.origin}/consent?token=${consentToken}`;
-    return (
-      <Shell>
-        <h1 className="mb-2 text-center text-2xl font-bold">You&rsquo;re signed up</h1>
-        <p className="mb-4 text-center text-sm text-gray-600">
-          Because you&rsquo;re under 13, a parent or guardian has to say it&rsquo;s okay before you
-          can join group chats. Everything else is ready now.
-        </p>
-        <div className="rounded-xl border p-3" style={{ borderColor: 'var(--th-hairline, #e5e7eb)' }}>
-          <p className="mb-2 text-sm font-semibold">Show this to {parentName.trim().split(' ')[0] || 'your parent'}</p>
-          <button
-            type="button"
-            onClick={() => { void navigator.clipboard?.writeText(link); }}
-            className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-left text-xs break-all"
-          >
-            {link}
-          </button>
-          <a
-            href={link}
-            className="block rounded-full px-6 py-3 text-center font-semibold"
-            style={{ backgroundColor: 'var(--th-primary, #0f1420)', color: 'var(--th-primary-text, #fff)' }}
-          >
-            Open it now
-          </a>
-          <p className="mt-2 text-xs text-gray-500">
-            If they&rsquo;re here, hand them your phone and tap Open. Otherwise copy the link and
-            send it to them — your leader can send it again later too.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate(info?.orgSlug ? `/o/${info.orgSlug}` : '/workspaces', { replace: true })}
-          className="mt-4 w-full rounded-full border border-gray-300 px-6 py-3 font-semibold"
-        >
-          Skip for now
-        </button>
-      </Shell>
-    );
-  }
-
   return (
     <Shell>
       <h1 className="mb-1 text-center text-2xl font-bold">Set up your account</h1>
@@ -227,10 +176,9 @@ export function StudentJoinPage() {
 
         {needsParent && (
           <div className="rounded-xl border p-3" style={{ borderColor: 'var(--th-hairline, #e5e7eb)' }}>
-            <p className="text-sm font-semibold">One more thing</p>
+            <p className="text-sm font-semibold">A parent or guardian</p>
             <p className="mt-1 text-xs text-gray-600">
-              You&rsquo;re under 13, so a parent or guardian needs to say it&rsquo;s okay before you can
-              join any group chats. We&rsquo;ll show you a link for them at the end.
+              So a leader can get hold of someone if they need to.
             </p>
             <label className="mt-3 block text-sm font-medium">
               Parent or guardian&rsquo;s name
@@ -311,7 +259,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center p-6">
       <div className="mb-6 flex flex-col items-center gap-2">
-        <img src="/icon-192.png" alt="" className="h-16 w-16 rounded-2xl" />
+        <img src="/pwa-512.png" alt="" className="h-16 w-16 rounded-2xl" />
         <p className="text-lg font-bold">Switch Leader App</p>
       </div>
       {children}
