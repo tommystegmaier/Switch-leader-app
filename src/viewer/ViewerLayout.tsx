@@ -190,7 +190,16 @@ export function ViewerLayout() {
     );
   }
 
-  const appName = settings?.appName ?? org.name;
+  // The name from My apps wins.
+  //
+  // app_settings.app_name is a SECOND copy of the same name, and the two had
+  // drifted: renaming in My apps only started writing both in migration 0055,
+  // so an app renamed before that kept its old name in here while My apps
+  // showed the new one. Since App identity was taken out of Settings there is
+  // no way to edit app_name deliberately, so there is nothing it could
+  // legitimately say that organizations.name doesn't — and preferring the
+  // editable one means this can't drift again whatever writes the other.
+  const appName = org.name || settings?.appName || 'Switch Leader App';
   const accentColor = settings?.theme?.accent || '#e23b2e';
   // Editors navigate all pages (incl. drafts); viewers only published pages
   // they're allowed to see (admins-only pages are hidden from viewers).
