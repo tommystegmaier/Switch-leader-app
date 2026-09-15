@@ -12,7 +12,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMembershipRole } from '@/auth/useMembership';
 import { useEditMode } from './EditModeProvider';
-import { useInvites, useCreateInvite, useRevokeInvite } from '@/data/inviteHooks';
 import { useOrgMembers, useSetMemberRole, useRemoveMember, useUpdateMemberProfile, useMembersWithPush, type OrgMember } from '@/data/memberHooks';
 import { useOrganization } from '@/data/hooks';
 import { errorMessage } from '@/lib/errors';
@@ -22,11 +21,11 @@ import { FONT_OPTIONS, THEME_PRESETS } from '@/lib/themePresets';
 import { useAllPages } from '@/data/pageHooks';
 import { NavIcon, NAV_ICON_NAMES, isNavIconName } from '@/blocks/navIcons';
 import {
-  AUDIENCE_LABEL, ROLE_LABEL, ROLE_LABEL_LONG, ROLE_ORDER, roleLabel, tabAudience,
-  type Audience,
+  AUDIENCE_LABEL, ROLE_LABEL, ROLE_ORDER, tabAudience, type Audience,
 } from '@/lib/roles';
 import type { AppSettings, NavStyle, NavTab, Role, ThemeColors, ViewerAccess } from '@/types';
 import { useSettingsMutations } from './useSettingsMutations';
+import { InviteLinks } from './InviteLinks';
 import { StudentsSection } from './StudentsSection';
 
 /**
@@ -351,22 +350,13 @@ function SortableTab({ id, children }: { id: string; children: ReactNode }) {
  */
 export function TeamAccessSection({ orgId, currentRole }: { orgId: string; currentRole: Role | null }) {
   const { user } = useAuth();
-  const { data: invites } = useInvites(orgId, true);
   const { data: members } = useOrgMembers(orgId, true);
   const { data: pushOn } = useMembersWithPush(orgId, true);
   const pushSet = new Set(pushOn ?? []);
-  const createInvite = useCreateInvite(orgId);
-  const revokeInvite = useRevokeInvite(orgId);
   const setRole = useSetMemberRole(orgId);
   const removeMember = useRemoveMember(orgId);
 
-  // Viewer by default — see the invite block: a role is far easier to raise
-  // later than to discover you handed out by accident.
-  const [inviteRole, setInviteRole] = useState<Role>('viewer');
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [invitePhone, setInvitePhone] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [noteFilter, setNoteFilter] = useState<'all' | 'on' | 'off'>('all');
   const isOwner = currentRole === 'owner';
@@ -378,28 +368,6 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
   const shownMembers = sortedMembers.filter((m) =>
     noteFilter === 'all' ? true : noteFilter === 'on' ? pushSet.has(m.userId) : !pushSet.has(m.userId),
   );
-
-  const joinLinkFor = (code: string) => `${window.location.origin}/join?code=${code}`;
-
-  async function copy(text: string) {
-    try {
-      await navigator.clipboard?.writeText(text);
-      setCopied(text);
-      setTimeout(() => setCopied(null), 2000);
-    } catch { /* clipboard unavailable */ }
-  }
-
-  async function onCreate() {
-    setError(null);
-    try {
-      const code = await createInvite.mutateAsync({ role: inviteRole, email: inviteEmail, phone: invitePhone });
-      setInviteEmail('');
-      setInvitePhone('');
-      await copy(joinLinkFor(code));
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
 
   async function run(fn: () => Promise<unknown>) {
     setError(null);
@@ -502,69 +470,13 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
         </ul>
       </div>
 
-      {/* Invite a teammate */}
+      {/* Invite to App — one join link per role. Shares a component with the
+          placeable Invite block so the two can't drift apart. */}
       <div className="rounded-lg border border-gray-200 p-3">
-        <span className="text-sm font-medium">Invite a teammate</span>
-        <div className="mt-2 flex flex-col gap-2">
-          <input
-            type="email"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            placeholder="Their email (optional — ties the link to them)"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-          />
-          <input
-            type="tel"
-            autoComplete="tel"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            placeholder="Or their phone number (optional)"
-            value={invitePhone}
-            onChange={(e) => setInvitePhone(e.target.value)}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <select className="rounded-md border border-gray-300 px-2 py-2 text-sm" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}>
-              <option value="viewer">{ROLE_LABEL_LONG.viewer}</option>
-              <option value="editor">{ROLE_LABEL_LONG.editor}</option>
-              <option value="admin">{ROLE_LABEL_LONG.admin}</option>
-              {isOwner && <option value="owner">{ROLE_LABEL_LONG.owner}</option>}
-            </select>
-            <button
-              type="button"
-              className="rounded-full px-4 py-2 text-sm font-semibold disabled:opacity-50"
-              style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
-              onClick={onCreate}
-              disabled={createInvite.isPending}
-            >
-              {createInvite.isPending ? 'Creating…' : 'Create invite link'}
-            </button>
-          </div>
+        <span className="text-sm font-medium">Invite to App</span>
+        <div className="mt-2">
+          <InviteLinks orgId={orgId} isOwner={isOwner} />
         </div>
-        <p className="mt-2 text-xs text-gray-500">A link is created and copied to your clipboard — text or email it to the person. It opens a page that shows their role and lets them create an account, then drops them straight in.</p>
-
-        {(invites ?? []).length > 0 && (
-          <ul className="mt-3 flex flex-col gap-1 text-sm">
-            {(invites ?? []).map((inv) => {
-              const link = joinLinkFor(inv.code);
-              return (
-                <li key={inv.id} className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 flex-1 truncate rounded bg-black/5 px-2 py-1 text-xs">
-                    {roleLabel(inv.role)}
-                    {inv.email && <span className="text-gray-500"> · {inv.email}</span>}
-                    {inv.phone && <span className="text-gray-500"> · {inv.phone}</span>}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-black/5" onClick={() => copy(link)}>
-                      {copied === link ? 'Copied ✓' : 'Copy link'}
-                    </button>
-                    <button type="button" className="rounded border border-gray-300 px-2 py-1 text-xs text-red-600 hover:bg-black/5" onClick={() => run(() => revokeInvite.mutateAsync(inv.id))}>
-                      Revoke
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
