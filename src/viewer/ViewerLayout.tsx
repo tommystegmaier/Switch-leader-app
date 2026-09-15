@@ -235,7 +235,11 @@ export function ViewerLayout() {
                 </svg>
               )}
             </button>
-            {canEdit && (
+            {/* Youth Pastor only. A broadcast goes to every phone in the app
+                at once and can't be recalled, so it sits with one person
+                rather than with everyone who can edit a page. Enforced by
+                /api/send-push too — this only hides the button. */}
+            {role === 'owner' && (
               <button
                 type="button"
                 onClick={() => setNotifyOpen(true)}

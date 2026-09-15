@@ -4,7 +4,7 @@
 // Deploys automatically with the Pages project (no separate service).
 //
 // Auth: the caller sends their Supabase access token (Bearer). We verify they
-// are an owner/admin/editor of the workspace before sending. Reads of the
+// are the OWNER (Youth Pastor) of the workspace before sending. Reads of the
 // subscription table use the SERVICE ROLE key (server-only secret).
 //
 // Required Pages environment variables (Settings → Variables and secrets):
@@ -62,8 +62,10 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     .eq('org_id', orgId)
     .eq('user_id', userData.user.id)
     .maybeSingle();
-  if (!membership || !['owner', 'admin', 'editor'].includes(membership.role)) {
-    return json({ error: 'You do not have permission to send notifications for this workspace.' }, 403);
+  // Youth Pastor only. This is the actual gate — hiding the button in the app
+  // stops it being offered, not being used.
+  if (!membership || membership.role !== 'owner') {
+    return json({ error: 'Only the Youth Pastor can send a notification to everyone.' }, 403);
   }
 
   // How many devices this invocation will handle.
