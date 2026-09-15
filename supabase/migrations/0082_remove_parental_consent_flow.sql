@@ -35,6 +35,11 @@ drop function if exists public.revoke_student_consent(uuid);
 -- --- 3. callers that asked whether permission was outstanding -------------
 -- chat_group_candidates greyed out a student who was waiting on a parent.
 -- Nobody waits now, so the column goes and every student can be added.
+--
+-- Dropped first, not replaced: this returns one column fewer than the 0079
+-- version, and Postgres refuses to change a function's return type in place
+-- (42P13). Same reason list_students is dropped below.
+drop function if exists public.chat_group_candidates(uuid);
 create or replace function public.chat_group_candidates(p_group uuid)
 returns table (user_id uuid, name text, grade text, is_student boolean)
 language sql stable security definer set search_path = public as $$
