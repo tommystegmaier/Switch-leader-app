@@ -44,12 +44,18 @@ function seenToday(iso: string | null): boolean {
   return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
-/** "Date last opened: 08/13/26", or a clear note when there's no visit yet. */
+/**
+ * "Opened 08/13", or a note when they never have.
+ *
+ * Deliberately short. This is a chip in a row on a phone, and the old
+ * "Date last opened: 08/13/26" was long enough to wrap onto four lines inside
+ * its own pill. The full wording lives in the tooltip.
+ */
 function fmtLastSeen(iso: string | null): string {
-  if (!iso) return 'Date last opened: never';
+  if (!iso) return 'Never opened';
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, '0');
-  return `Date last opened: ${p(d.getMonth() + 1)}/${p(d.getDate())}/${p(d.getFullYear() % 100)}`;
+  return `Opened ${p(d.getMonth() + 1)}/${p(d.getDate())}`;
 }
 
 export function SettingsPage() {
@@ -359,15 +365,19 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
   const [error, setError] = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [noteFilter, setNoteFilter] = useState<'all' | 'on' | 'off'>('all');
+  const [memberSearch, setMemberSearch] = useState('');
   const isOwner = currentRole === 'owner';
 
   // Sort by first name (A–Z), then apply the notifications filter.
   const sortedMembers = [...(members ?? [])].sort((a, b) =>
     (a.name?.trim() || a.email).toLowerCase().localeCompare((b.name?.trim() || b.email).toLowerCase()),
   );
-  const shownMembers = sortedMembers.filter((m) =>
-    noteFilter === 'all' ? true : noteFilter === 'on' ? pushSet.has(m.userId) : !pushSet.has(m.userId),
-  );
+  const q = memberSearch.trim().toLowerCase();
+  const shownMembers = sortedMembers
+    .filter((m) => (noteFilter === 'all' ? true : noteFilter === 'on' ? pushSet.has(m.userId) : !pushSet.has(m.userId)))
+    // Matches name or email. With a hundred and fifty people, scrolling to find
+    // one is the slow part of this screen whatever the rows look like.
+    .filter((m) => !q || (m.name ?? '').toLowerCase().includes(q) || m.email.toLowerCase().includes(q));
 
   async function run(fn: () => Promise<unknown>) {
     setError(null);
@@ -403,60 +413,83 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
             ))}
           </div>
         </div>
+        <input
+          type="search"
+          className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          placeholder={`Search ${sortedMembers.length} people by name or email…`}
+          value={memberSearch}
+          onChange={(e) => setMemberSearch(e.target.value)}
+          aria-label="Search people with access"
+        />
         <ul className="mt-2 flex flex-col gap-2 text-sm">
           {shownMembers.map((m) => {
             const isSelf = m.userId === user?.id;
             return (
-              <li key={m.userId} className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">
-                      {m.name || m.email}{isSelf && <span className="font-normal text-gray-400"> (you)</span>}
-                    </span>
-                    {m.name && <span className="block truncate text-xs text-gray-500">{m.email}</span>}
-                    <span
-                      className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${pushSet.has(m.userId) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}
-                      title="Whether this person has turned on push notifications (updates automatically)"
-                    >
-                      {pushSet.has(m.userId) ? '🔔 Notifications on' : '🔕 Notifications off'}
-                    </span>
-                    <span
-                      className={`ml-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                        seenToday(m.lastSeenAt) ? 'bg-green-100 text-green-700' : 'bg-black/5 text-gray-600'
-                      }`}
-                      title="The last time this person opened the app — green means today"
-                    >
-                      {fmtLastSeen(m.lastSeenAt)}
-                    </span>
+              <li
+                key={m.userId}
+                className="flex flex-col gap-2 rounded-lg border p-2.5"
+                style={{ borderColor: 'var(--th-hairline)' }}
+              >
+                {/* Name and email get the full width. They used to share a row
+                    with the role picker and two buttons, which left them about
+                    eighty pixels on a phone — "addy gl…" and nothing useful. */}
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {m.name || m.email}
+                    {isSelf && <span className="font-normal text-gray-400"> (you)</span>}
+                  </p>
+                  {m.name && <p className="truncate text-xs text-gray-500">{m.email}</p>}
+                </div>
+
+                {/* Status chips. nowrap so a chip never breaks mid-phrase; the
+                    full explanation stays in the tooltip. */}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span
+                    className={`whitespace-nowrap rounded-full px-2 py-0.5 font-medium ${pushSet.has(m.userId) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}
+                    title="Whether this person has turned on push notifications (updates automatically)"
+                  >
+                    {pushSet.has(m.userId) ? '🔔 On' : '🔕 Off'}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <select
-                      className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-60"
-                      value={m.role}
-                      disabled={isSelf || (m.role === 'owner' && !isOwner)}
-                      onChange={(e) => run(() => setRole.mutateAsync({ userId: m.userId, role: e.target.value as Role }))}
-                    >
-                      {ROLE_ORDER.map((r) => (
-                        <option key={r} value={r}>{ROLE_LABEL[r]}</option>
-                      ))}
-                    </select>
+                  <span
+                    className={`whitespace-nowrap rounded-full px-2 py-0.5 font-medium ${
+                      seenToday(m.lastSeenAt) ? 'bg-green-100 text-green-700' : 'bg-black/5 text-gray-600'
+                    }`}
+                    title="The last time this person opened the app — green means today"
+                  >
+                    {fmtLastSeen(m.lastSeenAt)}
+                  </span>
+                </div>
+
+                {/* Controls on their own row, so the role name is readable and
+                    the buttons are a thumb's width apart. */}
+                <div className="flex items-center gap-2">
+                  <select
+                    className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-xs disabled:opacity-60"
+                    value={m.role}
+                    disabled={isSelf || (m.role === 'owner' && !isOwner)}
+                    onChange={(e) => run(() => setRole.mutateAsync({ userId: m.userId, role: e.target.value as Role }))}
+                    aria-label={`Role for ${m.name || m.email}`}
+                  >
+                    {ROLE_ORDER.map((r) => (
+                      <option key={r} value={r}>{ROLE_LABEL[r]}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded border border-gray-300 px-2.5 py-1.5 text-xs hover:bg-black/5"
+                    onClick={() => setEditingMember((id) => (id === m.userId ? null : m.userId))}
+                  >
+                    {editingMember === m.userId ? 'Close' : 'Edit'}
+                  </button>
+                  {!isSelf && (
                     <button
                       type="button"
-                      className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-black/5"
-                      onClick={() => setEditingMember((id) => (id === m.userId ? null : m.userId))}
+                      className="shrink-0 rounded border border-gray-300 px-2.5 py-1.5 text-xs text-red-600 hover:bg-black/5"
+                      onClick={() => run(() => removeMember.mutateAsync(m.userId))}
                     >
-                      {editingMember === m.userId ? 'Close' : 'Edit info'}
+                      Remove
                     </button>
-                    {!isSelf && (
-                      <button
-                        type="button"
-                        className="rounded border border-gray-300 px-2 py-1 text-xs text-red-600 hover:bg-black/5"
-                        onClick={() => run(() => removeMember.mutateAsync(m.userId))}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
                 {editingMember === m.userId && (
                   <MemberEditor orgId={orgId} member={m} onDone={() => setEditingMember(null)} />
