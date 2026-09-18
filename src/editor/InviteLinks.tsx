@@ -144,7 +144,16 @@ export function InviteLinks({ orgId, isOwner }: { orgId: string; isOwner: boolea
                 </span>
                 <button
                   type="button"
-                  onClick={() => revoke.mutate(inv.id)}
+                  onClick={() => {
+                    // The role rows above confirm; these didn't. Same action,
+                    // same consequence — somebody part-way through signing up
+                    // loses their link — so the same question.
+                    if (confirm(
+                      `Turn off this ${ROLE_LABEL_LONG[inv.role] ?? inv.role} link?\n\n`
+                      + 'Anyone still holding it won\u2019t be able to join. People who already '
+                      + 'joined keep their access.'
+                    )) revoke.mutate(inv.id);
+                  }}
                   className="shrink-0 rounded px-2 py-1 text-red-600 underline"
                 >
                   Turn off

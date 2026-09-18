@@ -485,7 +485,27 @@ export function TeamAccessSection({ orgId, currentRole }: { orgId: string; curre
                     <button
                       type="button"
                       className="shrink-0 rounded border border-gray-300 px-2.5 py-1.5 text-xs text-red-600 hover:bg-black/5"
-                      onClick={() => run(() => removeMember.mutateAsync(m.userId))}
+                      onClick={() => {
+                        // This used to fire on the first tap, a thumb's width
+                        // from Edit, in a list of 157 rows. Naming the person
+                        // is the point: a confirmation that just says "are you
+                        // sure" doesn't tell you whether you hit the right row.
+                        //
+                        // It also says what does NOT happen. Removing access
+                        // only deletes their membership — remove_member touches
+                        // nothing else — so the honest message is reassuring,
+                        // and somebody who is scared of the button is somebody
+                        // who leaves the wrong person in the app.
+                        const who = m.name?.trim() || m.email;
+                        if (!confirm(
+                          `Remove ${who} from this app?\n\n`
+                          + 'They lose access straight away and their group chats disappear '
+                          + 'from their phone.\n\n'
+                          + 'Their account is NOT deleted, their messages stay, and they stay '
+                          + 'on the roster — so inviting them again puts everything back.'
+                        )) return;
+                        run(() => removeMember.mutateAsync(m.userId));
+                      }}
                     >
                       Remove
                     </button>
