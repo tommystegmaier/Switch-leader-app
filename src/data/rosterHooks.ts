@@ -100,9 +100,11 @@ export function useRosterGroupsAll(orgId: string | undefined, kind: RosterKind =
   return useQuery({
     queryKey: KEY(orgId, 'groups-all', kind),
     enabled: Boolean(orgId) && isSupabaseConfigured,
-    queryFn: async (): Promise<{ id: string; name: string }[]> => {
+    queryFn: async (): Promise<{ id: string; name: string; isAll: boolean; autoRole: string | null }[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const base = () => s.from('roster_groups').select('id, name').eq('org_id', orgId);
+      // is_all / auto_role come back too: whether clearing somebody's entry is
+      // safe depends on which kind of computed group it is.
+      const base = () => s.from('roster_groups').select('id, name, is_all, auto_role').eq('org_id', orgId);
       let { data, error } = await base().eq('kind', kind);
       if (error && isMissingColumn(error, 'kind')) {
         if (kind === 'student') return [];
@@ -110,7 +112,10 @@ export function useRosterGroupsAll(orgId: string | undefined, kind: RosterKind =
       }
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, name: r.name }));
+      return (data ?? []).map((r: any) => ({
+        id: r.id, name: r.name,
+        isAll: Boolean(r.is_all), autoRole: r.auto_role ?? null,
+      }));
     },
   });
 }

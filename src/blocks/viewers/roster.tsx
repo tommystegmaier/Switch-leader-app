@@ -238,10 +238,40 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   // Anyone on this side of the roster whose group the tree above never drew —
   // an "All Leaders"/auto group, or something nested deeper than MAX_GROUP_DEPTH.
   // They used to just not appear, which is the worst way for a roster to fail.
-  const groupName = new Map((everyGroup ?? []).map((g) => [g.id, g.name]));
+  const groupById = new Map((everyGroup ?? []).map((g) => [g.id, g]));
   const elsewhere = (allPeople ?? []).filter(
-    (p) => !groupIdSet.has(p.groupId) && groupName.has(p.groupId),
+    (p) => !groupIdSet.has(p.groupId) && groupById.has(p.groupId),
   );
+
+  /**
+   * Would clearing this entry cost the person their place in that channel?
+   *
+   * A role channel ("Coaches") contains anyone holding that role on ANY roster
+   * entry. So the duplicate entry inside the Coaches group is usually pointless
+   * — UNLESS it is that person's only Coach entry, in which case deleting it
+   * quietly ejects them from the Coaches chat. That distinction is the whole
+   * reason this isn't a plain Remove button.
+   */
+  const clearingIsSafe = (p: RosterPerson): boolean => {
+    const g = groupById.get(p.groupId);
+    if (!g) return true;
+    // All-leaders entries never grant anything: membership there is simply
+    // "you're on the roster", so an explicit row is always redundant.
+    if (g.isAll) return true;
+    if (!g.autoRole) return true;
+    // An entry with no account attached grants nobody anything — channel
+    // membership is looked up by account — so it can never be load-bearing.
+    // Without this it would be flagged as one, and the warning would claim
+    // somebody will "leave the chat" when they were never in it.
+    if (!p.userId) return true;
+    // A role channel: safe only if the role survives somewhere else. Note this
+    // checks the ROLE, not merely being in another group: somebody listed as a
+    // Group Leader elsewhere is still only a Coach by virtue of this entry.
+    return (allPeople ?? []).some((other) => other.id !== p.id
+      && other.userId && other.userId === p.userId
+      && other.role === g.autoRole);
+  };
+  const safeToClear = elsewhere.filter(clearingIsSafe);
 
   const title = props.title || (kind === 'student' ? 'Student Roster' : 'Leader Roster');
   const size: HeaderSize = props.headerSize ?? 'md';
@@ -252,6 +282,9 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   // Tapping a person (in the normal view) opens a large card of their info.
   const [viewing, setViewing] = useState<RosterPerson | null>(null);
   const [showElsewhere, setShowElsewhere] = useState(false);
+  // Clearing a stray roster entry. RLS already restricts this to
+  // owner/admin/editor, and the panel itself is Youth Pastor only.
+  const delPerson = useDeleteRosterPerson(org?.id ?? '');
 
   // Remember which groups are collapsed on this device.
   const collapseKey = `roster-collapsed-${org?.id ?? ''}`;
@@ -349,16 +382,59 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
                 with them being listed; they&rsquo;ll also appear in their real groups above.
               </p>
               <ul className="mt-2 flex flex-col gap-1.5">
-                {elsewhere.map((p) => (
-                  <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
-                    <span className="font-medium">{p.name}</span>
-                    <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs text-gray-600">
-                      {groupName.get(p.groupId)}
-                    </span>
-                    {p.role && <span className="text-xs text-gray-500">{p.role}</span>}
-                  </li>
-                ))}
+                {elsewhere.map((p) => {
+                  const g = groupById.get(p.groupId);
+                  const safe = clearingIsSafe(p);
+                  return (
+                    <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                      <span className="font-medium">{p.name}</span>
+                      <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs text-gray-600">
+                        {g?.name}
+                      </span>
+                      {p.role && <span className="text-xs text-gray-500">{p.role}</span>}
+                      {!safe && (
+                        <span className="text-xs" style={{ color: '#b45309' }}>
+                          only entry — keeps them in the chat
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const msg = safe
+                            ? `Clear ${p.name}'s duplicate entry in ${g?.name}?\n\n`
+                              + `They stay in the ${g?.name} chat — they hold that role in a real group too. `
+                              + 'Nothing else changes.'
+                            : `Clear ${p.name}'s entry in ${g?.name}?\n\n`
+                              + `WARNING: this is their ONLY "${g?.autoRole}" entry, so they will LEAVE the `
+                              + `${g?.name} chat.\n\nIf you want them to stay, first set their role to `
+                              + `"${g?.autoRole}" in one of their normal groups.`;
+                          if (confirm(msg)) delPerson.mutate(p.id);
+                        }}
+                        className="ml-auto rounded px-2 py-0.5 text-xs text-red-600 underline"
+                      >
+                        Clear
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
+              {safeToClear.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!confirm(
+                      `Clear ${safeToClear.length} duplicate entr${safeToClear.length === 1 ? 'y' : 'ies'}?\n\n`
+                      + 'Only the ones that change nothing are cleared. Anyone whose entry is keeping '
+                      + 'them in a chat is left alone.'
+                    )) return;
+                    for (const p of safeToClear) delPerson.mutate(p.id);
+                  }}
+                  className="mt-3 rounded-full border px-3 py-1.5 text-xs font-semibold"
+                  style={{ borderColor: 'var(--th-hairline-strong)' }}
+                >
+                  Clear the {safeToClear.length} that change nothing
+                </button>
+              )}
             </div>
           )}
         </div>
