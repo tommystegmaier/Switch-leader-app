@@ -92,10 +92,37 @@ export function useRosterPeople(orgId: string | undefined) {
     enabled: Boolean(orgId) && isSupabaseConfigured,
     queryFn: async (): Promise<RosterPerson[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const { data, error } = await s.from('roster_people').select('id, group_id, name, role, photo_url, email, phone, grade, user_id, sort').eq('org_id', orgId).order('sort').order('name');
-      if (error) throw error;
+
+      // Read in pages until the rows run out.
+      //
+      // This used to be one unbounded select, which meant it silently inherited
+      // PostgREST's row cap — 1000 by default on Supabase. Past that, rows are
+      // dropped with NO error: the query succeeds, the roster is just short.
+      //
+      // That is invisible in the worst way. Chat membership is decided in the
+      // database and never goes through this list, so a leader stays in their
+      // group's channel while disappearing off the roster board — which is the
+      // screen you'd check to find out who is in the group. A missing person on
+      // a youth ministry roster is not an acceptable silent failure.
+      const PAGE = 1000;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any) => ({ id: r.id, groupId: r.group_id, name: r.name, role: r.role ?? null, photoUrl: r.photo_url ?? null, email: r.email ?? null, phone: r.phone ?? null, grade: r.grade ?? null, userId: r.user_id ?? null, sort: r.sort }));
+      const rows: any[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await s.from('roster_people')
+          .select('id, group_id, name, role, photo_url, email, phone, grade, user_id, sort')
+          .eq('org_id', orgId)
+          // Ordered by id as the final tie-break. Without a unique last key the
+          // order of rows sharing a sort AND a name is undefined between
+          // requests, so a page boundary could drop one row and repeat another.
+          .order('sort').order('name').order('id')
+          .range(from, from + PAGE - 1);
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if (!data || data.length < PAGE) break;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return rows.map((r: any) => ({ id: r.id, groupId: r.group_id, name: r.name, role: r.role ?? null, photoUrl: r.photo_url ?? null, email: r.email ?? null, phone: r.phone ?? null, grade: r.grade ?? null, userId: r.user_id ?? null, sort: r.sort }));
     },
   });
 }
