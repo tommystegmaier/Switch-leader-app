@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { readAllPages } from '@/lib/pagedRead';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { Role } from '@/types';
 
@@ -34,8 +35,12 @@ export function useOrgMembers(orgId: string | undefined, enabled: boolean) {
     queryFn: async (): Promise<OrgMember[]> => {
       const s = getSupabase();
       if (!s || !orgId) return [];
-      const { data, error } = await s.rpc('list_org_members', { p_org: orgId });
-      if (error) throw error;
+      // Paged: a set-returning function is capped like any other read, so a
+      // workspace past a thousand members would quietly lose the tail of this
+      // list. See readAllPages.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await readAllPages<any>((from, to) =>
+        s.rpc('list_org_members', { p_org: orgId }).range(from, to));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => ({
         userId: r.user_id,

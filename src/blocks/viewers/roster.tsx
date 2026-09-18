@@ -17,7 +17,7 @@ import {
   useAddRosterPerson, useCreateRosterGroup, useCreateRosterRole, useDeleteRosterGroup,
   useDeleteRosterPerson, useDeleteRosterRole, useRenameRosterGroup, useRenameRosterRole,
   useReorderRosterGroups, useReorderRosterPeople, useReorderRosterRoles, useRosterGroups,
-  useRosterAccountOptions, useRosterPeople, useRosterRoles, useSeedRosterRoles,
+  useRosterAccountOptions, useRosterGroupsAll, useRosterPeople, useRosterRoles, useSeedRosterRoles,
   useSetMyRosterPhoto, useUpdateRosterPerson,
   type PersonInput, type RosterAccountOption, type RosterGroup, type RosterPerson, type RosterRole,
 } from '@/data/rosterHooks';
@@ -76,6 +76,14 @@ function DragHandle({ attributes, listeners }: {
     </button>
   );
 }
+
+/**
+ * How deep group nesting is drawn. Generous enough that no real roster hits it,
+ * low enough that a group accidentally made its own ancestor can't hang the
+ * page. Anyone below it is still listed — see the "Elsewhere on the roster"
+ * section, which catches whatever the tree didn't draw.
+ */
+const MAX_GROUP_DEPTH = 6;
 
 type HeaderSize = 'sm' | 'md' | 'lg';
 /** 'leader' is the leader roster; 'student' is the student roster. */
@@ -219,8 +227,19 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   // a leader who is in both a leader group and a student group appears in
   // each, which is the point of being able to add them to both.
   const { data: allPeople } = useRosterPeople(org?.id);
+  // Every group on this side, including the ones the board doesn't draw, so a
+  // person in one of those can be named rather than silently dropped.
+  const { data: everyGroup } = useRosterGroupsAll(org?.id, kind);
   const groupIdSet = new Set((groups ?? []).map((g) => g.id));
   const people = (allPeople ?? []).filter((p) => groupIdSet.has(p.groupId));
+
+  // Anyone on this side of the roster whose group the tree above never drew —
+  // an "All Leaders"/auto group, or something nested deeper than MAX_GROUP_DEPTH.
+  // They used to just not appear, which is the worst way for a roster to fail.
+  const groupName = new Map((everyGroup ?? []).map((g) => [g.id, g.name]));
+  const elsewhere = (allPeople ?? []).filter(
+    (p) => !groupIdSet.has(p.groupId) && groupName.has(p.groupId),
+  );
 
   const title = props.title || (kind === 'student' ? 'Student Roster' : 'Leader Roster');
   const size: HeaderSize = props.headerSize ?? 'md';
@@ -301,6 +320,33 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
         </SortableList>
       </div>
 
+      {/* The catch-all. If the tree above didn't draw somebody's group, they
+          are listed here with the group named, so the roster can't quietly be
+          missing a person. */}
+      {elsewhere.length > 0 && (
+        <div className="mt-4 rounded-xl border p-3" style={cardStyle}>
+          <p className="text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>
+            Elsewhere on the roster ({elsewhere.length})
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            These people are in a group that isn&rsquo;t shown above — usually the
+            all-{kind === 'student' ? 'students' : 'leaders'} group or a role group, which are
+            chat channels rather than groups you edit here.
+          </p>
+          <ul className="mt-2 flex flex-col gap-1.5">
+            {elsewhere.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                <span className="font-medium">{p.name}</span>
+                <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs text-gray-600">
+                  {groupName.get(p.groupId)}
+                </span>
+                {p.role && <span className="text-xs text-gray-500">{p.role}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {showManage && <AddGroup orgId={org.id} kind={kind} />}
       {showManage && isAdmin && <RoleListEditor orgId={org.id} kind={kind} />}
 
@@ -347,7 +393,8 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
   orgId: string;
   kind: RosterKind;
   group: RosterGroup;
-  level: 0 | 1;
+  /** 0 = a top group. Any depth is drawn; see the note on `subs`. */
+  level: number;
   allGroups: RosterGroup[];
   people: RosterPerson[];
   collapsed: Record<string, boolean>;
@@ -369,7 +416,17 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
     position: isDragging ? ('relative' as const) : undefined,
   };
   const directPeople = coachFirst(people.filter((p) => p.groupId === group.id));
-  const subs = level === 0 ? allGroups.filter((g) => g.parentId === group.id) : [];
+  // Subgroups at ANY depth.
+  //
+  // This used to be `level === 0 ? … : []`, so a group nested three deep was
+  // never drawn — and because `people` is narrowed to the groups that ARE
+  // drawn, everyone inside it disappeared off the roster entirely while
+  // staying in their chat. A roster that can silently omit a person is the
+  // wrong tool for checking who is in a group.
+  //
+  // MAX_DEPTH is a guard, not a design limit: a group whose parent chain loops
+  // back on itself would otherwise recurse until the tab dies.
+  const subs = level < MAX_GROUP_DEPTH ? allGroups.filter((g) => g.parentId === group.id) : [];
   const subPeople = subs.reduce((n, s) => n + people.filter((p) => p.groupId === s.id).length, 0);
   const count = directPeople.length + subPeople;
   const open = !collapsed[group.id];
@@ -435,7 +492,7 @@ function GroupBlock({ orgId, kind, group, level, allGroups, people, collapsed, t
                   orgId={orgId}
                   kind={kind}
                   group={sub}
-                  level={1}
+                  level={level + 1}
                   allGroups={allGroups}
                   people={people}
                   collapsed={collapsed}

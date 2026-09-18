@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { readAllPages } from '@/lib/pagedRead';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 
 /**
@@ -99,8 +100,10 @@ export function useRoster(orgId: string | undefined, enabled: boolean) {
     enabled: Boolean(orgId) && enabled && isSupabaseConfigured,
     queryFn: async (): Promise<RosterEntry[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
-      const { data, error } = await s.rpc('list_roster', { p_org: orgId });
-      if (error) throw error;
+      // Paged, same reason as the roster and the member list. See readAllPages.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await readAllPages<any>((from, to) =>
+        s.rpc('list_roster', { p_org: orgId }).range(from, to));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((r: any) => ({ roleId: r.role_id, userId: r.user_id, name: r.name ?? null, email: r.email }));
     },

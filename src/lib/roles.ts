@@ -14,7 +14,12 @@ import type { Role, VisibilityRule } from '@/types';
 export const ROLE_LABEL: Record<Role, string> = {
   owner: 'Youth Pastor',
   admin: 'Coach',
-  editor: 'Leader with edit access',
+  // NOT "Leader with edit access", which is what this said and which reads as
+  // a slightly-more-trusted Leader. Its real effect is that the person sees
+  // EVERY leader channel without being on any roster group — the same as a
+  // Coach. That name sent us hunting a phantom bug when a leader turned up in
+  // a chat she wasn't rostered for; the name should say what it does.
+  editor: 'Leader — all channels',
   viewer: 'Leader',
   student: 'Student',
 };
@@ -23,7 +28,7 @@ export const ROLE_LABEL: Record<Role, string> = {
 export const ROLE_LABEL_LONG: Record<Role, string> = {
   owner: 'Youth Pastor (full control)',
   admin: 'Coach (can edit + manage people)',
-  editor: 'Leader with edit access (can edit pages)',
+  editor: 'Leader — sees every channel, can edit pages',
   viewer: 'Leader (can view and chat)',
   student: 'Student (student pages and group chats only)',
 };

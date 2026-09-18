@@ -30,7 +30,7 @@ export function InviteView({ props, ctx }: { props: InviteProps; ctx: ViewerCtx 
       <div className={card} style={cardStyle}>
         <p className="th-feature-title font-semibold" style={{ color: 'var(--th-heading)' }}>✉️ {title}</p>
         <p className="mt-1 text-sm text-gray-500">
-          A join link for each role — Leader, Leader with edit access, Coach, Youth Pastor, Student.
+          A join link for each role — Leader, Leader with all channels, Coach, Youth Pastor, Student.
           Only the Youth Pastor and Coaches see it; hidden from everyone else.
         </p>
       </div>

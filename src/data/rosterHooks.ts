@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { readAllPages } from '@/lib/pagedRead';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 
 /**
@@ -86,6 +87,34 @@ export function useRosterGroups(orgId: string | undefined, kind: RosterKind = 'l
   });
 }
 
+/**
+ * EVERY group on this side of the app, including the ones the roster board
+ * deliberately doesn't draw — "All Leaders" and the auto groups, which are
+ * computed channels rather than editable groups.
+ *
+ * Exists so the board can tell you about a person whose group it isn't
+ * drawing, instead of dropping them. Somebody can end up in one of these:
+ * the 👥 panel in a channel adds to whatever channel you're in.
+ */
+export function useRosterGroupsAll(orgId: string | undefined, kind: RosterKind = 'leader') {
+  return useQuery({
+    queryKey: KEY(orgId, 'groups-all', kind),
+    enabled: Boolean(orgId) && isSupabaseConfigured,
+    queryFn: async (): Promise<{ id: string; name: string }[]> => {
+      const s = getSupabase(); if (!s || !orgId) return [];
+      const base = () => s.from('roster_groups').select('id, name').eq('org_id', orgId);
+      let { data, error } = await base().eq('kind', kind);
+      if (error && isMissingColumn(error, 'kind')) {
+        if (kind === 'student') return [];
+        ({ data, error } = await base());
+      }
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any) => ({ id: r.id, name: r.name }));
+    },
+  });
+}
+
 export function useRosterPeople(orgId: string | undefined) {
   return useQuery({
     queryKey: KEY(orgId, 'people'),
@@ -93,33 +122,18 @@ export function useRosterPeople(orgId: string | undefined) {
     queryFn: async (): Promise<RosterPerson[]> => {
       const s = getSupabase(); if (!s || !orgId) return [];
 
-      // Read in pages until the rows run out.
+      // Paged: an unbounded select silently inherits PostgREST's 1000-row cap
+      // and just returns a short roster. See readAllPages.
       //
-      // This used to be one unbounded select, which meant it silently inherited
-      // PostgREST's row cap — 1000 by default on Supabase. Past that, rows are
-      // dropped with NO error: the query succeeds, the roster is just short.
-      //
-      // That is invisible in the worst way. Chat membership is decided in the
-      // database and never goes through this list, so a leader stays in their
-      // group's channel while disappearing off the roster board — which is the
-      // screen you'd check to find out who is in the group. A missing person on
-      // a youth ministry roster is not an acceptable silent failure.
-      const PAGE = 1000;
+      // Ordered by id as the final tie-break — without a unique last key, rows
+      // sharing a sort AND a name have undefined order between requests, so a
+      // page boundary could drop one row and repeat another.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows: any[] = [];
-      for (let from = 0; ; from += PAGE) {
-        const { data, error } = await s.from('roster_people')
-          .select('id, group_id, name, role, photo_url, email, phone, grade, user_id, sort')
-          .eq('org_id', orgId)
-          // Ordered by id as the final tie-break. Without a unique last key the
-          // order of rows sharing a sort AND a name is undefined between
-          // requests, so a page boundary could drop one row and repeat another.
-          .order('sort').order('name').order('id')
-          .range(from, from + PAGE - 1);
-        if (error) throw error;
-        rows.push(...(data ?? []));
-        if (!data || data.length < PAGE) break;
-      }
+      const rows = await readAllPages<any>((from, to) => s.from('roster_people')
+        .select('id, group_id, name, role, photo_url, email, phone, grade, user_id, sort')
+        .eq('org_id', orgId)
+        .order('sort').order('name').order('id')
+        .range(from, to));
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return rows.map((r: any) => ({ id: r.id, groupId: r.group_id, name: r.name, role: r.role ?? null, photoUrl: r.photo_url ?? null, email: r.email ?? null, phone: r.phone ?? null, grade: r.grade ?? null, userId: r.user_id ?? null, sort: r.sort }));
