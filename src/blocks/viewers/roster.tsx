@@ -220,6 +220,8 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   const { data: org } = useOrganization(ctx.orgSlug);
   const { role, canEdit, isLoading } = useMembershipRole(org?.id);
   const isAdmin = role === 'owner' || role === 'admin';
+  // Youth Pastor only, and collapsed. See the note where it's rendered.
+  const isYouthPastor = role === 'owner';
   const kind: RosterKind = props.kind === 'student' ? 'student' : 'leader';
   const reorderGroups = useReorderRosterGroups(org?.id ?? '', kind);
   const { data: groups } = useRosterGroups(org?.id, kind);
@@ -249,6 +251,7 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
   useEffect(() => { if (ctx.editing) setManage(true); }, [ctx.editing]);
   // Tapping a person (in the normal view) opens a large card of their info.
   const [viewing, setViewing] = useState<RosterPerson | null>(null);
+  const [showElsewhere, setShowElsewhere] = useState(false);
 
   // Remember which groups are collapsed on this device.
   const collapseKey = `roster-collapsed-${org?.id ?? ''}`;
@@ -320,30 +323,44 @@ export function RosterView({ props, ctx }: { props: RosterProps; ctx: ViewerCtx 
         </SortableList>
       </div>
 
-      {/* The catch-all. If the tree above didn't draw somebody's group, they
-          are listed here with the group named, so the roster can't quietly be
-          missing a person. */}
-      {elsewhere.length > 0 && (
-        <div className="mt-4 rounded-xl border p-3" style={cardStyle}>
-          <p className="text-sm font-semibold" style={{ color: 'var(--th-heading)' }}>
-            Elsewhere on the roster ({elsewhere.length})
-          </p>
-          <p className="mt-1 text-xs text-gray-500">
-            These people are in a group that isn&rsquo;t shown above — usually the
-            all-{kind === 'student' ? 'students' : 'leaders'} group or a role group, which are
-            chat channels rather than groups you edit here.
-          </p>
-          <ul className="mt-2 flex flex-col gap-1.5">
-            {elsewhere.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
-                <span className="font-medium">{p.name}</span>
-                <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs text-gray-600">
-                  {groupName.get(p.groupId)}
-                </span>
-                {p.role && <span className="text-xs text-gray-500">{p.role}</span>}
-              </li>
-            ))}
-          </ul>
+      {/* The catch-all, folded away.
+          It exists so the roster can't quietly be missing a person — but in
+          practice almost everything in it is a Coach sitting in the automatic
+          "Coaches" channel, which is correct and not worth a box on the page.
+          So it's a quiet line you open when you're actually asking the
+          question, and only the Youth Pastor sees it: it's a plumbing check,
+          not something a leader browsing the roster needs to reason about. */}
+      {isYouthPastor && elsewhere.length > 0 && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setShowElsewhere((v) => !v)}
+            aria-expanded={showElsewhere}
+            className="text-xs text-gray-500 underline"
+          >
+            {showElsewhere ? 'Hide details' : `Details · ${elsewhere.length} in groups not shown here`}
+          </button>
+          {showElsewhere && (
+            <div className="mt-2 rounded-xl border p-3" style={cardStyle}>
+              <p className="text-xs text-gray-500">
+                These people have a roster entry in a group this page doesn&rsquo;t draw — normally
+                the automatic all-{kind === 'student' ? 'students' : 'leaders'} or role channels,
+                which are worked out from the roster rather than edited here. Nothing is wrong
+                with them being listed; they&rsquo;ll also appear in their real groups above.
+              </p>
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {elsewhere.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="rounded-full bg-black/5 px-2 py-0.5 text-xs text-gray-600">
+                      {groupName.get(p.groupId)}
+                    </span>
+                    {p.role && <span className="text-xs text-gray-500">{p.role}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
