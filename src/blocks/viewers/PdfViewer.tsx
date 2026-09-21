@@ -8,8 +8,14 @@ import { safeUrl } from '../sanitize';
 // Configure the pdf.js worker from the bundled dependency (Vite `?url` import),
 // so the PDF block works offline-friendly without a CDN. Heavy; this component
 // is loaded lazily by the document block.
+//
+// The `legacy` worker, to match the legacy library aliased in vite.config.ts —
+// the two halves of pdf.js talk to each other and must be the same build. The
+// worker does its own URL parsing for links inside a PDF, so it needs the same
+// polyfills; a modern worker paired with a legacy library would just move the
+// crash from the page into the background thread.
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
+  'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString();
 

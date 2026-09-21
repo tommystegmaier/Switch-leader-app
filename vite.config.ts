@@ -168,9 +168,23 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      // Send pdf.js — and react-pdf, which imports it — to the "legacy" build.
+      //
+      // The default build targets current browsers and freely uses things like
+      // URL.parse (Safari 18.4) and Promise.withResolvers (Safari 17.4). On an
+      // iPhone that hasn't been updated those are missing, so opening a page
+      // with a PDF on it threw "URL.parse is not a function" and the whole page
+      // was replaced by an error screen. pdf.js publishes the legacy build for
+      // exactly this: same version, same behaviour, with the polyfills folded
+      // in. It costs about 58 KB, in a chunk that is only downloaded when
+      // someone actually opens a PDF.
+      //
+      // An exact-match regex on purpose: a plain string alias would also rewrite
+      // subpaths like 'pdfjs-dist/build/pdf.worker.min.mjs' and mangle them.
+      { find: /^pdfjs-dist$/, replacement: 'pdfjs-dist/legacy/build/pdf.mjs' },
+    ],
   },
   server: {
     port: 5173,

@@ -1,3 +1,7 @@
+// First, before anything else imports anything: fill in the browser methods
+// that phones a version or two behind are missing. See src/lib/polyfills.ts.
+import '@/lib/polyfills';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
