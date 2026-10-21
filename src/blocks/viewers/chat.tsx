@@ -506,16 +506,27 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
     const input = e.target;
     const file = (input.files ?? [])[0];
     input.value = '';
-    if (!file) return;
+    if (!file) return;  // they backed out of the picker; nothing to say
     setAudioOpen(false);
     setError(null);
+
+    // An iPhone doesn't always put a type on a file picked out of Files, so the
+    // extension is the fallback rather than the other way round. Only turn
+    // something away when we can see it isn't audio — guessing wrong here means
+    // refusing a perfectly good voice memo.
+    const looksAudio = file.type.startsWith('audio/')
+      || /\.(m4a|mp3|wav|aac|caf|aiff?|ogg|oga|opus|amr|flac|mp4)$/i.test(file.name);
+    if (!looksAudio && file.type !== '') {
+      setError(`“${file.name}” isn’t a sound file, so it can’t go out as a voice message. Pick a recording — on an iPhone, open Voice Memos, tap ⋯ on the recording, Share, then Save to Files, and choose it from there.`);
+      return;
+    }
 
     // Attached recordings get the same length limit as ones made here — the
     // cost of a voice message falls on everyone who plays it, and that doesn't
     // depend on where it was recorded. Size is checked too, because a minute of
     // uncompressed audio from a computer can outweigh ten from a phone.
     if (file.size > MAX_AUDIO_BYTES) {
-      setError(`That recording is ${(file.size / 1e6).toFixed(1)} MB — too big to send. Try a shorter one; voice messages can be up to ${MAX_AUDIO_LABEL}.`);
+      setError(`That recording is ${(file.size / 1e6).toFixed(1)} MB, which is too big to send — voice messages can be up to ${MAX_AUDIO_LABEL}. Nothing was attached. Send it in shorter parts instead.`);
       return;
     }
     const seconds = await audioDuration(file);
@@ -523,7 +534,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
     // fraction over. An unreadable length (null) is let through — we don't
     // block someone over a question the browser wouldn't answer.
     if (seconds !== null && seconds > MAX_AUDIO_SECONDS + 2) {
-      setError(`That recording is ${fmtDuration(seconds)} long. Voice messages can be up to ${MAX_AUDIO_LABEL} — try sending it in shorter parts.`);
+      setError(`That recording is ${fmtDuration(seconds)} long, and voice messages can be up to ${MAX_AUDIO_LABEL}. Nothing was attached. Send it in shorter parts instead.`);
       return;
     }
     setPending((prev) => [...prev, { file, url: URL.createObjectURL(file), kind: 'audio' }]);
@@ -539,6 +550,14 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
 
   // Send the staged media (uploading now) plus any text. The text rides along
   // as the caption on the first item; extra media follow as their own bubbles.
+  //
+  // An attachment stays in the tray until the message holding it is actually
+  // in the database. It used to be cleared the instant Send was tapped, which
+  // is why a failed or slow upload read as "the app threw my recording away":
+  // the tile vanished immediately, and a voice message is several megabytes, so
+  // on a weak signal there was a long silence with nothing left on screen. Now
+  // nothing disappears until it has been sent, and a failure leaves it sitting
+  // there to try again.
   async function onSend() {
     const body = text.trim();
     if (!body && pending.length === 0) return;
@@ -547,8 +566,10 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
     const savedText = text;
     setText('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
-    setPending([]);
     setUploading(items.length > 0);
+    // Whether the typed caption has already gone out with the first item, so a
+    // failure part-way through doesn't put it back and send it twice.
+    let bodySent = false;
     try {
       if (items.length === 0) {
         await send.mutateAsync({ groupId, userId, authorName, body });
@@ -566,21 +587,28 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
             audioUrl: it.kind === 'audio' ? m.url : undefined,
             mediaKind: it.kind,
           });
+          if (i === 0 && body) bodySent = true;
+          // Safely in the database — only now does it leave the tray. Matched
+          // by identity, not index, so removing another tile mid-send can't
+          // drop the wrong one.
+          setPending((prev) => prev.filter((p) => p !== it));
+          URL.revokeObjectURL(it.url);
         }
-        items.forEach((it) => URL.revokeObjectURL(it.url));
       }
     } catch (e) {
       const msg = errorMessage(e);
-      // Translate the two failures people actually hit into plain language.
+      // Translate the failures people actually hit into plain language.
       setError(
         /row-level security|violates .*policy|not authorized|permission/i.test(msg)
           ? 'Couldn’t upload that — your account may not have permission to attach files yet. Ask an admin to run the latest update.'
         : /audio_url|chat_messages_media_check|column .* does not exist/i.test(msg)
           ? 'Voice messages aren’t enabled on this app yet. Ask an admin to run the latest database update.'
-        : msg,
+        : /network|failed to fetch|load failed|timed out|timeout/i.test(msg)
+          ? 'That didn’t send — the connection dropped part-way through. Your recording is still here; tap Send again when you have signal.'
+        : `That didn’t send. Your attachment is still here, so you can try again. (${msg})`,
       );
-      setText(savedText);
-      setPending(items); // keep previews so they can retry
+      if (!bodySent) setText(savedText);
+      // Whatever hasn't been sent is still in `pending` — nothing to restore.
     } finally {
       setUploading(false);
     }
@@ -638,7 +666,26 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
         ))}
       </div>
 
-      {error && <p className="px-4 text-xs text-red-600">{error}</p>}
+      {/* A banner, not a line of fine print.
+          This used to be 12px red text tucked between the messages and the
+          composer, which on a phone — right after a full-screen file picker had
+          just dismissed — people simply did not see. So "the app refused this
+          recording, and here is why" was experienced as "the app silently threw
+          my recording away". It stays until it is dismissed. */}
+      {error && (
+        <div className="mx-3 mb-2 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5" role="alert">
+          <span aria-hidden className="text-base leading-tight">⚠️</span>
+          <p className="flex-1 text-sm leading-snug text-red-900">{error}</p>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            aria-label="Dismiss"
+            className="-mr-1 shrink-0 px-1 text-lg leading-none text-red-400"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {canPost ? (
       <div className="relative border-t" style={cardStyle}>
@@ -662,15 +709,30 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
         {/* Staged attachments — shown as removable previews; nothing uploads
             until Send. */}
         {pending.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto px-3 pt-2">
-            {pending.map((p, i) => (
-              <div key={i} className="relative shrink-0">
-                {p.kind === 'audio'
-                  ? <VoiceChip url={p.url} />
-                  : <img src={p.url} alt="" className="h-16 w-16 rounded-lg object-cover" />}
-                <button type="button" onClick={() => removePending(i)} aria-label="Remove" className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs leading-none text-white">×</button>
-              </div>
-            ))}
+          <div className="px-3 pt-2">
+            <div className="flex gap-2 overflow-x-auto">
+              {pending.map((p, i) => (
+                <div key={i} className="relative shrink-0" style={{ opacity: uploading ? 0.5 : 1 }}>
+                  {p.kind === 'audio'
+                    ? <VoiceChip url={p.url} />
+                    : <img src={p.url} alt="" className="h-16 w-16 rounded-lg object-cover" />}
+                  {/* No × while a send is in flight: the first item may already
+                      be uploading, and pulling it out of the tray then would
+                      leave the tile gone and the upload still running. */}
+                  {!uploading && (
+                    <button type="button" onClick={() => removePending(i)} aria-label="Remove" className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs leading-none text-white">×</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* A voice message is a few megabytes, so on a phone signal this can
+                take a while. Saying so is the difference between "it's working"
+                and "it ate my recording". */}
+            {uploading && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                Sending{pending.length > 1 ? ` ${pending.length} attachments` : ''}… keep the app open until this finishes.
+              </p>
+            )}
           </div>
         )}
 
@@ -688,8 +750,19 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
               only — video sending has been retired. */}
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPickMedia} />
           <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onPickMedia} />
-          {/* Fallback for attaching an existing recording (e.g. a Voice Memo). */}
-          <input ref={audioFileRef} type="file" accept="audio/*" className="hidden" onChange={onPickAudioFile} />
+          {/* Fallback for attaching an existing recording (e.g. a Voice Memo).
+              The extensions are listed as well as `audio/*`: iOS matches the
+              Files browser against the accept list, and with the MIME type
+              alone it greyed out the very .m4a voice memos this exists to
+              attach — the picker opened and came back with nothing, which is
+              indistinguishable from the app ignoring you. */}
+          <input
+            ref={audioFileRef}
+            type="file"
+            accept="audio/*,.m4a,.mp3,.wav,.aac,.caf,.aiff,.aif,.ogg,.oga,.opus,.amr,.flac"
+            className="hidden"
+            onChange={onPickAudioFile}
+          />
           <textarea
             ref={inputRef}
             rows={1}
@@ -1125,12 +1198,20 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
       ranOutRef.current = false;
       setRanOut(false);
       setPhase('recording');
+      // Timed off the clock, and the cut-off decided OUTSIDE the state updater.
+      //
+      // Two things were wrong with counting ticks inside setSeconds. A state
+      // updater has to be a pure function of the previous state — React calls
+      // it again to check that, so at the three-minute mark stop() ran twice
+      // and set state during another component's render. And setInterval drifts
+      // and is throttled hard while a phone is locked or the app is in the
+      // background, so the count on screen could be well short of the real
+      // length of the recording.
+      const startedAt = Date.now();
       timerRef.current = setInterval(() => {
-        setSeconds((s) => {
-          const next = s + 1;
-          if (next >= MAX_AUDIO_SECONDS) { ranOutRef.current = true; stop(); }
-          return next;
-        });
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        setSeconds(elapsed);
+        if (elapsed >= MAX_AUDIO_SECONDS) { ranOutRef.current = true; stop(); }
       }, 1000);
     } catch (err) {
       const name = (err as { name?: string })?.name ?? 'UnknownError';
@@ -1154,7 +1235,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
       if (file.size < 2000) {
         setDiag('empty-capture');
         setPhase('intro');
-        setNotice('That recording came through silent. Please try again.');
+        setNotice('That recording came through silent. Please try again — and if it keeps happening, record it in Voice Memos and attach it instead.');
         return;
       }
       setNotice('');
@@ -1162,6 +1243,13 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
       fileRef.current = file;
       setPreviewUrl(URL.createObjectURL(file));
       setPhase('ready');
+    }).catch((err: unknown) => {
+      // Without this the screen sat on "Preparing your recording…" forever if
+      // anything in the audio teardown threw, and the only way out was to close
+      // the dialog — which looked exactly like the app discarding the recording.
+      setDiag(`convert-failed: ${(err as Error)?.message ?? 'unknown'}`);
+      setPhase('intro');
+      setNotice('Something went wrong saving that recording. Please try again — or record it in Voice Memos and attach it instead.');
     });
   }
 
