@@ -566,6 +566,33 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
     const savedText = text;
     setText('');
     if (inputRef.current) inputRef.current.style.height = 'auto';
+    await deliver(items, body, savedText);
+  }
+
+  /**
+   * Send a recording the moment it's made, without going back to the composer.
+   *
+   * The voice dialog used to end at "Add to message", which puts the recording
+   * in the tray and leaves you to find the send arrow — and since Enter stopped
+   * sending (the composer became a textarea so messages could keep their line
+   * breaks), a phone has no keyboard way to send at all. So people recorded
+   * something, tapped the only button offered, and were left holding it.
+   */
+  async function sendAudioNow(file: File) {
+    setAudioOpen(false);
+    setError(null);
+    const item: PendingMedia = { file, url: URL.createObjectURL(file), kind: 'audio' };
+    setPending((prev) => [...prev, item]);
+    const body = text.trim();
+    const savedText = text;
+    if (body) {
+      setText('');
+      if (inputRef.current) inputRef.current.style.height = 'auto';
+    }
+    await deliver([item], body, savedText);
+  }
+
+  async function deliver(items: PendingMedia[], body: string, restoreText: string) {
     setUploading(items.length > 0);
     // Whether the typed caption has already gone out with the first item, so a
     // failure part-way through doesn't put it back and send it twice.
@@ -613,7 +640,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
           ? 'That didn’t send — the connection dropped part-way through. Your recording is still here; tap Send again when you have signal.'
         : `That didn’t send. Your attachment is still here, so you can try again. (${msg})`,
       );
-      if (!bodySent) setText(savedText);
+      if (!bodySent) setText(restoreText);
       // Whatever hasn't been sent is still in `pending` — nothing to restore.
     } finally {
       setUploading(false);
@@ -788,7 +815,12 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
               onClick={() => void onSend()}
               disabled={uploading || send.isPending}
               aria-label="Send"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none disabled:opacity-50"
+              title="Send"
+              // 40px, not 32. This is the ONLY way to send on a phone — Enter
+              // inserts a newline so messages can keep their line breaks, and
+              // Cmd/Ctrl+Enter isn't something a phone keyboard has — so it
+              // can't be the smallest thing on the row.
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl leading-none disabled:opacity-50"
               style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
             >
               {uploading ? '⏳' : '↑'}
@@ -808,6 +840,7 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
         <AudioRecorder
           onCancel={() => setAudioOpen(false)}
           onDone={stageAudio}
+          onSendNow={(f) => void sendAudioNow(f)}
           onPickFile={() => audioFileRef.current?.click()}
         />
       )}
@@ -1167,7 +1200,7 @@ type RecPhase = 'intro' | 'asking' | 'recording' | 'converting' | 'ready' | 'blo
  * re-open that dialog — so we show a short, calm recovery screen instead of a
  * raw error.
  */
-function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void; onDone: (file: File) => void; onPickFile: () => void }) {
+function AudioRecorder({ onCancel, onDone, onSendNow, onPickFile }: { onCancel: () => void; onDone: (file: File) => void; onSendNow: (file: File) => void; onPickFile: () => void }) {
   const [phase, setPhase] = useState<RecPhase>('intro');
   const [seconds, setSeconds] = useState(0);
   const [diag, setDiag] = useState('');
@@ -1373,15 +1406,27 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               )}
               <audio src={previewUrl} controls className="mx-auto mt-4 w-full" />
               <div className="mt-5 flex flex-col gap-2">
+                {/* Send is the primary action, and it finishes the job here.
+                    "Add to message" is still offered for anyone who wants to
+                    type something alongside it — but it is no longer the only
+                    way out of this screen. */}
                 <button
                   type="button"
-                  onClick={() => fileRef.current && onDone(fileRef.current)}
+                  onClick={() => fileRef.current && onSendNow(fileRef.current)}
                   className="w-full rounded-full px-6 py-3.5 text-base font-semibold"
                   style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}
                 >
-                  Add to message
+                  Send voice message
                 </button>
-                <button type="button" onClick={reset} className="w-full rounded-full px-6 py-3 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current && onDone(fileRef.current)}
+                  className="w-full rounded-full border px-6 py-3 text-sm font-semibold"
+                  style={{ borderColor: 'var(--th-hairline-strong)', color: 'var(--th-text)' }}
+                >
+                  Add a note with it first
+                </button>
+                <button type="button" onClick={reset} className="w-full rounded-full px-6 py-2.5 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
                   Record again
                 </button>
               </div>
