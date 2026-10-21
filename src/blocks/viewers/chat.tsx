@@ -1241,7 +1241,20 @@ function AudioRecorder({ onCancel, onDone, onSendNow, onPickFile }: { onCancel: 
     try { ctx = createAudioContext(); } catch { /* fall back inside the recorder */ }
     try {
       // This call is what raises the system permission dialog.
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      //
+      // Asked for by name rather than taking the default raw stream: these are
+      // the phone's own voice processing, and in a youth room full of noise
+      // they are the difference between a usable recording and a wash of
+      // background. A browser that doesn't know a constraint ignores it, so
+      // this is safe everywhere.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
       streamRef.current = stream;
       // Capture raw samples rather than using MediaRecorder — see startPcmRecorder.
       recorderRef.current = await startPcmRecorder(stream, `voice-${Date.now()}`, ctx);
