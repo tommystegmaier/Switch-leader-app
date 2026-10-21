@@ -526,15 +526,15 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
     // depend on where it was recorded. Size is checked too, because a minute of
     // uncompressed audio from a computer can outweigh ten from a phone.
     if (file.size > MAX_AUDIO_BYTES) {
-      setError(`That recording is ${(file.size / 1e6).toFixed(1)} MB, which is too big to send — voice messages can be up to ${MAX_AUDIO_LABEL}. Nothing was attached. Send it in shorter parts instead.`);
+      setError(`That file is ${(file.size / 1e6).toFixed(1)} MB, which is too big to send — an attached recording can be up to ${(MAX_AUDIO_BYTES / 1e6).toFixed(0)} MB. Nothing was attached. A voice memo recorded on a phone is far smaller than this, so if it came off a computer, try saving it at a lower quality.`);
       return;
     }
     const seconds = await audioDuration(file);
-    // A couple of seconds of slack: a "3 minute" recording often measures a
+    // A couple of seconds of slack: a "5 minute" recording often measures a
     // fraction over. An unreadable length (null) is let through — we don't
     // block someone over a question the browser wouldn't answer.
-    if (seconds !== null && seconds > MAX_AUDIO_SECONDS + 2) {
-      setError(`That recording is ${fmtDuration(seconds)} long, and voice messages can be up to ${MAX_AUDIO_LABEL}. Nothing was attached. Send it in shorter parts instead.`);
+    if (seconds !== null && seconds > MAX_ATTACHED_SECONDS + 2) {
+      setError(`That recording is ${fmtDuration(seconds)} long, and an attached recording can be up to ${MAX_ATTACHED_LABEL}. Nothing was attached. Send it in shorter parts instead.`);
       return;
     }
     setPending((prev) => [...prev, { file, url: URL.createObjectURL(file), kind: 'audio' }]);
@@ -599,7 +599,13 @@ function ChannelPane({ orgId, groupId, userId, authorName, canModerate, deleteMo
       const msg = errorMessage(e);
       // Translate the failures people actually hit into plain language.
       setError(
-        /row-level security|violates .*policy|not authorized|permission/i.test(msg)
+        // Storage refused the file itself. Worth calling out separately: it is
+        // a setting on the project, not anything the sender did or can fix, and
+        // it hits the big files (voice messages) while letting the small ones
+        // (compressed photos) through — so it reads as "audio is broken".
+        /exceeded the maximum allowed size|payload too large|413|entity too large|quota|storage limit|exceeded.*limit/i.test(msg)
+          ? `The app’s file storage turned this down — it’s ${(() => { const it = items[0]; return it ? (it.file.size / 1e6).toFixed(1) : '?'; })()} MB. That’s a limit on the app, not on you, and it needs a Youth Pastor to look at the storage settings. (${msg})`
+        : /row-level security|violates .*policy|not authorized|permission/i.test(msg)
           ? 'Couldn’t upload that — your account may not have permission to attach files yet. Ask an admin to run the latest update.'
         : /audio_url|chat_messages_media_check|column .* does not exist/i.test(msg)
           ? 'Voice messages aren’t enabled on this app yet. Ask an admin to run the latest database update.'
@@ -1123,18 +1129,30 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
   );
 }
 
-// Voice messages are uncompressed WAV, so length is bandwidth: ~1.4 MB a
-// minute, downloaded by every person who plays it. At the old 5-minute cap one
-// message could be 9.5 MB and cost hundreds of MB across a channel. Three
-// minutes keeps the worst case around 4 MB. Recording stops on its own when it
-// runs out, so every screen that can be looked at before then says the limit
-// out loud — being cut off mid-sentence with no warning reads as a bug.
+// RECORDING IN THE APP, and ATTACHING something already on the phone, have
+// different limits, because a minute of one is not a minute of the other.
+//
+// What we record is uncompressed WAV: ~1.4 MB a minute, downloaded by every
+// person who plays it. Length really is bandwidth here, so three minutes (about
+// 4 MB at worst) is the cap. Recording stops on its own when it runs out, so
+// every screen that can be looked at before then says so out loud — being cut
+// off mid-sentence with no warning reads as a bug.
 const MAX_AUDIO_SECONDS = 180;
 const MAX_AUDIO_LABEL = `${Math.round(MAX_AUDIO_SECONDS / 60)} minutes`;
-// Ceiling for an ATTACHED recording, where we don't control the format. Three
-// minutes recorded here is ~4 MB, and a phone's own voice memo of the same
-// length is under 2 MB, so this leaves generous room — while still turning away
-// the uncompressed studio-quality files that are tens of MB per listener.
+
+// An attached iPhone voice memo is compressed — roughly 0.25 MB a minute, a
+// sixth of what we record ourselves. Five minutes of one is about 1.2 MB, well
+// under a three-minute recording made here, so holding attachments to the
+// recording limit turned away the SMALLER file. They get five minutes.
+//
+// This limit is also why voice messages started failing for several leaders at
+// once in August: before then, attaching had no limit at all, and people had
+// been sending long voice memos for months.
+const MAX_ATTACHED_SECONDS = 300;
+const MAX_ATTACHED_LABEL = `${Math.round(MAX_ATTACHED_SECONDS / 60)} minutes`;
+// A size ceiling as well, because length alone doesn't bound an attachment:
+// five minutes off a phone is ~1.2 MB, but five minutes of CD-quality audio off
+// a computer is over 25 MB, and every listener downloads it.
 const MAX_AUDIO_BYTES = 12_000_000;
 
 type RecPhase = 'intro' | 'asking' | 'recording' | 'converting' | 'ready' | 'blocked' | 'unavailable';
@@ -1295,7 +1313,10 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               <button type="button" onClick={onPickFile} className="mx-auto mt-4 block text-sm underline" style={{ color: 'var(--th-text)' }}>
                 Attach a recording instead
               </button>
-              <p className="mt-1 text-xs text-gray-400">Same {MAX_AUDIO_LABEL} limit</p>
+              {/* Deliberately NOT the recording limit: a memo off the phone is
+                  compressed, so five minutes of one is smaller than three
+                  minutes of what we record here. */}
+              <p className="mt-1 text-xs text-gray-400">Up to {MAX_ATTACHED_LABEL} long</p>
             </>
           )}
 
@@ -1384,7 +1405,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               >
                 Choose a recording
               </button>
-              <p className="mt-3 text-xs text-gray-400">Up to {MAX_AUDIO_LABEL} long</p>
+              <p className="mt-3 text-xs text-gray-400">Up to {MAX_ATTACHED_LABEL} long</p>
               <details className="mt-4 text-left">
                 <summary className="cursor-pointer text-center text-sm underline" style={{ color: 'var(--th-text)' }}>Or turn the microphone on</summary>
                 <ol className="mx-auto mt-3 max-w-[18rem] space-y-2 text-sm text-gray-500">
@@ -1411,7 +1432,7 @@ function AudioRecorder({ onCancel, onDone, onPickFile }: { onCancel: () => void;
               <button type="button" onClick={onPickFile} className="mt-5 w-full rounded-full px-6 py-3.5 text-base font-semibold" style={{ backgroundColor: 'var(--th-primary)', color: 'var(--th-primary-text)' }}>
                 Choose a recording
               </button>
-              <p className="mt-3 text-xs text-gray-400">Up to {MAX_AUDIO_LABEL} long</p>
+              <p className="mt-3 text-xs text-gray-400">Up to {MAX_ATTACHED_LABEL} long</p>
               <button type="button" onClick={() => void start()} className="mt-2 w-full rounded-full px-6 py-3 text-sm font-medium" style={{ color: 'var(--th-text)' }}>
                 Try the microphone again
               </button>
