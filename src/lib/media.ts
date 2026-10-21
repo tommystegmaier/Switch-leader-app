@@ -134,17 +134,23 @@ export async function startPcmRecorder(stream: MediaStream, baseName = 'voice', 
 /**
  * Sample rate for voice messages, in Hz.
  *
- * WAV is uncompressed, so this rate IS the file size: 16-bit mono works out at
- * exactly 2 bytes per sample, so 12 kHz is 24 KB per second — about 1.4 MB a
- * minute. Every listener downloads that, so a single long voice note in a busy
- * channel is a meaningful share of a month's bandwidth.
+ * WAV is uncompressed, so this rate IS the file size: 16-bit mono is exactly
+ * 2 bytes per sample, so 16 kHz is 32 KB per second — about 1.9 MB a minute,
+ * and a three-minute message is 5.8 MB. Every listener downloads that, so this
+ * number is a direct line to the bandwidth bill. Raising it is safe (any
+ * browser plays PCM WAV at any rate); it just costs proportionally more.
  *
- * 12 kHz carries frequencies up to 6 kHz, comfortably above the ~3.4 kHz a
- * phone call gives you, so speech is unaffected; it's a quarter smaller than
- * the 16 kHz we used to write. Raising it is safe (any browser plays PCM WAV at
- * any rate) — it just costs proportionally more to send.
+ * 16 kHz carries sound up to 8 kHz. That is the "wideband" / HD-voice range,
+ * and the point of it is the consonants: 's', 'f' and 'th' live between 4 and
+ * 8 kHz, so at 12 kHz they blur into each other and speech sounds dull even
+ * when it is perfectly clear. Worth the extra third of a megabyte a minute.
+ *
+ * NOTE: this is only half of sounding good. The other half is resample()
+ * above, which has to remove everything over half this rate BEFORE dropping to
+ * it — without that filter the rate barely matters, because the high end folds
+ * back on top of the speech.
  */
-const VOICE_RATE = 12000;
+const VOICE_RATE = 16000;
 
 /**
  * Resample down to the voice rate, filtering first so it doesn't alias.

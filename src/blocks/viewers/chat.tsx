@@ -1165,18 +1165,18 @@ function GifPicker({ onCancel, onPick }: { onCancel: () => void; onPick: (url: s
 // RECORDING IN THE APP, and ATTACHING something already on the phone, have
 // different limits, because a minute of one is not a minute of the other.
 //
-// What we record is uncompressed WAV: ~1.4 MB a minute, downloaded by every
-// person who plays it. Length really is bandwidth here, so three minutes (about
-// 4 MB at worst) is the cap. Recording stops on its own when it runs out, so
-// every screen that can be looked at before then says so out loud — being cut
-// off mid-sentence with no warning reads as a bug.
+// What we record is uncompressed WAV at 16 kHz: ~1.9 MB a minute, downloaded
+// by every person who plays it. Length really is bandwidth here, so three
+// minutes (about 5.8 MB at worst) is the cap. Recording stops on its own when
+// it runs out, so every screen that can be looked at before then says so out
+// loud — being cut off mid-sentence with no warning reads as a bug.
 const MAX_AUDIO_SECONDS = 180;
 const MAX_AUDIO_LABEL = `${Math.round(MAX_AUDIO_SECONDS / 60)} minutes`;
 
-// An attached iPhone voice memo is compressed — roughly 0.25 MB a minute, a
-// sixth of what we record ourselves. Five minutes of one is about 1.2 MB, well
-// under a three-minute recording made here, so holding attachments to the
-// recording limit turned away the SMALLER file. They get five minutes.
+// An attached iPhone voice memo is compressed — roughly 0.25 MB a minute,
+// about an eighth of what we record ourselves. Five minutes of one is about
+// 1.2 MB, far under a three-minute recording made here, so holding attachments
+// to the recording limit turned away the SMALLER file. They get five minutes.
 //
 // This limit is also why voice messages started failing for several leaders at
 // once in August: before then, attaching had no limit at all, and people had
